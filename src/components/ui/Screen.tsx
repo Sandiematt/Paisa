@@ -16,7 +16,7 @@ export function Screen({
   style,
 }: ScreenProps) {
   return (
-    <View style={styles.root}>
+    <View style={styles.root} collapsable={false}>
       {/* Android is edge-to-edge from RN 0.87, so the canvas behind the bar
           comes from the root view rather than a status bar colour. */}
       <StatusBar barStyle="dark-content" />

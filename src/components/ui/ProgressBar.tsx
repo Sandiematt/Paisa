@@ -7,6 +7,7 @@ import {useReducedMotion} from '../../hooks/useReducedMotion';
 type ProgressBarProps = {
   /** 0 to 1. */
   progress: number;
+  color?: string;
 };
 
 /**
@@ -14,7 +15,7 @@ type ProgressBarProps = {
  * thing rides the native driver. Animating `width` would trigger layout on
  * every frame.
  */
-export function ProgressBar({progress}: ProgressBarProps) {
+export function ProgressBar({progress, color = colors.accent}: ProgressBarProps) {
   const reducedMotion = useReducedMotion();
   const [trackWidth, setTrackWidth] = useState(0);
   const value = useRef(new Animated.Value(progress)).current;
@@ -46,7 +47,11 @@ export function ProgressBar({progress}: ProgressBarProps) {
       <Animated.View
         style={[
           styles.fill,
-          {width: trackWidth, transform: [{translateX}, {scaleX: value}]},
+          {
+            width: trackWidth,
+            backgroundColor: color,
+            transform: [{translateX}, {scaleX: value}],
+          },
         ]}
       />
     </View>
@@ -63,6 +68,5 @@ const styles = StyleSheet.create({
   fill: {
     height: 4,
     borderRadius: radii.pill,
-    backgroundColor: colors.accent,
   },
 });

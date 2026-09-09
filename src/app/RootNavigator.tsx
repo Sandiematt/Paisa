@@ -6,9 +6,9 @@ import {travel} from '../theme';
 import {AuthChoiceScreen} from '../features/auth/AuthChoiceScreen';
 import {LoginScreen} from '../features/auth/LoginScreen';
 import {SplashScreen} from '../features/auth/SplashScreen';
-import {FirstExpenseEmptyState} from '../features/expenses/FirstExpenseEmptyState';
 import {OnboardingFlow} from '../features/onboarding/OnboardingFlow';
 import {OnboardingDraft} from '../features/onboarding/types';
+import {MainTabs} from '../features/tabs/MainTabs';
 import {RouteName} from './routes';
 import {useRouter} from './useRouter';
 
@@ -60,12 +60,7 @@ export function RootNavigator() {
           return <OnboardingFlow onComplete={handleComplete} />;
 
         case 'home':
-          return draft ? (
-            <FirstExpenseEmptyState
-              draft={draft}
-              onAddExpense={notImplemented}
-            />
-          ) : null;
+          return draft ? <MainTabs draft={draft} /> : null;
 
         default:
           return null;

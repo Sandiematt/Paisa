@@ -20,7 +20,8 @@ type Variant =
   | 'bodyStrong'
   | 'label'
   | 'caption'
-  | 'numeric';
+  | 'numeric'
+  | 'numericHero';
 
 export const typography: Record<Variant, TextStyle> = {
   display: {
@@ -78,6 +79,14 @@ export const typography: Record<Variant, TextStyle> = {
     lineHeight: 36,
     fontWeight: '700',
     letterSpacing: -1,
+    fontVariant: ['tabular-nums'],
+  },
+  numericHero: {
+    fontFamily: family.sans,
+    fontSize: 56,
+    lineHeight: 62,
+    fontWeight: '700',
+    letterSpacing: -2,
     fontVariant: ['tabular-nums'],
   },
 };

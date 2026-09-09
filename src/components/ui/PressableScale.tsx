@@ -71,6 +71,7 @@ export function PressableScale({
   return (
     <Pressable
       {...rest}
+      collapsable={false}
       style={containerStyle}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}>

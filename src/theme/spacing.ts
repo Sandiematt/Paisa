@@ -25,4 +25,6 @@ export const layout = {
   screenPadding: spacing.xxl,
   controlHeight: 56,
   hairlineWidth: 1,
+  navIcon: 22,
+  addButton: 56,
 } as const;

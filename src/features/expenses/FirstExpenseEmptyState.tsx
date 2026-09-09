@@ -15,6 +15,8 @@ import {OnboardingDraft} from '../onboarding/types';
 type FirstExpenseEmptyStateProps = {
   draft: OnboardingDraft;
   onAddExpense: () => void;
+  /** Drop the bottom safe-area inset when the tab bar owns it. */
+  inTabs?: boolean;
 };
 
 /**
@@ -25,14 +27,15 @@ type FirstExpenseEmptyStateProps = {
 export function FirstExpenseEmptyState({
   draft,
   onAddExpense,
+  inTabs = false,
 }: FirstExpenseEmptyStateProps) {
   const currency = currencyByCode(draft.currency);
   const firstName = draft.name.trim().split(' ')[0] || 'there';
   const previewCategories = draft.categoryIds.slice(0, 4);
 
   return (
-    <Screen>
-      <View style={styles.root}>
+    <Screen edges={inTabs ? ['top'] : ['top', 'bottom']}>
+      <View style={[styles.root, inTabs && styles.rootInTabs]}>
         <View style={styles.center}>
           <Stagger index={0}>
             <CelebrationBadge />
@@ -101,6 +104,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: layout.screenPadding,
     paddingBottom: spacing.xxl,
+  },
+  rootInTabs: {
+    paddingBottom: spacing.lg,
   },
   center: {
     flex: 1,
