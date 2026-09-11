@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -21,15 +22,16 @@ import {
 import {colors, layout, spacing} from '../../theme';
 import {GoogleButton} from './components/GoogleButton';
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 type LoginScreenProps = {
-  onSubmit: () => void;
+  onSubmit: (email: string, password: string) => Promise<string | null>;
   onCreateAccount: () => void;
-  onForgotPassword: () => void;
+  onForgotPassword: (email: string) => Promise<string | null>;
   onGoogle: () => void;
   onBack: () => void;
 };
 
-/** UI and navigation only. Credentials go nowhere until the backend lands. */
 export function LoginScreen({
   onSubmit,
   onCreateAccount,
@@ -40,6 +42,48 @@ export function LoginScreen({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [revealed, setRevealed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  const handleSignIn = async () => {
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      setError('Enter a valid email address.');
+      return;
+    }
+    if (!password) {
+      setError('Enter your password.');
+      return;
+    }
+
+    setBusy(true);
+    setError(undefined);
+    const message = await onSubmit(email, password);
+    setBusy(false);
+    if (message) {
+      setError(message);
+    }
+  };
+
+  const handleForgot = async () => {
+    if (!EMAIL_PATTERN.test(email.trim())) {
+      Alert.alert(
+        'Email first',
+        'Type the email on your account, then tap Forgot password.',
+      );
+      return;
+    }
+    setBusy(true);
+    const message = await onForgotPassword(email);
+    setBusy(false);
+    if (message) {
+      Alert.alert('Could not send reset', message);
+      return;
+    }
+    Alert.alert(
+      'Check your email',
+      'If that address has an account, we sent a reset link.',
+    );
+  };
 
   return (
     <Screen>
@@ -69,13 +113,19 @@ export function LoginScreen({
               label="Email"
               placeholder="you@domain.com"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={value => {
+                setEmail(value);
+                if (error) {
+                  setError(undefined);
+                }
+              }}
               autoCapitalize="none"
               autoCorrect={false}
               keyboardType="email-address"
               autoComplete="email"
               textContentType="emailAddress"
               returnKeyType="next"
+              editable={!busy}
             />
           </Stagger>
 
@@ -84,12 +134,20 @@ export function LoginScreen({
               label="Password"
               placeholder="Your password"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={value => {
+                setPassword(value);
+                if (error) {
+                  setError(undefined);
+                }
+              }}
               secureTextEntry={!revealed}
               autoCapitalize="none"
               autoComplete="password"
               textContentType="password"
               returnKeyType="done"
+              onSubmitEditing={handleSignIn}
+              error={error}
+              editable={!busy}
               trailing={
                 <PressableScale
                   onPress={() => setRevealed(current => !current)}
@@ -107,14 +165,18 @@ export function LoginScreen({
             />
             <GhostButton
               label="Forgot password?"
-              onPress={onForgotPassword}
+              onPress={handleForgot}
               style={styles.forgot}
             />
           </Stagger>
         </ScrollView>
 
         <Stagger index={3} style={styles.footer}>
-          <PrimaryButton label="Sign in" onPress={onSubmit} />
+          <PrimaryButton
+            label={busy ? 'Signing in…' : 'Sign in'}
+            onPress={handleSignIn}
+            disabled={busy}
+          />
 
           <DividerLabel label="or" style={styles.divider} />
 

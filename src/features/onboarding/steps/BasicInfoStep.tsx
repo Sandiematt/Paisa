@@ -52,6 +52,22 @@ export function BasicInfoStep({draft, errors, onChange}: BasicInfoStepProps) {
         />
       </Stagger>
 
+      <Stagger index={3} style={styles.spaced}>
+        <TextField
+          label="Password"
+          placeholder="At least 6 characters"
+          value={draft.password ?? ''}
+          onChangeText={value => onChange('password', value)}
+          secureTextEntry
+          autoCapitalize="none"
+          autoComplete="new-password"
+          textContentType="newPassword"
+          returnKeyType="done"
+          helper="This is how you will sign back in."
+          error={errors.password}
+        />
+      </Stagger>
+
       <View style={styles.tail} />
     </StepLayout>
   );

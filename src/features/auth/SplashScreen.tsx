@@ -7,12 +7,17 @@ import {colors, layout, spacing} from '../../theme';
 
 type SplashScreenProps = {
   onGetStarted: () => void;
+  /** Hide the CTA while the stored session is still being read. */
+  ready?: boolean;
 };
 
 /**
  * Root of the stack, so there is no back affordance here by design.
  */
-export function SplashScreen({onGetStarted}: SplashScreenProps) {
+export function SplashScreen({
+  onGetStarted,
+  ready = true,
+}: SplashScreenProps) {
   return (
     <Screen>
       <View style={styles.root}>
@@ -36,13 +41,17 @@ export function SplashScreen({onGetStarted}: SplashScreenProps) {
           </Stagger>
         </View>
 
-        <Stagger index={2}>
-          <PrimaryButton
-            label="Get started"
-            trailing={'\u2192'}
-            onPress={onGetStarted}
-          />
-        </Stagger>
+        {ready ? (
+          <Stagger index={2}>
+            <PrimaryButton
+              label="Get started"
+              trailing={'\u2192'}
+              onPress={onGetStarted}
+            />
+          </Stagger>
+        ) : (
+          <View style={styles.ctaSlot} />
+        )}
       </View>
     </Screen>
   );
@@ -74,5 +83,8 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: spacing.md,
     maxWidth: 300,
+  },
+  ctaSlot: {
+    height: 56,
   },
 });

@@ -9,7 +9,7 @@ type GoogleButtonProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Official Google G (FirebaseUI asset). Auth itself is still a stub. */
+/** Official Google G (FirebaseUI asset). OAuth provider wiring comes next. */
 export function GoogleButton({label, onPress, style}: GoogleButtonProps) {
   return (
     <SecondaryButton

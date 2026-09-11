@@ -32,6 +32,9 @@ export const colors = {
 
   danger: '#C2412A',
 
+  alertDanger: '#FDECEA',
+  alertPositive: '#E8F5EE',
+
   scrim: 'rgba(21, 20, 18, 0.06)',
 } as const;
 

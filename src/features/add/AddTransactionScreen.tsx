@@ -6,6 +6,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   View,
+  Alert,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -23,6 +24,15 @@ import {
   TogglePill,
 } from '../../components/ui';
 import {formatAmountInput, parseAmountInput} from '../../lib/formatMoney';
+import {
+  categoryForSlug,
+  loadCategories,
+  CategoryRow,
+} from '../../lib/categoriesStore';
+import {
+  createTransaction,
+  localDateISO,
+} from '../../lib/transactionsStore';
 import {colors, layout, radii, spacing} from '../../theme';
 import {CATEGORIES, categoryById} from '../onboarding/constants';
 import {AddKind} from './types';
@@ -33,6 +43,7 @@ type AddTransactionScreenProps = {
   currencySymbol: string;
   categoryIds: string[];
   onClose: () => void;
+  onSaved?: () => void;
 };
 
 const INCOME_CATEGORIES = [
@@ -92,6 +103,7 @@ export function AddTransactionScreen({
   currencySymbol,
   categoryIds,
   onClose,
+  onSaved,
 }: AddTransactionScreenProps) {
   const insets = useSafeAreaInsets();
   const {height} = useWindowDimensions();
@@ -100,6 +112,8 @@ export function AddTransactionScreen({
   const [kind, setKind] = useState<AddKind>(initialKind);
   const [amount, setAmount] = useState('0');
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [dbCategories, setDbCategories] = useState<CategoryRow[]>([]);
 
   useEffect(() => {
     if (!visible) {
@@ -108,6 +122,22 @@ export function AddTransactionScreen({
     setKind(initialKind);
     setAmount('0');
     setCategoryId(null);
+    setSaving(false);
+    let cancelled = false;
+    loadCategories()
+      .then(rows => {
+        if (!cancelled) {
+          setDbCategories(rows);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDbCategories([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [initialKind, visible]);
 
   const expenseCategories = useMemo(() => {
@@ -126,12 +156,14 @@ export function AddTransactionScreen({
       : categories[0]?.id ?? null;
 
   const numericAmount = parseAmountInput(amount);
-  const canSubmit = numericAmount > 0;
-  const submitLabel = canSubmit
-    ? kind === 'income'
-      ? 'Add income'
-      : 'Add expense'
-    : 'Enter an amount';
+  const canSubmit = numericAmount > 0 && !saving;
+  const submitLabel = saving
+    ? 'Saving…'
+    : numericAmount > 0
+      ? kind === 'income'
+        ? 'Add income'
+        : 'Add expense'
+      : 'Enter an amount';
 
   const amountSize =
     amount.replace('.', '').length > 6 ? 40 : compact ? 48 : 56;
@@ -139,6 +171,39 @@ export function AddTransactionScreen({
   const onKindChange = (next: AddKind) => {
     setKind(next);
     setCategoryId(null);
+  };
+
+  const handleSubmit = async () => {
+    if (numericAmount <= 0 || saving) {
+      return;
+    }
+    const chip = categories.find(item => item.id === selectedCategory);
+    const match = selectedCategory
+      ? categoryForSlug(dbCategories, selectedCategory, kind)
+      : undefined;
+    setSaving(true);
+    try {
+      await createTransaction({
+        type: kind,
+        amount: numericAmount,
+        categoryId: match?.id ?? null,
+        description: match?.name ?? chip?.label ?? null,
+        merchant: match?.name ?? chip?.label ?? null,
+        transactionDate: localDateISO(),
+        paymentMethod: 'Everyday',
+      });
+      onSaved?.();
+      onClose();
+    } catch (caught) {
+      Alert.alert(
+        'Could not save',
+        caught instanceof Error
+          ? caught.message
+          : 'Try again in a moment.',
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -263,10 +328,10 @@ export function AddTransactionScreen({
 
           <PrimaryButton
             label={submitLabel}
-            onPress={onClose}
+            onPress={handleSubmit}
             disabled={!canSubmit}
             accessibilityHint={
-              canSubmit
+              numericAmount > 0
                 ? `Saves this ${kind}`
                 : 'Enter an amount to continue'
             }

@@ -10,6 +10,7 @@ import {SearchGlyph} from '../../components/icons/Glyphs';
 import {AppText, Screen, TogglePill} from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
 import {colors, layout, radii, spacing} from '../../theme';
+import {useFloatingNavClearance, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {SAMPLE_TRANSACTIONS} from './sampleTransactions';
 import {ActivityFilter, ActivityTransaction} from './types';
 
@@ -93,6 +94,8 @@ function matchesFilter(
 export function ActivityScreen({currencySymbol}: ActivityScreenProps) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ActivityFilter>('all');
+  const navClearance = useFloatingNavClearance();
+  const navScroll = useFloatingNavScroll();
 
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -163,7 +166,12 @@ export function ActivityScreen({currencySymbol}: ActivityScreenProps) {
 
       <ScrollView
         style={styles.list}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          {paddingBottom: spacing.xxl + navClearance},
+        ]}
+        onScroll={navScroll.onScroll}
+        scrollEventThrottle={navScroll.scrollEventThrottle}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled">
         {groups.length === 0 ? (

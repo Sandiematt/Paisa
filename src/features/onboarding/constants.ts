@@ -12,8 +12,8 @@ export const STEP_TITLES: Record<StepKey, {title: string; subtitle: string}> = {
     subtitle: 'We use your name on your reports and nothing else.',
   },
   money: {
-    title: 'How do you count?',
-    subtitle: 'Income helps us size your budget. You can add it later.',
+    title: 'How much is in the wallet?',
+    subtitle: 'Starting balance is what you have now. Monthly income is what you expect to add.',
   },
   goal: {
     title: "What's the goal?",
@@ -24,8 +24,8 @@ export const STEP_TITLES: Record<StepKey, {title: string; subtitle: string}> = {
     subtitle: 'Choose at least three. You can edit these any time.',
   },
   budget: {
-    title: 'Set a monthly budget',
-    subtitle: 'A ceiling to measure against. Optional, and easy to change.',
+    title: 'Budget and savings',
+    subtitle: 'Set a spending ceiling and how much you want to save each month.',
   },
 };
 

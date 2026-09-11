@@ -13,11 +13,15 @@ export type GoalId = 'track' | 'save' | 'split';
 export type OnboardingDraft = {
   name: string;
   email: string;
+  password?: string;
   currency: string;
+  startingBalance: string;
   monthlyIncome: string;
   goal: GoalId | null;
   categoryIds: string[];
   monthlyBudget: string;
+  monthlySavingsGoal: string;
+  avatarUrl?: string;
 };
 
 export type CategoryPreset = {

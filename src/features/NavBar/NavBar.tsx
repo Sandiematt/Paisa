@@ -1,7 +1,12 @@
-import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import React, {useEffect, useMemo, useRef} from 'react';
+import {Animated, StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
+import {
+  FLOATING_NAV_GAP,
+  useFloatingNavClearance,
+  useFloatingNavVisible,
+} from './FloatingNavScroll';
 import {
   ActivityGlyph,
   AskGlyph,
@@ -9,8 +14,9 @@ import {
   InsightsGlyph,
   PlusGlyph,
 } from '../../components/icons/Glyphs';
-import {AppText, PressableScale} from '../../components/ui';
-import {colors, layout, radii, spacing} from '../../theme';
+import {PressableScale} from '../../components/ui';
+import {useReducedMotion} from '../../hooks/useReducedMotion';
+import {colors, duration, easing, layout, radii, spacing} from '../../theme';
 
 export const TABS = ['home', 'activity', 'insights', 'ask'] as const;
 export type TabId = (typeof TABS)[number];
@@ -21,142 +27,190 @@ type NavBarProps = {
   onAddPress: () => void;
 };
 
-const ITEMS: {
-  id: TabId | 'add';
-  label: string;
-}[] = [
+const ITEMS: {id: TabId | 'add'; label: string}[] = [
   {id: 'home', label: 'Home'},
   {id: 'activity', label: 'Activity'},
-  {id: 'add', label: 'Add'},
+  {id: 'add', label: 'Add transaction'},
   {id: 'insights', label: 'Insights'},
-  {id: 'ask', label: 'Ask'},
+  {id: 'ask', label: 'Paisa AI'},
 ];
+
+const ITEM_WIDTH = 58;
+const ITEM_HEIGHT = 44;
+const PILL_PAD = 8;
+const INDICATOR = 40;
 
 function TabGlyph({
   id,
   color,
+  active,
 }: {
-  id: Exclude<TabId, never>;
+  id: TabId;
   color: string;
+  active: boolean;
 }) {
   const size = layout.navIcon;
   switch (id) {
     case 'home':
-      return <HomeGlyph color={color} size={size} />;
+      return <HomeGlyph color={color} size={size} active={active} />;
     case 'activity':
-      return <ActivityGlyph color={color} size={size} />;
+      return <ActivityGlyph color={color} size={size} active={active} />;
     case 'insights':
-      return <InsightsGlyph color={color} size={size} />;
+      return <InsightsGlyph color={color} size={size} active={active} />;
     case 'ask':
-      return <AskGlyph color={color} size={size} />;
+      return <AskGlyph color={color} size={size} active={active} />;
   }
 }
 
 export function NavBar({activeTab, onTabPress, onAddPress}: NavBarProps) {
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotion();
+  const navVisible = useFloatingNavVisible();
+  const hideDistance = useFloatingNavClearance() + spacing.lg;
+  const selectedIndex = useMemo(
+    () => ITEMS.findIndex(item => item.id === activeTab),
+    [activeTab],
+  );
+  const indicatorX = useRef(new Animated.Value(selectedIndex * ITEM_WIDTH))
+    .current;
+  const hidden = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(indicatorX, {
+      toValue: selectedIndex * ITEM_WIDTH,
+      duration: reducedMotion ? 0 : duration.swap,
+      easing: easing.out,
+      useNativeDriver: true,
+    }).start();
+  }, [indicatorX, reducedMotion, selectedIndex]);
+
+  useEffect(() => {
+    Animated.timing(hidden, {
+      toValue: navVisible ? 0 : 1,
+      duration: reducedMotion ? 0 : duration.swap,
+      easing: easing.out,
+      useNativeDriver: true,
+    }).start();
+  }, [hidden, navVisible, reducedMotion]);
+
+  const dockMotion = {
+    opacity: hidden.interpolate({
+      inputRange: [0, 1],
+      outputRange: [1, 0],
+    }),
+    transform: [
+      {
+        translateY: hidden.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0, reducedMotion ? 0 : hideDistance],
+        }),
+      },
+    ],
+  };
 
   return (
-    <View
-      collapsable={false}
+    <Animated.View
+      pointerEvents={navVisible ? 'box-none' : 'none'}
       style={[
-        styles.bar,
-        {paddingBottom: Math.max(insets.bottom, spacing.sm)},
+        styles.dock,
+        {paddingBottom: Math.max(insets.bottom, spacing.sm) + FLOATING_NAV_GAP},
+        dockMotion,
       ]}>
-      {ITEMS.map(item => {
-        if (item.id === 'add') {
-          return (
-            <View key="add" style={styles.slot} collapsable={false}>
+      <View style={styles.pill}>
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.indicator,
+            {transform: [{translateX: indicatorX}]},
+          ]}
+        />
+        {ITEMS.map(item => {
+          if (item.id === 'add') {
+            return (
               <PressableScale
+                key="add"
                 onPress={onAddPress}
                 scaleTo={0.94}
                 accessibilityRole="button"
-                accessibilityLabel="Add transaction"
+                accessibilityLabel={item.label}
                 accessibilityHint="Opens a menu to add an expense or income"
-                containerStyle={styles.slotFill}
-                style={styles.addHit}>
+                containerStyle={styles.slot}
+                style={styles.hit}>
                 <View style={styles.addFace}>
-                  <PlusGlyph color={colors.ink} size={18} />
+                  <PlusGlyph color={colors.ink} size={16} />
                 </View>
               </PressableScale>
-            </View>
-          );
-        }
+            );
+          }
 
-        const tabId = item.id;
-        const active = activeTab === tabId;
-        const color = active ? colors.ink : colors.inkMuted;
+          const tabId = item.id;
+          const active = activeTab === tabId;
+          const color = active ? colors.ink : colors.inkMuted;
 
-        return (
-            <View key={tabId} style={styles.slot} collapsable={false}>
+          return (
             <PressableScale
+              key={tabId}
               onPress={() => onTabPress(tabId)}
               scaleTo={0.94}
               accessibilityRole="tab"
               accessibilityState={{selected: active}}
               accessibilityLabel={item.label}
-              containerStyle={styles.slotFill}
-              style={styles.tab}>
-              <TabGlyph id={tabId} color={color} />
-              <AppText
-                variant="caption"
-                color={color}
-                style={styles.label}
-                numberOfLines={1}>
-                {item.label}
-              </AppText>
+              containerStyle={styles.slot}
+              style={styles.hit}>
+              <TabGlyph id={tabId} color={color} active={active} />
             </PressableScale>
-          </View>
-        );
-      })}
-    </View>
+          );
+        })}
+      </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  bar: {
+  dock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  pill: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    backgroundColor: colors.canvas,
-    borderTopWidth: layout.hairlineWidth,
-    borderTopColor: colors.hairline,
-    paddingTop: spacing.sm,
-    paddingHorizontal: spacing.xs,
+    alignItems: 'center',
+    padding: PILL_PAD,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    shadowOffset: {width: 0, height: 8},
+    elevation: 8,
+  },
+  indicator: {
+    position: 'absolute',
+    top: PILL_PAD + (ITEM_HEIGHT - INDICATOR) / 2,
+    left: PILL_PAD + (ITEM_WIDTH - INDICATOR) / 2,
+    width: INDICATOR,
+    height: INDICATOR,
+    borderRadius: radii.pill,
+    backgroundColor: colors.accentSoft,
   },
   slot: {
+    width: ITEM_WIDTH,
+    height: ITEM_HEIGHT,
+  },
+  hit: {
     flex: 1,
-    minHeight: 52,
-  },
-  slotFill: {
-    flex: 1,
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  tab: {
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: spacing.xs,
-  },
-  label: {
-    letterSpacing: 0.1,
-    marginTop: spacing.xs,
-  },
-  addHit: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingBottom: spacing.xs,
   },
   addFace: {
-    width: layout.addButton,
-    height: layout.addButton,
+    width: 32,
+    height: 32,
     borderRadius: radii.pill,
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.accentPress,
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 4},
-    elevation: 4,
   },
 });

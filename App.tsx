@@ -3,12 +3,15 @@ import {StyleSheet} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 import {RootNavigator} from './src/app/RootNavigator';
+import {AuthProvider} from './src/features/auth/AuthProvider';
 import {colors} from './src/theme';
 
 export default function App() {
   return (
     <SafeAreaProvider style={styles.root}>
-      <RootNavigator />
+      <AuthProvider>
+        <RootNavigator />
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

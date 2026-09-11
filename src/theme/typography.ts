@@ -80,14 +80,16 @@ export const typography: Record<Variant, TextStyle> = {
     fontWeight: '700',
     letterSpacing: -1,
     fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
   },
   numericHero: {
     fontFamily: family.sans,
-    fontSize: 56,
-    lineHeight: 62,
+    fontSize: 52,
+    lineHeight: 58,
     fontWeight: '700',
     letterSpacing: -2,
     fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
   },
 };
 

@@ -20,7 +20,7 @@ import {OnboardingDraft, StepKey} from './types';
 import {useOnboarding} from './useOnboarding';
 
 type OnboardingFlowProps = {
-  onComplete: (draft: OnboardingDraft) => void;
+  onComplete: (draft: OnboardingDraft) => void | Promise<void>;
 };
 
 export function OnboardingFlow({onComplete}: OnboardingFlowProps) {

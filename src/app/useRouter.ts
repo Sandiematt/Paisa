@@ -26,6 +26,11 @@ export function useRouter(initial: RouteName) {
     setStack(current => [...current.slice(0, -1), name]);
   }, []);
 
+  const reset = useCallback((name: RouteName) => {
+    setDirection(1);
+    setStack([name]);
+  }, []);
+
   const pop = useCallback(() => {
     setDirection(-1);
     setStack(current => (current.length > 1 ? current.slice(0, -1) : current));
@@ -47,5 +52,5 @@ export function useRouter(initial: RouteName) {
     return () => subscription.remove();
   }, [canGoBack, pop]);
 
-  return {route, direction, canGoBack, push, replace, pop};
+  return {route, direction, canGoBack, push, replace, pop, reset};
 }

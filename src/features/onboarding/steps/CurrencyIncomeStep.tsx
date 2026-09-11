@@ -39,6 +39,21 @@ export function CurrencyIncomeStep({draft, onChange}: CurrencyIncomeStepProps) {
 
       <Stagger index={2} style={styles.spaced}>
         <TextField
+          label="Starting balance"
+          placeholder="0"
+          prefix={currency.symbol}
+          value={draft.startingBalance}
+          onChangeText={value =>
+            onChange('startingBalance', value.replace(/[^0-9]/g, ''))
+          }
+          keyboardType="number-pad"
+          returnKeyType="done"
+          helper="What you have now. This becomes the opening wallet amount."
+        />
+      </Stagger>
+
+      <Stagger index={3} style={styles.spaced}>
+        <TextField
           label="Monthly income"
           placeholder="0"
           prefix={currency.symbol}
@@ -48,7 +63,7 @@ export function CurrencyIncomeStep({draft, onChange}: CurrencyIncomeStepProps) {
           }
           keyboardType="number-pad"
           returnKeyType="done"
-          helper="Optional. It only sets the scale of your charts."
+          helper="Salary and other expected income. Logged income is added on top."
         />
       </Stagger>
     </StepLayout>

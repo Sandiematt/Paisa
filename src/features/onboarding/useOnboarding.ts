@@ -9,15 +9,19 @@ const INITIAL_DRAFT: OnboardingDraft = {
   name: '',
   email: '',
   currency: 'INR',
+  startingBalance: '',
   monthlyIncome: '',
   goal: null,
   categoryIds: DEFAULT_CATEGORY_IDS,
   monthlyBudget: '',
+  monthlySavingsGoal: '',
 };
 
 export type OnboardingController = ReturnType<typeof useOnboarding>;
 
-export function useOnboarding(onComplete: (draft: OnboardingDraft) => void) {
+export function useOnboarding(
+  onComplete: (draft: OnboardingDraft) => void | Promise<void>,
+) {
   const [draft, setDraft] = useState<OnboardingDraft>(INITIAL_DRAFT);
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
@@ -49,6 +53,9 @@ export function useOnboarding(onComplete: (draft: OnboardingDraft) => void) {
     if (!EMAIL_PATTERN.test(draft.email.trim())) {
       next.email = 'That email address looks incomplete.';
     }
+    if ((draft.password ?? '').length < 6) {
+      next.password = 'Use at least 6 characters.';
+    }
     if (draft.goal === null) {
       next.goal = 'Pick one so we know what to show you first.';
     }
@@ -56,12 +63,12 @@ export function useOnboarding(onComplete: (draft: OnboardingDraft) => void) {
       next.categoryIds = `Choose at least ${MIN_CATEGORIES} categories.`;
     }
     return next;
-  }, [draft.categoryIds.length, draft.email, draft.goal, draft.name]);
+  }, [draft.categoryIds.length, draft.email, draft.goal, draft.name, draft.password]);
 
   const validity = useMemo<Record<StepKey, StepValidity>>(
     () => ({
       basics: {
-        canContinue: !errors.name && !errors.email,
+        canContinue: !errors.name && !errors.email && !errors.password,
         skippable: false,
       },
       money: {canContinue: true, skippable: true},
