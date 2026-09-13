@@ -108,6 +108,24 @@ describe('buildHomeReport', () => {
     expect(report.healthLabel).toBe('No data');
   });
 
+  it('does not invent a 100% change when there is no previous balance', () => {
+    const rows = [
+      tx({
+        id: 'pay',
+        type: 'income',
+        amount: 11992,
+        categoryId: null,
+        transactionDate: '2026-09-02',
+      }),
+    ];
+
+    const report = buildHomeReport(rows, [housing], 'month', now);
+
+    expect(report.balance).toBe(11992);
+    expect(report.changePct).toBeNull();
+    expect(report.changeAmount).toBe(11992);
+  });
+
   it('treats opening balance as wallet seed, not period income', () => {
     const rows = [
       tx({
@@ -247,7 +265,8 @@ describe('buildHomeReport', () => {
     expect(report.overBudget).toBe(false);
     expect(report.planFeasible).toBe(false);
     expect(report.plannedSavings).toBe(1000);
-    expect(report.actualSavings).toBe(-100);
+    expect(report.actualSavings).toBe(9900);
+    expect(report.savingsUsesPlannedIncome).toBe(true);
     expect(report.healthLabel).toBe('On track');
     expect(report.planLabel).toBe('Off track');
     expect(report.planHint.toLowerCase()).toContain('month');
@@ -278,6 +297,7 @@ describe('buildHomeReport', () => {
     });
 
     expect(report.actualSavings).toBe(1500);
+    expect(report.savingsUsesPlannedIncome).toBe(false);
     expect(report.plannedSavings).toBe(10000);
     expect(report.monthlySavingsGoal).toBe(5000);
     expect(report.overBudget).toBe(false);
@@ -287,7 +307,7 @@ describe('buildHomeReport', () => {
     expect(report.insightKicker).toBe('Spending');
   });
 
-  it('does not credit savings when planned income is unused and no income arrived', () => {
+  it('uses planned income minus expenses when no income is logged', () => {
     const rows = [
       tx({
         id: 'coffee',
@@ -304,7 +324,8 @@ describe('buildHomeReport', () => {
       monthlySavingsGoal: 5000,
     });
 
-    expect(report.actualSavings).toBe(-2000);
+    expect(report.actualSavings).toBe(28000);
+    expect(report.savingsUsesPlannedIncome).toBe(true);
     expect(report.planFeasible).toBe(true);
     expect(report.overBudget).toBe(false);
   });
@@ -344,5 +365,14 @@ describe('buildHomeReport', () => {
     expect(report.overBudget).toBe(true);
     expect(report.healthLabel).toBe('Off track');
     expect(report.spendRatio).toBeGreaterThan(100);
+    expect(report.budget).toBeLessThan(report.monthlyBudget);
+    expect(report.monthlyBudget).toBe(20000);
+    expect(report.monthlySpent).toBe(21580);
+    expect(report.monthlyRemainingBudget).toBe(-1580);
+    expect(report.monthlyOverBudget).toBe(true);
+    expect(report.monthlySpendRatio).toBe(108);
+    expect(report.monthlyActualSavings).toBe(28420);
+    expect(report.monthlySavingsVsTarget).toBe(27420);
+    expect(report.monthlySavingsUsesPlannedIncome).toBe(false);
   });
 });

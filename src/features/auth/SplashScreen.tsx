@@ -23,7 +23,7 @@ export function SplashScreen({
       <View style={styles.root}>
         <View style={styles.center}>
           <Stagger index={0} style={styles.logo}>
-            <Logo />
+            <Logo size={132} />
           </Stagger>
 
           <Stagger index={1} style={styles.copy}>

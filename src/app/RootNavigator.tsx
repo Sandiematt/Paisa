@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, StyleSheet} from 'react-native';
 
 import {SlideSwap} from '../components/ui';
@@ -26,17 +26,21 @@ export function RootNavigator() {
     useAuth();
   const [draft, setDraft] = useState<OnboardingDraft | null>(null);
   const [profileReady, setProfileReady] = useState(false);
+  const hadUser = useRef(false);
 
   useEffect(() => {
     if (!ready) {
       return;
     }
     if (!user) {
+      hadUser.current = false;
       setDraft(null);
       setProfileReady(true);
       router.reset('splash');
       return;
     }
+
+    hadUser.current = true;
 
     let cancelled = false;
     setProfileReady(false);
@@ -133,8 +137,14 @@ export function RootNavigator() {
 
   const renderRoute = useCallback(
     (name: string) => {
-      if (!ready || (session && !profileReady)) {
-        return <SplashScreen ready={false} onGetStarted={() => {}} />;
+      const waitingOnAuth = !ready || (session && !profileReady);
+      if (waitingOnAuth) {
+        return (
+          <SplashScreen
+            ready={false}
+            onGetStarted={() => {}}
+          />
+        );
       }
 
       if (session && draft) {

@@ -2,10 +2,14 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {StyleSheet, View} from 'react-native';
 
 import {ActivityScreen} from '../activity/ActivityScreen';
+import {ActivityFilter} from '../activity/types';
 import {AddActionSheet} from '../add/AddActionSheet';
 import {AddTransactionScreen} from '../add/AddTransactionScreen';
 import {AddKind} from '../add/types';
+import {BudgetDetailsScreen} from '../home/BudgetDetailsScreen';
 import {HomeScreen} from '../home/HomeScreen';
+import {HomeReport} from '../home/homeReport';
+import {SavingsDetailsScreen} from '../home/SavingsDetailsScreen';
 import {FloatingNavScrollProvider} from '../NavBar/FloatingNavScroll';
 import {NavBar, TabId} from '../NavBar/NavBar';
 import {currencyByCode} from '../onboarding/constants';
@@ -27,10 +31,15 @@ type MainTabsProps = {
 export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   const [profileDraft, setProfileDraft] = useState<OnboardingDraft>(draft);
   const [tab, setTab] = useState<TabId>('home');
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [addKind, setAddKind] = useState<AddKind | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [budgetOpen, setBudgetOpen] = useState(false);
+  const [savingsOpen, setSavingsOpen] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  // Latest dashboard report, updated whenever HomeScreen recomputes it
+  const [lastReport, setLastReport] = useState<HomeReport | null>(null);
 
   useEffect(() => {
     setProfileDraft(draft);
@@ -55,6 +64,18 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     setAddKind(kind);
   }, []);
 
+  const onAddPress = useCallback(() => {
+    if (tab === 'activity' && activityFilter === 'expenses') {
+      openComposer('expense');
+      return;
+    }
+    if (tab === 'activity' && activityFilter === 'income') {
+      openComposer('income');
+      return;
+    }
+    setSheetOpen(true);
+  }, [activityFilter, openComposer, tab]);
+
   let page = null;
   if (tab === 'home') {
     page = (
@@ -63,13 +84,22 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
         currencySymbol={currency.symbol}
         avatarUrl={profileDraft.avatarUrl}
         onProfilePress={() => setProfileOpen(true)}
+        onBudgetPress={() => setBudgetOpen(true)}
+        onSavingsPress={() => setSavingsOpen(true)}
+        onReportReady={setLastReport}
         refreshNonce={refreshNonce}
         openingAmount={Number(profileDraft.startingBalance) || 0}
         plan={moneyPlan}
       />
     );
   } else if (tab === 'activity') {
-    page = <ActivityScreen currencySymbol={currency.symbol} />;
+    page = (
+      <ActivityScreen
+        currencySymbol={currency.symbol}
+        filter={activityFilter}
+        onFilterChange={setActivityFilter}
+      />
+    );
   } else if (tab === 'insights') {
     page = <InsightsScreen currencySymbol={currency.symbol} />;
   } else {
@@ -78,7 +108,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
 
   return (
     <FloatingNavScrollProvider
-      resetKey={`${tab}:${profileOpen}:${sheetOpen}:${addKind ?? ''}`}>
+      resetKey={`${tab}:${profileOpen}:${budgetOpen}:${savingsOpen}:${sheetOpen}:${addKind ?? ''}`}>
       <View style={styles.root} collapsable={false}>
         <View style={styles.stage} collapsable={false}>
           {page}
@@ -87,7 +117,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
         <NavBar
           activeTab={tab}
           onTabPress={setTab}
-          onAddPress={() => setSheetOpen(true)}
+          onAddPress={onAddPress}
         />
 
         <AddActionSheet
@@ -103,6 +133,38 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           categoryIds={profileDraft.categoryIds}
           onClose={() => setAddKind(null)}
           onSaved={() => setRefreshNonce(value => value + 1)}
+        />
+
+        {/* Budget Details — opens from the Budget card on the dashboard */}
+        <BudgetDetailsScreen
+          visible={budgetOpen}
+          onClose={() => setBudgetOpen(false)}
+          currencySymbol={currency.symbol}
+          budget={lastReport?.budget ?? moneyPlan.monthlyBudget}
+          spent={lastReport?.spent ?? 0}
+          remainingBudget={
+            lastReport?.remainingBudget ?? moneyPlan.monthlyBudget
+          }
+          spendRatio={lastReport?.spendRatio ?? 0}
+          overBudget={lastReport?.overBudget ?? false}
+          slices={lastReport?.slices ?? []}
+          range={lastReport?.range ?? 'month'}
+        />
+
+        <SavingsDetailsScreen
+          visible={savingsOpen}
+          onClose={() => setSavingsOpen(false)}
+          currencySymbol={currency.symbol}
+          monthlySavingsGoal={
+            lastReport?.monthlySavingsGoal ?? moneyPlan.monthlySavingsGoal
+          }
+          periodSavingsTarget={lastReport?.periodSavingsTarget ?? 0}
+          actualSavings={lastReport?.actualSavings ?? 0}
+          savingsVsTarget={lastReport?.savingsVsTarget ?? 0}
+          savingsUsesPlannedIncome={
+            lastReport?.savingsUsesPlannedIncome ?? false
+          }
+          range={lastReport?.range ?? 'month'}
         />
 
         <ProfileScreen

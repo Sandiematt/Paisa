@@ -34,7 +34,7 @@ export function AuthChoiceScreen({
       <View style={styles.root}>
         <View style={styles.center}>
           <Stagger index={0} style={styles.logo}>
-            <Logo size={96} />
+            <Logo size={120} />
           </Stagger>
 
           <Stagger index={1} style={styles.copy}>

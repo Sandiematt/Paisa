@@ -34,23 +34,34 @@ export const EMPTY_MONEY_PLAN: MoneyPlan = {
 export type InsightKicker = 'Budget plan' | 'Spending' | 'Health score';
 
 export type HomeReport = {
+  range: HomeRange;
   rangeLabel: string;
   compareLabel: string;
   net: number;
   balance: number;
-  changePct: number;
+  changePct: number | null;
+  changeAmount: number;
   income: number;
   spent: number;
   remainingBudget: number;
   budget: number;
   monthlyIncome: number;
   monthlyBudget: number;
+  monthlySpent: number;
+  monthlyRemainingBudget: number;
+  monthlySpendRatio: number;
+  monthlyOverBudget: boolean;
+  monthlySlices: SpendSlice[];
   monthlySavingsGoal: number;
+  monthlyActualSavings: number;
+  monthlySavingsVsTarget: number;
+  monthlySavingsUsesPlannedIncome: boolean;
   periodSavingsTarget: number;
   plannedSavings: number;
   periodPlannedSavings: number;
   actualSavings: number;
   savingsVsTarget: number;
+  savingsUsesPlannedIncome: boolean;
   planFeasible: boolean;
   overBudget: boolean;
   series: number[];
@@ -177,12 +188,9 @@ function walletParts(rows: TransactionRow[]) {
   };
 }
 
-function changePercent(current: number, previous: number): number {
-  if (previous === 0) {
-    if (current === 0) {
-      return 0;
-    }
-    return current > 0 ? 100 : -100;
+function changePercent(current: number, previous: number): number | null {
+  if (Math.abs(previous) < 0.005) {
+    return Math.abs(current) < 0.005 ? 0 : null;
   }
   return Math.round(((current - previous) / Math.abs(previous)) * 100);
 }
@@ -281,7 +289,7 @@ export function scaleMonthly(
   return roundMoney(amount);
 }
 
-function rangeNoun(range: HomeRange): string {
+export function rangeNoun(range: HomeRange): string {
   if (range === 'week') {
     return 'week';
   }
@@ -289,6 +297,19 @@ function rangeNoun(range: HomeRange): string {
     return 'year';
   }
   return 'month';
+}
+
+export function rangeScopeLabel(range: HomeRange): string {
+  return `this ${rangeNoun(range)}`;
+}
+
+export function rangePlanTitle(
+  range: HomeRange,
+  kind: 'budget' | 'savings',
+): string {
+  const prefix =
+    range === 'week' ? 'Weekly' : range === 'year' ? 'Yearly' : 'Monthly';
+  return kind === 'budget' ? `${prefix} budget` : `${prefix} savings goal`;
 }
 
 type PlanInsight = {
@@ -302,6 +323,7 @@ type PlanInsight = {
   periodPlannedSavings: number;
   actualSavings: number;
   savingsVsTarget: number;
+  savingsUsesPlannedIncome: boolean;
   planFeasible: boolean;
   overBudget: boolean;
   health: number;
@@ -337,7 +359,12 @@ function planInsight(
   const periodPlannedSavings = roundMoney(periodPlannedIncome - periodBudget);
   const planFeasible =
     monthlySavingsGoal <= 0 || plannedSavings + 0.004 >= monthlySavingsGoal;
-  const actualSavings = roundMoney(actualIncome - spent);
+  const savingsUsesPlannedIncome =
+    actualIncome <= 0 && periodPlannedIncome > 0;
+  const incomeForSavings = savingsUsesPlannedIncome
+    ? periodPlannedIncome
+    : actualIncome;
+  const actualSavings = roundMoney(incomeForSavings - spent);
   const savingsVsTarget = roundMoney(actualSavings - periodSavingsTarget);
   const spendRatio =
     periodBudget > 0 ? Math.round((spent / periodBudget) * 100) : 0;
@@ -366,6 +393,7 @@ function planInsight(
       periodPlannedSavings,
       actualSavings,
       savingsVsTarget,
+      savingsUsesPlannedIncome,
       planFeasible,
       overBudget: false,
       health: 0,
@@ -393,6 +421,7 @@ function planInsight(
       periodPlannedSavings,
       actualSavings,
       savingsVsTarget,
+      savingsUsesPlannedIncome,
       planFeasible,
       overBudget,
       health: 0,
@@ -420,6 +449,7 @@ function planInsight(
       periodPlannedSavings,
       actualSavings,
       savingsVsTarget,
+      savingsUsesPlannedIncome,
       planFeasible,
       overBudget,
       health: Math.max(0, Math.min(100, 100 - spendRatio)),
@@ -446,6 +476,7 @@ function planInsight(
     periodPlannedSavings,
     actualSavings,
     savingsVsTarget,
+    savingsUsesPlannedIncome,
     planFeasible,
     overBudget,
     health: planTone === 'poor' ? 35 : 100,
@@ -651,6 +682,14 @@ export function buildHomeReport(
   const highlightValue = series[highlightIndex] ?? lifetime.balance;
   const empty = transactions.length === 0;
   const periodEmpty = currentRows.length === 0;
+  const monthPeriod = range === 'month' ? period : periodFor('month', now);
+  const monthRows =
+    range === 'month'
+      ? currentRows
+      : transactions.filter(row =>
+          inRange(row.transactionDate, monthPeriod.start, monthPeriod.end),
+        );
+  const monthParts = range === 'month' ? current : walletParts(monthRows);
   const hasPlan = plan.monthlyBudget > 0 || plan.monthlySavingsGoal > 0;
   const insight = planInsight(
     plan,
@@ -660,6 +699,12 @@ export function buildHomeReport(
     now,
     empty,
   );
+  const monthInsight =
+    range === 'month'
+      ? insight
+      : planInsight(plan, monthParts.spent, monthParts.income, 'month', now, empty);
+  const monthSlices =
+    range === 'month' ? spendSlices(currentRows, categories) : spendSlices(monthRows, categories);
   const health = hasPlan
     ? insight
     : healthBreakdown(lifetime.balance, current.spent, empty);
@@ -684,23 +729,34 @@ export function buildHomeReport(
       );
 
   return {
+    range,
     rangeLabel: rangeLabel(range, now),
     compareLabel: compareLabel(range, now),
     net: current.net,
     balance: lifetime.balance,
     changePct: changePercent(lifetime.balance, previousRemaining),
+    changeAmount: roundMoney(lifetime.balance - previousRemaining),
     income: roundMoney(current.income),
     spent: roundMoney(current.spent),
     remainingBudget: insight.remainingBudget,
     budget: insight.budget,
     monthlyIncome: insight.monthlyIncome,
     monthlyBudget: insight.monthlyBudget,
+    monthlySpent: roundMoney(monthParts.spent),
+    monthlyRemainingBudget: monthInsight.remainingBudget,
+    monthlySpendRatio: monthInsight.spendRatio,
+    monthlyOverBudget: monthInsight.overBudget,
+    monthlySlices: monthSlices,
     monthlySavingsGoal: insight.monthlySavingsGoal,
+    monthlyActualSavings: monthInsight.actualSavings,
+    monthlySavingsVsTarget: monthInsight.savingsVsTarget,
+    monthlySavingsUsesPlannedIncome: monthInsight.savingsUsesPlannedIncome,
     periodSavingsTarget: insight.periodSavingsTarget,
     plannedSavings: insight.plannedSavings,
     periodPlannedSavings: insight.periodPlannedSavings,
     actualSavings: insight.actualSavings,
     savingsVsTarget: insight.savingsVsTarget,
+    savingsUsesPlannedIncome: insight.savingsUsesPlannedIncome,
     planFeasible: insight.planFeasible,
     overBudget: insight.overBudget,
     series,

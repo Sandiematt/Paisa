@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   Animated,
   BackHandler,
@@ -6,19 +6,13 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import {AppText, PressableScale} from '../../components/ui';
-import {useReducedMotion} from '../../hooks/useReducedMotion';
-import {
-  colors,
-  duration,
-  easing,
-  layout,
-  radii,
-  spacing,
-} from '../../theme';
-import {AddKind} from './types';
+import { MoneyInGlyph, MoneyOutGlyph } from '../../components/icons/Glyphs';
+import { AppText, PressableScale } from '../../components/ui';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { colors, duration, easing, layout, radii, spacing } from '../../theme';
+import { AddKind } from './types';
 
 type AddActionSheetProps = {
   visible: boolean;
@@ -31,18 +25,21 @@ const OPTIONS: {
   title: string;
   description: string;
   accent: string;
+  accentSoft: string;
 }[] = [
   {
     kind: 'expense',
-    title: 'Add Expense',
-    description: 'Log money that went out.',
+    title: 'Add expense',
+    description: 'Capture a purchase, bill, fee, or cash spend.',
     accent: colors.coral,
+    accentSoft: '#FCE9E4',
   },
   {
     kind: 'income',
-    title: 'Add Income',
-    description: 'Log money that came in.',
+    title: 'Add income',
+    description: 'Record salary, refunds, transfers, or side income.',
     accent: colors.positive,
+    accentSoft: colors.alertPositive,
   },
 ];
 
@@ -87,9 +84,10 @@ export function AddActionSheet({
     <View
       style={styles.layer}
       pointerEvents={visible ? 'auto' : 'none'}
-      collapsable={false}>
+      collapsable={false}
+    >
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
-        <Animated.View style={[styles.scrim, {opacity: progress}]} />
+        <Animated.View style={[styles.scrim, { opacity: progress }]} />
       </Pressable>
 
       <Animated.View
@@ -98,36 +96,62 @@ export function AddActionSheet({
           {
             paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.md,
             opacity: progress,
-            transform: [{translateY}],
+            transform: [{ translateY }],
           },
-        ]}>
+        ]}
+      >
         <View style={styles.handle} />
-        <AppText variant="heading" style={styles.title}>
-          Add transaction
-        </AppText>
+        <View style={styles.header}>
+          <AppText variant="title" style={styles.title}>
+            Add transaction
+          </AppText>
+          <AppText variant="body" color={colors.inkSecondary}>
+            Choose the flow that matches the money movement.
+          </AppText>
+        </View>
 
-          <View style={styles.options}>
-            {OPTIONS.map((option, index) => (
-              <PressableScale
-                key={option.kind}
-                onPress={() => onSelect(option.kind)}
-                scaleTo={0.98}
-                accessibilityRole="button"
-                accessibilityLabel={option.title}
+        <View style={styles.options}>
+          {OPTIONS.map((option, index) => (
+            <PressableScale
+              key={option.kind}
+              onPress={() => onSelect(option.kind)}
+              scaleTo={0.98}
+              accessibilityRole="button"
+              accessibilityLabel={option.title}
+              style={[
+                styles.option,
+                index < OPTIONS.length - 1 && styles.optionGap,
+                { borderColor: option.accentSoft },
+              ]}
+            >
+              <View
                 style={[
-                  styles.option,
-                  index < OPTIONS.length - 1 && styles.optionGap,
-                ]}>
-              <View style={[styles.rail, {backgroundColor: option.accent}]} />
+                  styles.mark,
+                  {
+                    backgroundColor: option.accentSoft,
+                    borderColor: option.accent,
+                  },
+                ]}
+              >
+                {option.kind === 'income' ? (
+                  <MoneyInGlyph color={option.accent} size={20} />
+                ) : (
+                  <MoneyOutGlyph color={option.accent} size={20} />
+                )}
+              </View>
               <View style={styles.optionCopy}>
                 <AppText variant="heading">{option.title}</AppText>
                 <AppText
                   variant="body"
                   color={colors.inkSecondary}
-                  style={styles.optionDesc}>
+                  style={styles.optionDesc}
+                >
                   {option.description}
                 </AppText>
               </View>
+              <AppText variant="heading" color={colors.inkMuted}>
+                {'›'}
+              </AppText>
             </PressableScale>
           ))}
         </View>
@@ -160,6 +184,11 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radii.sheet,
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.md,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.12,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: -8 },
+    elevation: 12,
   },
   handle: {
     alignSelf: 'center',
@@ -169,8 +198,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.hairlineStrong,
     marginBottom: spacing.xl,
   },
-  title: {
+  header: {
     marginBottom: spacing.xl,
+  },
+  title: {
+    marginBottom: spacing.xs,
   },
   options: {
     flexDirection: 'column',
@@ -179,23 +211,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radii.card,
+    borderRadius: radii.sheet,
     borderWidth: 1.5,
     borderColor: colors.hairline,
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
   },
   optionGap: {
     marginBottom: spacing.md,
   },
-  rail: {
-    width: 4,
-    height: 40,
+  mark: {
+    width: 44,
+    height: 44,
     borderRadius: radii.pill,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: spacing.lg,
   },
   optionCopy: {
     flex: 1,
+    paddingRight: spacing.md,
   },
   optionDesc: {
     marginTop: 2,

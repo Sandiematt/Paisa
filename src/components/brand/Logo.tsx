@@ -14,11 +14,12 @@ type LogoProps = {
  * once a transparent asset exists.
  */
 export function Logo({size = 132}: LogoProps) {
+  const imageSize = size - spacing.sm * 2;
   return (
     <View style={[styles.tile, {width: size, height: size}]}>
       <Image
         source={require('../../../assets/logo/logo.png')}
-        style={styles.image}
+        style={[styles.image, {width: imageSize, height: imageSize}]}
         resizeMode="contain"
         accessibilityRole="image"
         accessibilityLabel="Paisa"
@@ -33,13 +34,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.hairline,
-    padding: spacing.lg,
+    padding: spacing.sm,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   image: {
-    width: '100%',
-    height: '100%',
+    // sized dynamically from the prop above
   },
 });

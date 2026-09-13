@@ -1,3 +1,5 @@
+// this is just a feature Screen for now ... it is used as a placeholder.
+  
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
 

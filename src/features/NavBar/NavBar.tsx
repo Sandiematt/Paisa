@@ -133,7 +133,7 @@ export function NavBar({activeTab, onTabPress, onAddPress}: NavBarProps) {
                 scaleTo={0.94}
                 accessibilityRole="button"
                 accessibilityLabel={item.label}
-                accessibilityHint="Opens a menu to add an expense or income"
+                accessibilityHint="Adds an expense or income"
                 containerStyle={styles.slot}
                 style={styles.hit}>
                 <View style={styles.addFace}>

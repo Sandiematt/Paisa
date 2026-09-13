@@ -33,6 +33,7 @@ import {
   MIN_CATEGORIES,
   currencyByCode,
 } from '../onboarding/constants';
+import {scaleMonthly} from '../home/homeReport';
 import {GoalId, OnboardingDraft} from '../onboarding/types';
 import {AvatarPickerModal} from './AvatarPickerModal';
 import {
@@ -162,12 +163,10 @@ export function ProfileScreen({
   const [name, setName] = useState(draft.name);
   const [email, setEmail] = useState(draft.email);
   const [currency, setCurrency] = useState(draft.currency);
-  const [monthlyIncome, setMonthlyIncome] = useState(draft.monthlyIncome);
   const [monthlyBudget, setMonthlyBudget] = useState(draft.monthlyBudget);
   const [monthlySavingsGoal, setMonthlySavingsGoal] = useState(
     draft.monthlySavingsGoal,
   );
-  const [startingBalance, setStartingBalance] = useState(draft.startingBalance);
   const [currentBalance, setCurrentBalance] = useState('');
   const [currentBalanceDirty, setCurrentBalanceDirty] = useState(false);
   const computedBalance = useRef(0);
@@ -224,10 +223,8 @@ export function ProfileScreen({
     setName(draft.name);
     setEmail(draft.email);
     setCurrency(draft.currency);
-    setMonthlyIncome(draft.monthlyIncome);
     setMonthlyBudget(draft.monthlyBudget);
     setMonthlySavingsGoal(draft.monthlySavingsGoal);
-    setStartingBalance(draft.startingBalance);
     setCurrentBalanceDirty(false);
     setGoal(draft.goal);
     setCategoryIds(draft.categoryIds);
@@ -265,9 +262,13 @@ export function ProfileScreen({
   const activeCurrency = useMemo(() => currencyByCode(currency), [currency]);
   const budgetNumber = Number(monthlyBudget) || 0;
   const perDay = budgetNumber > 0 ? Math.round(budgetNumber / 30) : 0;
-  const incomeNumber = Number(monthlyIncome) || 0;
   const savingsNumber = Number(monthlySavingsGoal) || 0;
-  const leftover = incomeNumber > 0 && budgetNumber > 0 ? incomeNumber - budgetNumber : 0;
+  const leftover =
+    Number(draft.monthlyIncome) > 0 && budgetNumber > 0
+      ? Number(draft.monthlyIncome) - budgetNumber
+      : 0;
+  const weeklyPace = scaleMonthly(savingsNumber, 'week', new Date());
+  const yearlyPotential = scaleMonthly(savingsNumber, 'year', new Date());
   const emailVerified = EMAIL_PATTERN.test(email.trim());
 
   const goalLabel =
@@ -316,21 +317,18 @@ export function ProfileScreen({
       return;
     }
 
-    const startingDelta =
-      (textToMoney(startingBalance) ?? 0) -
-      (textToMoney(draft.startingBalance) ?? 0);
     const typedCurrent = textToMoney(currentBalance);
     const targetWalletBalance = currentBalanceDirty
       ? typedCurrent
-      : (typedCurrent ?? computedBalance.current) + startingDelta;
+      : typedCurrent ?? computedBalance.current;
 
     onSave(
       {
         name: name.trim(),
         email: email.trim(),
         currency,
-        startingBalance,
-        monthlyIncome,
+        startingBalance: draft.startingBalance,
+        monthlyIncome: draft.monthlyIncome,
         monthlyBudget,
         monthlySavingsGoal,
         goal,
@@ -573,19 +571,6 @@ export function ProfileScreen({
             <SettingsSection title="Financial Profile">
               <View style={styles.fieldBlock}>
                 <TextField
-                  label="Starting balance"
-                  placeholder="Not set"
-                  prefix={activeCurrency.symbol}
-                  value={startingBalance}
-                  onChangeText={val =>
-                    setStartingBalance(val.replace(/[^0-9]/g, ''))
-                  }
-                  keyboardType="number-pad"
-                  helper="Opening amount. Changing this posts an adjustment if current balance is left as-is."
-                />
-              </View>
-              <View style={[styles.fieldBlock, styles.fieldFollow]}>
-                <TextField
                   label="Current balance"
                   placeholder="0"
                   prefix={activeCurrency.symbol}
@@ -596,18 +581,6 @@ export function ProfileScreen({
                   }}
                   keyboardType="number-pad"
                   helper="From your transactions. Edits are saved as an adjustment, not a rewrite."
-                />
-              </View>
-              <View style={[styles.fieldBlock, styles.fieldFollow]}>
-                <TextField
-                  label="Monthly income"
-                  placeholder="Not set"
-                  prefix={activeCurrency.symbol}
-                  value={monthlyIncome}
-                  onChangeText={val =>
-                    setMonthlyIncome(val.replace(/[^0-9]/g, ''))
-                  }
-                  keyboardType="number-pad"
                 />
               </View>
               <View style={[styles.fieldBlock, styles.fieldFollow]}>
@@ -632,8 +605,24 @@ export function ProfileScreen({
                     setMonthlySavingsGoal(val.replace(/[^0-9]/g, ''))
                   }
                   keyboardType="number-pad"
+                  helper="Only this monthly target is saved. Week and year follow from it."
                 />
               </View>
+              {savingsNumber > 0 ? (
+                <View style={styles.savingsDerived}>
+                  <SettingsRow
+                    label="Weekly pace"
+                    value={`${activeCurrency.symbol}${weeklyPace.toLocaleString('en-IN')}`}
+                    kind="info"
+                  />
+                  <SettingsRow
+                    label="Yearly potential"
+                    value={`${activeCurrency.symbol}${yearlyPotential.toLocaleString('en-IN')}`}
+                    kind="info"
+                    last
+                  />
+                </View>
+              ) : null}
               {perDay > 0 ? (
                 <AppText
                   variant="caption"
@@ -960,6 +949,11 @@ const styles = StyleSheet.create({
   },
 
   // Financial profile
+  savingsDerived: {
+    marginTop: spacing.xs,
+    borderTopWidth: layout.hairlineWidth,
+    borderTopColor: colors.hairline,
+  },
   dailyHint: {
     paddingBottom: spacing.md,
     paddingTop: spacing.xs,

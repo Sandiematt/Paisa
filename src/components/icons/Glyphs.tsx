@@ -332,6 +332,216 @@ export function PlusGlyph({color, size = 22}: GlyphProps) {
   );
 }
 
+export function MinusGlyph({color, size = 22}: GlyphProps) {
+  const thickness = Math.max(2.4, size * 0.12);
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      <View
+        style={{
+          width: size,
+          height: thickness,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+        }}
+      />
+    </View>
+  );
+}
+
+export function CalendarGlyph({color, size = 16}: GlyphProps) {
+  const stroke = Math.max(1.5, size * 0.1);
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+      }}>
+      <View
+        style={{
+          width: size * 0.88,
+          height: size * 0.78,
+          borderWidth: stroke,
+          borderColor: color,
+          borderRadius: 3,
+          paddingTop: size * 0.22,
+          paddingHorizontal: 2,
+          justifyContent: 'center',
+        }}>
+        <View style={[styles.rule, {backgroundColor: color}]} />
+      </View>
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: size * 0.22,
+          width: stroke,
+          height: size * 0.28,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: size * 0.22,
+          width: stroke,
+          height: size * 0.28,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+        }}
+      />
+    </View>
+  );
+}
+
+/**
+ * New-entry mark for the tab add button: a folded note, not a plus.
+ */
+export function LedgerGlyph({color, size = 18}: GlyphProps) {
+  const stroke = Math.max(1.6, size * 0.1);
+  const width = size * 0.72;
+  const height = size * 0.88;
+  const fold = size * 0.28;
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      <View
+        style={{
+          width,
+          height,
+          borderWidth: stroke,
+          borderColor: color,
+          borderRadius: 3,
+          overflow: 'hidden',
+          paddingHorizontal: size * 0.12,
+          paddingTop: size * 0.28,
+          justifyContent: 'space-between',
+          paddingBottom: size * 0.14,
+        }}>
+        <View style={[styles.rule, {backgroundColor: color, width: '100%'}]} />
+        <View style={[styles.rule, {backgroundColor: color, width: '70%'}]} />
+        <View style={[styles.rule, {backgroundColor: color, width: '86%'}]} />
+      </View>
+      <View
+        style={{
+          position: 'absolute',
+          top: (size - height) / 2,
+          right: (size - width) / 2,
+          width: 0,
+          height: 0,
+          borderLeftWidth: fold,
+          borderBottomWidth: fold,
+          borderLeftColor: 'transparent',
+          borderBottomColor: color,
+        }}
+      />
+    </View>
+  );
+}
+
+/**
+ * Shared money-flow mark. The tray stays on the baseline.
+ * Income drops into it. Expense lifts out of it.
+ */
+export function MoneyFlowGlyph({
+  color,
+  size = 18,
+  direction,
+}: GlyphProps & {direction: 'in' | 'out'}) {
+  const stroke = Math.max(1.7, size * 0.11);
+  const incoming = direction === 'in';
+  const trayW = size * 0.82;
+  const trayH = size * 0.3;
+  const shaftH = size * 0.32;
+  const head = size * 0.26;
+
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+      }}>
+      <View
+        style={{
+          flex: 1,
+          width: size,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+        {incoming ? null : (
+          <View
+            style={{
+              width: head,
+              height: head,
+              borderTopWidth: stroke,
+              borderRightWidth: stroke,
+              borderColor: color,
+              transform: [{rotate: '-45deg'}],
+              marginBottom: -head * 0.45,
+            }}
+          />
+        )}
+        <View
+          style={{
+            width: stroke,
+            height: shaftH,
+            borderRadius: radii.pill,
+            backgroundColor: color,
+          }}
+        />
+        {incoming ? (
+          <View
+            style={{
+              width: head,
+              height: head,
+              borderTopWidth: stroke,
+              borderRightWidth: stroke,
+              borderColor: color,
+              transform: [{rotate: '135deg'}],
+              marginTop: -head * 0.45,
+            }}
+          />
+        ) : null}
+      </View>
+      <View
+        style={{
+          width: trayW,
+          height: trayH,
+          borderWidth: stroke,
+          borderTopWidth: 0,
+          borderColor: color,
+          borderBottomLeftRadius: 5,
+          borderBottomRightRadius: 5,
+        }}
+      />
+    </View>
+  );
+}
+
+export function MoneyInGlyph({color, size = 18}: GlyphProps) {
+  return <MoneyFlowGlyph color={color} size={size} direction="in" />;
+}
+
+export function MoneyOutGlyph({color, size = 18}: GlyphProps) {
+  return <MoneyFlowGlyph color={color} size={size} direction="out" />;
+}
+
 export function SearchGlyph({color, size = 18}: GlyphProps) {
   const lens = size * 0.72;
   return (

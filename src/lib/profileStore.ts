@@ -106,14 +106,11 @@ export function draftFromUser(
     name: stored?.name || asString(meta.name) || displayNameFromEmail(user.email),
     email: stored?.email || user.email || asString(meta.email),
     currency: stored?.currency || asString(meta.currency, 'INR'),
-    startingBalance:
-      stored?.startingBalance !== undefined
-        ? stored.startingBalance
-        : asString(meta.startingBalance),
-    monthlyIncome: stored?.monthlyIncome || asString(meta.monthlyIncome),
-    monthlyBudget: stored?.monthlyBudget || asString(meta.monthlyBudget),
+    startingBalance: stored?.startingBalance ?? asString(meta.startingBalance),
+    monthlyIncome: stored?.monthlyIncome ?? asString(meta.monthlyIncome),
+    monthlyBudget: stored?.monthlyBudget ?? asString(meta.monthlyBudget),
     monthlySavingsGoal:
-      stored?.monthlySavingsGoal || asString(meta.monthlySavingsGoal),
+      stored?.monthlySavingsGoal ?? asString(meta.monthlySavingsGoal),
     goal: stored?.goal ?? asGoal(meta.goal),
     categoryIds: stored?.categoryIds ?? asCategories(meta.categoryIds),
     avatarUrl: stored?.avatarUrl || asString(meta.avatarUrl) || undefined,

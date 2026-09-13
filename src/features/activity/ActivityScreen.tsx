@@ -23,6 +23,8 @@ const FILTERS: {id: ActivityFilter; label: string}[] = [
 
 type ActivityScreenProps = {
   currencySymbol: string;
+  filter: ActivityFilter;
+  onFilterChange: (filter: ActivityFilter) => void;
 };
 
 type DayGroup = {
@@ -91,9 +93,12 @@ function matchesFilter(
   }
 }
 
-export function ActivityScreen({currencySymbol}: ActivityScreenProps) {
+export function ActivityScreen({
+  currencySymbol,
+  filter,
+  onFilterChange,
+}: ActivityScreenProps) {
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<ActivityFilter>('all');
   const navClearance = useFloatingNavClearance();
   const navScroll = useFloatingNavScroll();
 
@@ -159,7 +164,7 @@ export function ActivityScreen({currencySymbol}: ActivityScreenProps) {
             key={item.id}
             label={item.label}
             selected={filter === item.id}
-            onPress={() => setFilter(item.id)}
+            onPress={() => onFilterChange(item.id)}
           />
         ))}
       </ScrollView>
