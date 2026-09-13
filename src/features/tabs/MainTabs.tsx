@@ -8,8 +8,8 @@ import {AddTransactionScreen} from '../add/AddTransactionScreen';
 import {AddKind} from '../add/types';
 import {BudgetDetailsScreen} from '../home/BudgetDetailsScreen';
 import {HomeScreen} from '../home/HomeScreen';
-import {HomeReport} from '../home/homeReport';
 import {SavingsDetailsScreen} from '../home/SavingsDetailsScreen';
+import {useHomeDashboard} from '../home/useHomeDashboard';
 import {FloatingNavScrollProvider} from '../NavBar/FloatingNavScroll';
 import {NavBar, TabId} from '../NavBar/NavBar';
 import {currencyByCode} from '../onboarding/constants';
@@ -38,8 +38,6 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [savingsOpen, setSavingsOpen] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
-  // Latest dashboard report, updated whenever HomeScreen recomputes it
-  const [lastReport, setLastReport] = useState<HomeReport | null>(null);
 
   useEffect(() => {
     setProfileDraft(draft);
@@ -57,6 +55,20 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       profileDraft.monthlyIncome,
       profileDraft.monthlySavingsGoal,
     ],
+  );
+  const {
+    range,
+    setRange,
+    report,
+    status,
+    refreshing,
+    error,
+    updatedAt,
+    reload,
+  } = useHomeDashboard(
+    refreshNonce,
+    Number(profileDraft.startingBalance) || 0,
+    moneyPlan,
   );
 
   const openComposer = useCallback((kind: AddKind) => {
@@ -86,10 +98,14 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
         onProfilePress={() => setProfileOpen(true)}
         onBudgetPress={() => setBudgetOpen(true)}
         onSavingsPress={() => setSavingsOpen(true)}
-        onReportReady={setLastReport}
-        refreshNonce={refreshNonce}
-        openingAmount={Number(profileDraft.startingBalance) || 0}
-        plan={moneyPlan}
+        report={report}
+        status={status}
+        refreshing={refreshing}
+        error={error}
+        updatedAt={updatedAt}
+        reload={reload}
+        range={range}
+        setRange={setRange}
       />
     );
   } else if (tab === 'activity') {
@@ -140,15 +156,15 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           visible={budgetOpen}
           onClose={() => setBudgetOpen(false)}
           currencySymbol={currency.symbol}
-          budget={lastReport?.budget ?? moneyPlan.monthlyBudget}
-          spent={lastReport?.spent ?? 0}
+          budget={report.budget ?? moneyPlan.monthlyBudget}
+          spent={report.spent ?? 0}
           remainingBudget={
-            lastReport?.remainingBudget ?? moneyPlan.monthlyBudget
+            report.remainingBudget ?? moneyPlan.monthlyBudget
           }
-          spendRatio={lastReport?.spendRatio ?? 0}
-          overBudget={lastReport?.overBudget ?? false}
-          slices={lastReport?.slices ?? []}
-          range={lastReport?.range ?? 'month'}
+          spendRatio={report.spendRatio ?? 0}
+          overBudget={report.overBudget ?? false}
+          slices={report.slices ?? []}
+          range={report.range ?? 'month'}
         />
 
         <SavingsDetailsScreen
@@ -156,15 +172,15 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           onClose={() => setSavingsOpen(false)}
           currencySymbol={currency.symbol}
           monthlySavingsGoal={
-            lastReport?.monthlySavingsGoal ?? moneyPlan.monthlySavingsGoal
+            report.monthlySavingsGoal ?? moneyPlan.monthlySavingsGoal
           }
-          periodSavingsTarget={lastReport?.periodSavingsTarget ?? 0}
-          actualSavings={lastReport?.actualSavings ?? 0}
-          savingsVsTarget={lastReport?.savingsVsTarget ?? 0}
+          periodSavingsTarget={report.periodSavingsTarget ?? 0}
+          actualSavings={report.actualSavings ?? 0}
+          savingsVsTarget={report.savingsVsTarget ?? 0}
           savingsUsesPlannedIncome={
-            lastReport?.savingsUsesPlannedIncome ?? false
+            report.savingsUsesPlannedIncome ?? false
           }
-          range={lastReport?.range ?? 'month'}
+          range={report.range ?? 'month'}
         />
 
         <ProfileScreen
