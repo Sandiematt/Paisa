@@ -86,7 +86,9 @@ describe('buildHomeReport', () => {
     expect(report.spent).toBe(300);
     expect(report.net).toBe(700);
     expect(report.balance).toBe(1000);
-    expect(report.changePct).toBe(233);
+    expect(report.changePct).toBe(133);
+    expect(report.changeAmount).toBe(400);
+    expect(report.compareLabel).toBe('vs August');
     expect(report.slices[0].percent + report.slices[1].percent).toBe(100);
     expect(report.empty).toBe(false);
     expect(report.series).toHaveLength(15);
@@ -122,7 +124,7 @@ describe('buildHomeReport', () => {
     const report = buildHomeReport(rows, [housing], 'month', now);
 
     expect(report.balance).toBe(11992);
-    expect(report.changePct).toBeNull();
+    expect(report.changePct).toBe(0);
     expect(report.changeAmount).toBe(11992);
   });
 
@@ -328,6 +330,163 @@ describe('buildHomeReport', () => {
     expect(report.savingsUsesPlannedIncome).toBe(true);
     expect(report.planFeasible).toBe(true);
     expect(report.overBudget).toBe(false);
+  });
+
+  it('keeps week income and spend on this Monday–Sunday only', () => {
+    const rows = [
+      tx({
+        id: 'last-week',
+        type: 'expense',
+        amount: 900,
+        categoryId: 'cat-housing',
+        transactionDate: '2026-09-09',
+      }),
+      tx({
+        id: 'this-week-pay',
+        type: 'income',
+        amount: 4000,
+        categoryId: null,
+        transactionDate: '2026-09-14T08:00:00.000Z',
+      }),
+      tx({
+        id: 'this-week-rent',
+        type: 'expense',
+        amount: 1100,
+        categoryId: 'cat-housing',
+        transactionDate: '2026-09-15',
+      }),
+    ];
+
+    const week = buildHomeReport(rows, [housing], 'week', now);
+    const month = buildHomeReport(rows, [housing], 'month', now);
+
+    expect(week.income).toBe(4000);
+    expect(week.spent).toBe(1100);
+    expect(week.net).toBe(2900);
+    expect(week.changePct).toBe(422);
+    expect(week.changeAmount).toBe(3800);
+    expect(week.compareLabel).toBe('vs last week');
+    expect(month.spent).toBe(2000);
+    expect(month.income).toBe(4000);
+    expect(month.changePct).toBe(0);
+    expect(month.compareLabel).toBe('vs August');
+  });
+
+  it('compares this year net to last year for the yearly badge', () => {
+    const rows = [
+      tx({
+        id: 'last-year',
+        type: 'income',
+        amount: 2000,
+        categoryId: null,
+        transactionDate: '2025-03-10',
+      }),
+      tx({
+        id: 'last-year-rent',
+        type: 'expense',
+        amount: 500,
+        categoryId: 'cat-housing',
+        transactionDate: '2025-06-01',
+      }),
+      tx({
+        id: 'this-year',
+        type: 'income',
+        amount: 4500,
+        categoryId: null,
+        transactionDate: '2026-02-01',
+      }),
+      tx({
+        id: 'this-year-rent',
+        type: 'expense',
+        amount: 1500,
+        categoryId: 'cat-housing',
+        transactionDate: '2026-04-01',
+      }),
+    ];
+
+    const report = buildHomeReport(rows, [housing], 'year', now);
+
+    expect(report.net).toBe(3000);
+    expect(report.changePct).toBe(100);
+    expect(report.changeAmount).toBe(1500);
+    expect(report.compareLabel).toBe('vs last year');
+  });
+
+  it('computes a distinct change badge for week, month, and year', () => {
+    const rows = [
+      tx({
+        id: 'last-year',
+        type: 'income',
+        amount: 10000,
+        categoryId: null,
+        transactionDate: '2025-04-01',
+      }),
+      tx({
+        id: 'last-year-rent',
+        type: 'expense',
+        amount: 2000,
+        categoryId: 'cat-housing',
+        transactionDate: '2025-08-01',
+      }),
+      tx({
+        id: 'august',
+        type: 'income',
+        amount: 4000,
+        categoryId: null,
+        transactionDate: '2026-08-10',
+      }),
+      tx({
+        id: 'august-rent',
+        type: 'expense',
+        amount: 1000,
+        categoryId: 'cat-housing',
+        transactionDate: '2026-08-20',
+      }),
+      tx({
+        id: 'last-week',
+        type: 'income',
+        amount: 500,
+        categoryId: null,
+        transactionDate: '2026-09-08',
+      }),
+      tx({
+        id: 'last-week-food',
+        type: 'expense',
+        amount: 100,
+        categoryId: 'cat-dining',
+        transactionDate: '2026-09-09',
+      }),
+      tx({
+        id: 'this-week',
+        type: 'income',
+        amount: 2000,
+        categoryId: null,
+        transactionDate: '2026-09-14',
+      }),
+      tx({
+        id: 'this-week-food',
+        type: 'expense',
+        amount: 200,
+        categoryId: 'cat-dining',
+        transactionDate: '2026-09-15',
+      }),
+    ];
+
+    const week = buildHomeReport(rows, [housing, dining], 'week', now);
+    const month = buildHomeReport(rows, [housing, dining], 'month', now);
+    const year = buildHomeReport(rows, [housing, dining], 'year', now);
+
+    expect(week.net).toBe(1800);
+    expect(week.changePct).toBe(350);
+    expect(week.compareLabel).toBe('vs last week');
+
+    expect(month.net).toBe(2200);
+    expect(month.changePct).toBe(-27);
+    expect(month.compareLabel).toBe('vs August');
+
+    expect(year.net).toBe(5200);
+    expect(year.changePct).toBe(-35);
+    expect(year.compareLabel).toBe('vs last year');
   });
 
   it('evaluates the savings plan monthly even on the week range', () => {

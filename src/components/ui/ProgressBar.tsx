@@ -8,21 +8,38 @@ type ProgressBarProps = {
   /** 0 to 1. */
   progress: number;
   color?: string;
+  /** Wonder budget/savings bars: gold→coral or green→lime. */
+  gradient?: [string, string];
 };
+
+function mixHex(a: string, b: string, t: number): string {
+  const parse = (hex: string) => {
+    const h = hex.replace('#', '');
+    return [
+      parseInt(h.slice(0, 2), 16),
+      parseInt(h.slice(2, 4), 16),
+      parseInt(h.slice(4, 6), 16),
+    ] as const;
+  };
+  const [ar, ag, ab] = parse(a);
+  const [br, bg, bb] = parse(b);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `rgb(${r},${g},${bl})`;
+}
 
 /**
  * Fill is driven by `scaleX` with a compensating `translateX` so the whole
  * thing rides the native driver. Animating `width` would trigger layout on
  * every frame.
  */
-export function ProgressBar({progress, color = colors.accent}: ProgressBarProps) {
+export function ProgressBar({progress, color = colors.accent, gradient}: ProgressBarProps) {
   const reducedMotion = useReducedMotion();
   const [trackWidth, setTrackWidth] = useState(0);
   const value = useRef(new Animated.Value(progress)).current;
 
   useEffect(() => {
-    // Matched to the step swap so the bar and the arriving content settle
-    // together instead of the bar finishing early.
     Animated.timing(value, {
       toValue: progress,
       duration: reducedMotion ? 0 : duration.screenEnter,
@@ -35,12 +52,10 @@ export function ProgressBar({progress, color = colors.accent}: ProgressBarProps)
     setTrackWidth(event.nativeEvent.layout.width);
   };
 
-  // Scaling happens about the centre, so shift left by half the missing width
-  // to keep the fill anchored to the start of the track.
-  const translateX = Animated.multiply(
-    Animated.add(value, -1),
-    trackWidth / 2,
-  );
+  const translateX = Animated.multiply(Animated.add(value, -1), trackWidth / 2);
+  const stops = gradient
+    ? Array.from({length: 12}, (_, index) => mixHex(gradient[0], gradient[1], index / 11))
+    : null;
 
   return (
     <View style={styles.track} onLayout={onLayout} accessibilityRole="progressbar">
@@ -49,24 +64,40 @@ export function ProgressBar({progress, color = colors.accent}: ProgressBarProps)
           styles.fill,
           {
             width: trackWidth,
-            backgroundColor: color,
+            backgroundColor: stops ? undefined : color,
             transform: [{translateX}, {scaleX: value}],
           },
-        ]}
-      />
+        ]}>
+        {stops ? (
+          <View style={styles.gradientRow}>
+            {stops.map((stop, index) => (
+              <View key={index} style={[styles.gradientStop, {backgroundColor: stop}]} />
+            ))}
+          </View>
+        ) : null}
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   track: {
-    height: 4,
+    height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.hairline,
+    backgroundColor: colors.track,
     overflow: 'hidden',
   },
   fill: {
-    height: 4,
+    height: 6,
     borderRadius: radii.pill,
+    overflow: 'hidden',
+  },
+  gradientRow: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  gradientStop: {
+    flex: 1,
+    height: 6,
   },
 });

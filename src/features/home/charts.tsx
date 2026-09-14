@@ -205,7 +205,8 @@ export function DonutChart({slices, size = 132, children}: DonutChartProps) {
     ticks.length = TICKS;
   }
 
-  const stroke = 22;
+  const hole = Math.round(size * 0.71);
+  const stroke = Math.max(10, (size - hole) / 2);
   const tickW = 5;
   const radius = size / 2 - stroke / 2;
 
@@ -233,11 +234,11 @@ export function DonutChart({slices, size = 132, children}: DonutChartProps) {
         style={[
           styles.donutHole,
           {
-            width: size - stroke * 2 - 4,
-            height: size - stroke * 2 - 4,
-            borderRadius: size,
-            top: stroke + 2,
-            left: stroke + 2,
+            width: hole,
+            height: hole,
+            borderRadius: hole,
+            top: (size - hole) / 2,
+            left: (size - hole) / 2,
           },
         ]}>
         {children}
@@ -325,7 +326,7 @@ const styles = StyleSheet.create({
   },
   donutHole: {
     position: 'absolute',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.canvas,
     alignItems: 'center',
     justifyContent: 'center',
   },

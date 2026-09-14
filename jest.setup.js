@@ -1,3 +1,9 @@
+jest.mock('expo', () => ({
+  registerRootComponent: component => component,
+}));
+
+jest.mock('expo-dev-client', () => ({}));
+
 jest.mock('react-native-url-polyfill/auto', () => ({}));
 
 jest.mock('@react-native-async-storage/async-storage', () => {

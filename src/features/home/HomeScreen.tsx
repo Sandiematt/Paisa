@@ -1,23 +1,33 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  Animated,
   Image,
   LayoutChangeEvent,
+  Pressable,
   RefreshControl,
   ScrollView,
+  StyleSheet,
+  View,
 } from 'react-native';
-import {Text, View, styled} from '@tamagui/core';
-import {XStack, YStack} from '@tamagui/stacks';
+import {Text} from '@tamagui/core';
 
-import {RefreshGlyph, TrendUpGlyph} from '../../components/icons/Glyphs';
-import {ProgressBar, Screen} from '../../components/ui';
+import {
+  ArrowDownRightIcon,
+  ArrowUpRightIcon,
+  ChevronRightIcon,
+  CreditCardIcon,
+  TrendingUpIcon,
+} from '../../components/icons/FeatherIcons';
+import {RefreshGlyph} from '../../components/icons/Glyphs';
+import {GlassPanel, PressableScale, ProgressBar, Screen} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
-import {colors, layout, radii} from '../../theme';
+import {colors, fonts, layout, radii, shadows} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
-import {BalanceBackdrop} from './BalanceBackdrop';
 import {DonutChart} from './charts';
+import {HomeAmbient} from './HomeAmbient';
 import {HomeRange, HomeReport, SpendSlice, rangeScopeLabel} from './homeReport';
 
 type DashboardStatus = 'loading' | 'ready' | 'error';
@@ -46,45 +56,51 @@ const RANGES: {id: HomeRange; label: string}[] = [
 ];
 
 const AVATAR_SIZE = 44;
-const DONUT_SIZE = 132;
+const DONUT_SIZE = 104;
 const MAX_VISIBLE_SLICES = 4;
-const RANGE_PAD = 4;
-const RANGE_SEG_H = 40;
+const RANGE_PAD = 5;
+const RANGE_SEG_H = 34;
 
 const TINTS = {
-  income: '#E8F5EE',
-  expense: '#FDECEA',
-  saved: '#FBF0DA',
-  budget: '#E8F0FE',
-  savings: '#FFE8E8',
+  income: colors.alertPositive,
+  expense: colors.alertDanger,
+  saved: colors.accentSoft,
 } as const;
 
 const tabular = {fontVariant: ['tabular-nums'] as const};
 
-function pressMotion(reduced: boolean) {
-  return {
-    transition: reduced ? ('0ms' as const) : ('100ms' as const),
-    pressStyle: {scale: reduced ? 1 : 0.97},
-  };
+function Circle({
+  size,
+  backgroundColor,
+  borderColor,
+  children,
+  style,
+}: {
+  size: number;
+  backgroundColor?: string;
+  borderColor?: string;
+  children?: React.ReactNode;
+  style?: object;
+}) {
+  return (
+    <View
+      style={[
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: backgroundColor ?? 'transparent',
+          borderWidth: borderColor ? 1 : 0,
+          borderColor,
+        },
+        style,
+      ]}>
+      {children}
+    </View>
+  );
 }
-
-const Circle = styled(View, {
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderRadius: 999,
-});
-
-const Card = styled(YStack, {
-  backgroundColor: colors.surface,
-  borderRadius: radii.card,
-  borderWidth: 1,
-  borderColor: colors.hairline,
-  shadowColor: '#0F1A2E',
-  shadowOpacity: 0.06,
-  shadowRadius: 14,
-  shadowOffset: {width: 0, height: 5},
-  elevation: 2,
-});
 
 function timeGreeting(): string {
   const hour = new Date().getHours();
@@ -126,10 +142,10 @@ function syncCaption(
     return 'Updating…';
   }
   if (status === 'error') {
-    return error ? `${error} · Tap to retry` : 'Could not sync · Tap to retry';
+    return error ? `${error} • Tap to retry` : 'Could not sync • Tap to retry';
   }
   if (empty) {
-    return 'No activity yet · Tap to sync';
+    return 'No activity yet • Tap to sync';
   }
   if (!updatedAt) {
     return 'Tap to sync';
@@ -147,66 +163,88 @@ function syncCaption(
 type SummaryKind = 'income' | 'expense' | 'saved';
 
 const SummaryIcon = React.memo(function SummaryIcon({kind}: {kind: SummaryKind}) {
-  const tint = kind === 'income' ? TINTS.income : kind === 'expense' ? TINTS.expense : TINTS.saved;
-  return (
-    <Circle width={28} height={28} backgroundColor={tint}>
-      {kind === 'saved' ? (
-        <Text fontSize={13} lineHeight={16} color={colors.ink}>
-          🌿
-        </Text>
-      ) : (
-        <YStack transform={kind === 'expense' ? [{scaleY: -1}] : undefined}>
-          <TrendUpGlyph color={kind === 'income' ? colors.positive : colors.danger} size={13} />
-        </YStack>
-      )}
-    </Circle>
-  );
+  if (kind === 'income') {
+    return <ArrowUpRightIcon color={colors.positive} size={15} />;
+  }
+  if (kind === 'expense') {
+    return <ArrowDownRightIcon color={colors.danger} size={15} />;
+  }
+  return <TrendingUpIcon color="#C88A2E" size={15} />;
 });
+
+function IconDisk({
+  size,
+  backgroundColor,
+  borderColor,
+  children,
+}: {
+  size: number;
+  backgroundColor: string;
+  borderColor: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor,
+      }}>
+      {children}
+    </View>
+  );
+}
 
 function StatTile({
   kind,
   label,
   amount,
   currencySymbol,
-  barColor,
-  barPercent,
 }: {
   kind: SummaryKind;
   label: string;
   amount: number;
   currencySymbol: string;
-  barColor: string;
-  barPercent: number;
 }) {
+  const disk =
+    kind === 'income'
+      ? {backgroundColor: TINTS.income, borderColor: '#3F7A4E33'}
+      : kind === 'expense'
+        ? {backgroundColor: TINTS.expense, borderColor: '#C0523A33'}
+        : {backgroundColor: TINTS.saved, borderColor: '#C88A2E33'};
+
   return (
-    <Card flex={1} minWidth={0} paddingVertical={14} paddingHorizontal={10} gap={8}>
-      <SummaryIcon kind={kind} />
-      <YStack gap={2} minWidth={0}>
-        <Text fontSize={11} lineHeight={15} fontWeight="600" color={colors.inkMuted} numberOfLines={1}>
-          {label}
-        </Text>
-        <Text
-          fontSize={15}
-          lineHeight={20}
-          fontWeight="700"
-          letterSpacing={-0.3}
-          color={colors.ink}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.7}
-          style={tabular}>
-          {formatMoney(amount, currencySymbol, {decimals: 0})}
-        </Text>
-      </YStack>
-      <YStack height={3} width="100%" backgroundColor={colors.hairline} borderRadius={999} overflow="hidden">
-        <YStack
-          height={3}
-          borderRadius={999}
-          backgroundColor={barColor}
-          width={`${Math.min(100, Math.max(0, barPercent))}%`}
-        />
-      </YStack>
-    </Card>
+    <GlassPanel style={[styles.statCard, shadows.cardSoft]} radius={radii.card} contentStyle={styles.statInner}>
+      <IconDisk size={30} {...disk}>
+        <SummaryIcon kind={kind} />
+      </IconDisk>
+      <Text
+        fontFamily={fonts.interMedium}
+        fontSize={12}
+        lineHeight={16}
+        fontWeight="500"
+        color={colors.inkSecondary}
+        numberOfLines={1}>
+        {label}
+      </Text>
+      <Text
+        fontFamily={fonts.outfitSemi}
+        fontSize={17}
+        lineHeight={22}
+        fontWeight="600"
+        color={colors.ink}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.7}
+        style={tabular}>
+        {formatMoney(amount, currencySymbol, {decimals: 0})}
+      </Text>
+    </GlassPanel>
   );
 }
 
@@ -221,36 +259,12 @@ const SummaryRow = React.memo(function SummaryRow({
   saved: number;
   currencySymbol: string;
 }) {
-  const spentPct = income > 0 ? (spent / income) * 100 : 0;
-  const savedPct = income > 0 ? (Math.max(0, saved) / income) * 100 : 0;
-
   return (
-    <XStack alignItems="stretch" gap={8} marginBottom={16}>
-      <StatTile
-        kind="income"
-        label="Income"
-        amount={income}
-        currencySymbol={currencySymbol}
-        barColor={colors.positive}
-        barPercent={100}
-      />
-      <StatTile
-        kind="expense"
-        label="Expenses"
-        amount={spent}
-        currencySymbol={currencySymbol}
-        barColor={colors.danger}
-        barPercent={spentPct}
-      />
-      <StatTile
-        kind="saved"
-        label="Saved"
-        amount={Math.max(0, saved)}
-        currencySymbol={currencySymbol}
-        barColor={colors.accent}
-        barPercent={savedPct}
-      />
-    </XStack>
+    <View style={styles.statRow}>
+      <StatTile kind="income" label="Income" amount={income} currencySymbol={currencySymbol} />
+      <StatTile kind="expense" label="Expenses" amount={spent} currencySymbol={currencySymbol} />
+      <StatTile kind="saved" label="Saved" amount={Math.max(0, saved)} currencySymbol={currencySymbol} />
+    </View>
   );
 });
 
@@ -272,172 +286,184 @@ const SpendingCard = React.memo(function SpendingCard({
   const remainder = safeSlices.length - visibleSlices.length;
 
   return (
-    <Card padding={20} marginBottom={16} gap={18}>
-      <XStack alignItems="center" justifyContent="space-between">
-        <YStack gap={2}>
-          <Text fontSize={18} lineHeight={24} fontWeight="600" letterSpacing={-0.3} color={colors.ink}>
+    <GlassPanel style={[styles.spendCard, shadows.card]} radius={24} contentStyle={styles.spendInner}>
+      <View style={styles.rowBetween}>
+        <View>
+          <Text
+            fontFamily={fonts.outfitSemi}
+            fontSize={18}
+            lineHeight={24}
+            fontWeight="600"
+            letterSpacing={-0.45}
+            color={colors.ink}>
             Spending
           </Text>
-          <Text fontSize={12} lineHeight={17} fontWeight="500" color={colors.inkMuted}>
+          <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} fontWeight="500" color={colors.inkMuted}>
             By category
           </Text>
-        </YStack>
+        </View>
         {hasSlices ? (
-          <XStack
-            alignItems="center"
-            gap={6}
-            paddingHorizontal={10}
-            paddingVertical={5}
-            borderRadius={999}
-            backgroundColor={overBudget ? TINTS.expense : TINTS.income}
+          <View
+            style={[
+              styles.chip,
+              {
+                backgroundColor: overBudget ? TINTS.expense : TINTS.income,
+                borderColor: overBudget ? '#C0523A40' : '#3F7A4E40',
+              },
+            ]}
             accessibilityRole="text"
             accessibilityLabel={`Spending ${overBudget ? 'off track' : 'on track'}`}>
-            <Circle width={6} height={6} backgroundColor={tone} />
-            <Text fontSize={12} lineHeight={16} fontWeight="600" color={tone}>
+            <Circle size={6} backgroundColor={tone} />
+            <Text fontFamily={fonts.interSemi} fontSize={11} lineHeight={15} fontWeight="600" color={tone}>
               {overBudget ? 'Off track' : 'On track'}
             </Text>
-          </XStack>
+          </View>
         ) : null}
-      </XStack>
+      </View>
 
-      <XStack alignItems="center" gap={18}>
+      <View style={styles.spendBody}>
         <DonutChart
           slices={hasSlices ? safeSlices : [{id: 'empty', label: 'None', color: colors.hairline, percent: 100}]}
           size={DONUT_SIZE}>
-          <YStack alignItems="center" justifyContent="center">
-            <Text fontSize={11} lineHeight={15} fontWeight="600" color={colors.inkMuted} marginBottom={2}>
+          <View style={styles.donutLabel}>
+            <Text
+              fontFamily={fonts.interMedium}
+              fontSize={10}
+              lineHeight={13}
+              fontWeight="500"
+              color={colors.inkMuted}>
               Spent
             </Text>
-            <Text fontSize={14} lineHeight={18} fontWeight="700" color={colors.ink} numberOfLines={1} style={tabular}>
+            <Text
+              fontFamily={fonts.outfitSemi}
+              fontSize={15}
+              lineHeight={18}
+              fontWeight="600"
+              color={colors.ink}
+              numberOfLines={1}
+              style={tabular}>
               {formatMoney(spent, currencySymbol, {decimals: 0})}
             </Text>
-          </YStack>
+          </View>
         </DonutChart>
 
         {hasSlices ? (
-          <YStack flex={1} minWidth={0} justifyContent="center" gap={12}>
+          <View style={styles.categoryCol}>
             {visibleSlices.map(slice => (
-              <YStack key={slice.id} gap={5}>
-                <XStack alignItems="center" gap={8}>
-                  <Circle width={8} height={8} backgroundColor={slice.color} />
+              <View key={slice.id} style={styles.categoryBlock}>
+                <View style={styles.rowBetween}>
+                  <View style={styles.categoryName}>
+                    <Circle size={7} backgroundColor={slice.color} />
+                    <Text
+                      fontFamily={fonts.interMedium}
+                      fontSize={13}
+                      lineHeight={17}
+                      fontWeight="500"
+                      color={colors.inkSecondary}
+                      numberOfLines={1}
+                      style={{flex: 1}}>
+                      {slice.label}
+                    </Text>
+                  </View>
                   <Text
-                    flex={1}
-                    fontSize={12}
-                    lineHeight={16}
-                    fontWeight="500"
-                    color={colors.inkSecondary}
-                    numberOfLines={1}>
-                    {slice.label}
-                  </Text>
-                  <Text
-                    minWidth={36}
-                    textAlign="right"
-                    fontSize={12}
-                    lineHeight={16}
-                    fontWeight="700"
+                    fontFamily={fonts.interSemi}
+                    fontSize={13}
+                    lineHeight={17}
+                    fontWeight="600"
                     color={colors.ink}
                     style={tabular}>
                     {slice.percent}%
                   </Text>
-                </XStack>
-                <YStack height={3} backgroundColor={colors.canvasSunk} borderRadius={999} overflow="hidden">
-                  <YStack
-                    height={3}
-                    borderRadius={999}
-                    backgroundColor={slice.color}
-                    width={`${Math.min(100, Math.max(0, slice.percent))}%`}
+                </View>
+                <View style={styles.track}>
+                  <View
+                    style={[
+                      styles.trackFill,
+                      {
+                        backgroundColor: slice.color,
+                        width: `${Math.min(100, Math.max(0, slice.percent))}%`,
+                      },
+                    ]}
                   />
-                </YStack>
-              </YStack>
+                </View>
+              </View>
             ))}
             {remainder > 0 ? (
               <Text fontSize={12} lineHeight={17} fontWeight="500" color={colors.inkMuted}>
                 +{remainder} more
               </Text>
             ) : null}
-          </YStack>
+          </View>
         ) : (
-          <YStack flex={1} minWidth={0} justifyContent="center">
+          <View style={styles.categoryCol}>
             <Text fontSize={13} lineHeight={19} fontWeight="500" color={colors.inkMuted}>
               Nothing logged yet — spending will show up here once you add it.
             </Text>
-          </YStack>
+          </View>
         )}
-      </XStack>
-    </Card>
+      </View>
+    </GlassPanel>
   );
 });
 
 type MetricCardProps = {
-  iconTint: string;
-  emoji: string;
   title: string;
   amount: number;
   amountColor: string;
   currencySymbol: string;
-  subtitle: string;
   progress: number;
   progressColor: string;
+  progressGradient?: [string, string];
   footerLeft: string;
-  footerRight: React.ReactNode;
+  footerTone: string;
   accessibilityLabel: string;
+  icon: React.ReactNode;
+  iconBackground: string;
+  iconBorder: string;
   onPress?: () => void;
 };
 
 function MetricCard({
-  iconTint,
-  emoji,
   title,
   amount,
   amountColor,
   currencySymbol,
-  subtitle,
   progress,
   progressColor,
+  progressGradient,
   footerLeft,
-  footerRight,
+  footerTone,
   accessibilityLabel,
+  icon,
+  iconBackground,
+  iconBorder,
   onPress,
 }: MetricCardProps) {
-  const reducedMotion = useReducedMotion();
-  const press = pressMotion(reducedMotion);
-
   return (
-    <Card
-      flex={1}
-      minWidth={0}
-      padding={16}
-      gap={4}
+    <PressableScale
+      scaleTo={0.98}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      transition={press.transition}
-      pressStyle={press.pressStyle}>
-      <XStack alignItems="center" marginBottom={8}>
-        <YStack
-          width={28}
-          height={28}
-          borderRadius={10}
-          alignItems="center"
-          justifyContent="center"
-          backgroundColor={iconTint}
-          marginRight={8}>
-          <Text fontSize={13} lineHeight={16}>
-            {emoji}
+      containerStyle={styles.metricWrap}
+      style={[styles.metricPress, shadows.cardSoft]}>
+      <GlassPanel radius={radii.cardMetric} contentStyle={styles.metricCard} style={styles.metricGlass}>
+      <View style={styles.rowBetween}>
+        <View style={styles.metricTitle}>
+          <IconDisk size={28} backgroundColor={iconBackground} borderColor={iconBorder}>
+            {icon}
+          </IconDisk>
+          <Text fontFamily={fonts.interSemi} fontSize={13} lineHeight={18} fontWeight="600" color={colors.ink}>
+            {title}
           </Text>
-        </YStack>
-        <Text flex={1} fontSize={13} lineHeight={18} fontWeight="600" color={colors.ink} numberOfLines={1}>
-          {title}
-        </Text>
-        <Text fontSize={16} lineHeight={18} fontWeight="500" color={colors.inkMuted}>
-          ›
-        </Text>
-      </XStack>
+        </View>
+        <ChevronRightIcon color={colors.inkMuted} size={16} />
+      </View>
       <Text
-        fontSize={24}
-        lineHeight={28}
+        fontFamily={fonts.outfitBold}
+        fontSize={22}
+        lineHeight={26}
         fontWeight="700"
-        letterSpacing={-0.6}
         color={amountColor}
         numberOfLines={1}
         adjustsFontSizeToFit
@@ -445,19 +471,12 @@ function MetricCard({
         style={tabular}>
         {formatMoney(amount, currencySymbol, {decimals: 0})}
       </Text>
-      <Text fontSize={12} lineHeight={17} fontWeight="500" color={colors.inkMuted} numberOfLines={2}>
-        {subtitle}
+      <ProgressBar progress={progress} color={progressColor} gradient={progressGradient} />
+      <Text fontFamily={fonts.interMedium} fontSize={11} lineHeight={15} fontWeight="500" color={footerTone}>
+        {footerLeft}
       </Text>
-      <YStack marginTop="auto" paddingTop={14} gap={8}>
-        <ProgressBar progress={progress} color={progressColor} />
-        <XStack alignItems="center" justifyContent="space-between" gap={8}>
-          <Text fontSize={12} lineHeight={17} fontWeight="500" color={colors.inkMuted}>
-            {footerLeft}
-          </Text>
-          {footerRight}
-        </XStack>
-      </YStack>
-    </Card>
+      </GlassPanel>
+    </PressableScale>
   );
 }
 
@@ -482,21 +501,18 @@ function BudgetCard({
 
   return (
     <MetricCard
-      iconTint={TINTS.budget}
-      emoji="💰"
       title="Budget"
       amount={Math.abs(remainingBudget)}
       amountColor={overBudget ? colors.danger : colors.ink}
       currencySymbol={currencySymbol}
-      subtitle={overBudget ? `over ${scope}` : `left ${scope}`}
       progress={progress}
       progressColor={overBudget ? colors.danger : colors.accent}
+      progressGradient={overBudget ? ['#D98A2B', '#C0523A'] : ['#D98A2B', '#E8B15A']}
       footerLeft={overBudget ? 'Over budget' : `${usedPct}% used`}
-      footerRight={
-        <Text fontSize={12} lineHeight={17} fontWeight="600" color={colors.inkMuted} numberOfLines={1} style={tabular}>
-          {formatMoney(usedAmount, currencySymbol, {decimals: 0})}
-        </Text>
-      }
+      footerTone={overBudget ? colors.danger : colors.inkMuted}
+      icon={<CreditCardIcon color={colors.gold} size={14} />}
+      iconBackground={TINTS.saved}
+      iconBorder="#C88A2E33"
       accessibilityLabel={`Budget, ${formatMoney(Math.abs(remainingBudget), currencySymbol, {
         decimals: 0,
       })} ${overBudget ? `over ${scope}` : `left ${scope}`}`}
@@ -509,7 +525,7 @@ function SavingsGoalCard({
   actualSavings,
   periodSavingsTarget,
   savingsVsTarget,
-  savingsUsesPlannedIncome,
+  savingsUsesPlannedIncome: _savingsUsesPlannedIncome,
   currencySymbol,
   range,
   onPress,
@@ -528,32 +544,20 @@ function SavingsGoalCard({
   const progress =
     periodSavingsTarget > 0 ? Math.max(0, Math.min(1, saved / periodSavingsTarget)) : saved > 0 ? 1 : 0;
   const savedPct = Math.round(progress * 100);
-  const planSuffix = savingsUsesPlannedIncome ? ' · vs plan' : '';
-  const subtitle =
-    periodSavingsTarget > 0
-      ? `of ${formatMoney(periodSavingsTarget, currencySymbol, {decimals: 0})} ${scope}${planSuffix}`
-      : `saved ${scope}${planSuffix}`;
-
   return (
     <MetricCard
-      iconTint={TINTS.savings}
-      emoji="🎯"
       title="Savings"
       amount={saved}
       amountColor={colors.ink}
       currencySymbol={currencySymbol}
-      subtitle={subtitle}
       progress={progress}
       progressColor={onTrack ? colors.positive : colors.danger}
+      progressGradient={onTrack ? ['#3F7A4E', '#6BA85A'] : ['#D98A2B', '#C0523A']}
       footerLeft={`${savedPct}% of goal`}
-      footerRight={
-        <XStack alignItems="center" gap={4}>
-          <Circle width={6} height={6} backgroundColor={onTrack ? colors.positive : colors.danger} />
-          <Text fontSize={12} lineHeight={17} fontWeight="600" color={onTrack ? colors.positive : colors.danger}>
-            {onTrack ? 'On track' : 'Off track'}
-          </Text>
-        </XStack>
-      }
+      footerTone={onTrack ? colors.positive : colors.danger}
+      icon={<TrendingUpIcon color={onTrack ? colors.positive : colors.danger} size={14} />}
+      iconBackground={onTrack ? TINTS.income : TINTS.expense}
+      iconBorder={onTrack ? '#3F7A4E33' : '#C0523A33'}
       accessibilityLabel={`Savings goal, ${formatMoney(saved, currencySymbol, {
         decimals: 0,
       })} saved ${scope}, ${onTrack ? 'on track' : 'off track'}`}
@@ -583,55 +587,56 @@ function RangeSwitch({
     setTrackW(event.nativeEvent.layout.width);
   };
 
+  const slide = useRef(new Animated.Value(0)).current;
+  const placed = useRef(false);
+  useEffect(() => {
+    if (segmentW <= 0) {
+      return;
+    }
+    if (!placed.current) {
+      slide.setValue(slideX);
+      placed.current = true;
+      return;
+    }
+    Animated.timing(slide, {
+      toValue: slideX,
+      duration: reducedMotion ? 0 : 180,
+      useNativeDriver: true,
+    }).start();
+  }, [reducedMotion, segmentW, slide, slideX]);
+
   return (
-    <XStack
-      accessibilityRole="tablist"
-      alignItems="center"
-      backgroundColor={colors.canvasSunk}
-      borderRadius={999}
-      padding={RANGE_PAD}
-      marginBottom={16}
-      overflow="hidden"
-      onLayout={onTrackLayout}>
-      <YStack
-        position="absolute"
-        top={RANGE_PAD}
-        left={RANGE_PAD}
-        height={RANGE_SEG_H}
-        width={segmentW}
-        borderRadius={999}
-        backgroundColor={colors.ink}
-        x={slideX}
-        transition={reducedMotion ? '0ms' : 'quick'}
-      />
+    <View accessibilityRole="tablist" style={styles.rangeTrack} onLayout={onTrackLayout}>
+      {segmentW > 0 ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.rangeThumb,
+            {width: segmentW, transform: [{translateX: slide}]},
+          ]}
+        />
+      ) : null}
       {RANGES.map(item => {
         const selected = range === item.id;
         return (
-          <XStack
+          <Pressable
             key={item.id}
-            flex={1}
-            zIndex={1}
-            alignItems="center"
-            justifyContent="center"
-            height={RANGE_SEG_H}
-            borderRadius={999}
+            style={styles.rangeSeg}
             onPress={() => setRange(item.id)}
             accessibilityRole="tab"
-            accessibilityState={{selected}}
-            transition={reducedMotion ? '0ms' : '100ms'}
-            pressStyle={{scale: reducedMotion ? 1 : 0.97}}>
+            accessibilityState={{selected}}>
             <Text
-              fontSize={14}
-              lineHeight={20}
-              fontWeight="600"
-              letterSpacing={-0.1}
-              color={selected ? colors.onInk : colors.inkSecondary}>
+              fontFamily={selected ? fonts.interSemi : fonts.interMedium}
+              fontSize={13}
+              lineHeight={18}
+              fontWeight={selected ? '600' : '500'}
+              color={selected ? '#FFFFFF' : colors.inkSecondary}>
               {item.label}
             </Text>
-          </XStack>
+          </Pressable>
         );
       })}
-    </XStack>
+    </View>
   );
 }
 
@@ -653,8 +658,6 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const navClearance = useFloatingNavClearance();
   const navScroll = useFloatingNavScroll();
-  const reducedMotion = useReducedMotion();
-  const press = pressMotion(reducedMotion);
 
   useEffect(() => {
     if (status === 'error' && error) {
@@ -672,22 +675,20 @@ export function HomeScreen({
 
   const hasSecureAvatar = isSafeAvatarUrl(avatarUrl);
   const changePositive = (data.changePct ?? data.changeAmount ?? 0) >= 0;
-  const showChangeBadge = !data.empty && data.changePct != null;
+  const showChangeBadge = !data.empty;
+  const changePct = Math.abs(data.changePct ?? 0);
   const syncLabel = syncCaption(status, refreshing, error, updatedAt, data.empty);
   const savedAmount = data.actualSavings;
   const rangeWord = range === 'week' ? 'week' : range === 'year' ? 'year' : 'month';
   const showBudget = data.monthlyBudget > 0;
   const showSavings = data.monthlySavingsGoal > 0;
-  const syncTone =
-    status === 'error' ? colors.danger : data.empty && status === 'ready' ? colors.inkMuted : colors.positive;
-
   return (
-    <Screen edges={['top']}>
+    <Screen edges={['top']} backdrop={<HomeAmbient />}>
       <ScrollView
-        style={{flex: 1}}
+        style={styles.scroll}
         contentContainerStyle={{
           paddingHorizontal: layout.screenPadding,
-          paddingTop: 12,
+          paddingTop: 8,
           paddingBottom: navClearance,
         }}
         onScroll={navScroll.onScroll}
@@ -701,138 +702,136 @@ export function HomeScreen({
           />
         }
         showsVerticalScrollIndicator={false}>
-        <XStack alignItems="center" gap={12} marginBottom={16}>
-          <YStack flex={1} minWidth={0} gap={2}>
-            <Text fontSize={13} lineHeight={18} fontWeight="500" color={colors.inkMuted} numberOfLines={1}>
+        <View style={styles.header}>
+          <View style={styles.greeting}>
+            <Text
+              fontFamily={fonts.interMedium}
+              fontSize={13}
+              lineHeight={18}
+              fontWeight="500"
+              color={colors.inkSoft}
+              numberOfLines={1}>
               {timeGreeting()}
             </Text>
             <Text
-              fontSize={32}
-              lineHeight={36}
-              fontWeight="700"
-              letterSpacing={-1}
+              fontFamily={fonts.outfitSemi}
+              fontSize={26}
+              lineHeight={32}
+              fontWeight="600"
+              letterSpacing={-0.65}
               color={colors.ink}
               numberOfLines={1}>
               {firstName}
             </Text>
-          </YStack>
-          <Circle
-            width={AVATAR_SIZE}
-            height={AVATAR_SIZE}
-            backgroundColor={colors.accentSoft}
-            borderWidth={2}
-            borderColor={colors.surface}
-            overflow="hidden"
+          </View>
+          <PressableScale
+            scaleTo={0.94}
             onPress={onProfilePress}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Open profile"
-            transition={press.transition}
-            pressStyle={{scale: reducedMotion ? 1 : 0.94}}>
-            {hasSecureAvatar ? (
-              <Image
-                source={{uri: avatarUrl}}
-                style={{width: AVATAR_SIZE, height: AVATAR_SIZE}}
-                resizeMode="cover"
-              />
-            ) : (
-              <Text fontSize={14} lineHeight={18} fontWeight="700" color={colors.ink}>
-                {initials}
-              </Text>
-            )}
-          </Circle>
-        </XStack>
-
-        <Card
-          overflow="hidden"
-          paddingVertical={16}
-          paddingLeft={20}
-          paddingRight={8}
-          marginBottom={14}
-          backgroundColor={colors.surface}>
-          <XStack alignItems="center" gap={4}>
-            <YStack flex={1} minWidth={0} gap={4}>
-              <Text fontSize={12} lineHeight={16} fontWeight="600" color={colors.inkMuted}>
-                Available balance
-              </Text>
-              <Text
-                fontSize={40}
-                lineHeight={46}
-                fontWeight="700"
-                letterSpacing={-1.6}
-                color={data.balance < 0 ? colors.danger : colors.ink}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.5}
-                style={tabular}>
-                {formatMoney(data.balance, currencySymbol, {decimals: 0})}
-              </Text>
-              {showChangeBadge ? (
-                <XStack
-                  alignItems="center"
-                  alignSelf="flex-start"
-                  paddingHorizontal={9}
-                  paddingVertical={5}
-                  borderRadius={999}
-                  gap={4}
-                  marginTop={4}
-                  backgroundColor={changePositive ? TINTS.income : TINTS.expense}
-                  transition={reducedMotion ? '0ms' : '150ms'}
-                  enterStyle={reducedMotion ? undefined : {opacity: 0, scale: 0.96}}>
-                  <YStack transform={changePositive ? undefined : [{scaleY: -1}]}>
-                    <TrendUpGlyph color={changePositive ? colors.positive : colors.danger} size={10} />
-                  </YStack>
-                  <Text
-                    fontSize={12}
-                    lineHeight={16}
-                    fontWeight="600"
-                    color={changePositive ? colors.positive : colors.danger}>
-                    {`${changePositive ? '+' : ''}${data.changePct}% vs last ${rangeWord}`}
-                  </Text>
-                </XStack>
+            style={shadows.avatar}>
+            <GlassPanel
+              intensity="md"
+              overlayColor="#FFFFFFCC"
+              radius={AVATAR_SIZE / 2}
+              contentStyle={styles.avatarFace}>
+              {hasSecureAvatar ? (
+                <Image
+                  source={{uri: avatarUrl}}
+                  style={{width: AVATAR_SIZE, height: AVATAR_SIZE}}
+                  resizeMode="cover"
+                />
               ) : (
-                <Text fontSize={12} lineHeight={16} fontWeight="500" color={colors.inkMuted} marginTop={4}>
-                  {data.empty ? 'Add a transaction to start tracking' : `This ${rangeWord}`}
+                <Text
+                  fontFamily={fonts.outfitSemi}
+                  fontSize={15}
+                  lineHeight={18}
+                  fontWeight="600"
+                  color={colors.gold}>
+                  {initials}
                 </Text>
               )}
-            </YStack>
-            <YStack flexShrink={0} marginRight={-28} marginVertical={-16}>
-              <BalanceBackdrop />
-            </YStack>
-          </XStack>
-        </Card>
+            </GlassPanel>
+          </PressableScale>
+        </View>
 
-        <XStack
-          alignItems="center"
-          minHeight={36}
-          gap={8}
-          marginBottom={16}
-          paddingHorizontal={12}
-          paddingVertical={8}
-          borderRadius={999}
-          backgroundColor={colors.canvasSunk}
-          alignSelf="stretch"
-          onPress={reload}
-          accessibilityRole="button"
-          accessibilityLabel={`Sync now. ${syncLabel}`}
-          transition={press.transition}
-          pressStyle={press.pressStyle}>
-          {refreshing || status === 'loading' ? (
-            <ActivityIndicator size="small" color={colors.inkMuted} />
-          ) : (
-            <RefreshGlyph color={colors.inkMuted} size={12} />
-          )}
-          <Circle width={6} height={6} backgroundColor={syncTone} />
-          <Text
-            flex={1}
-            fontSize={12}
-            lineHeight={17}
-            fontWeight="500"
-            color={status === 'error' ? colors.danger : colors.inkMuted}
-            numberOfLines={1}>
-            {syncLabel}
-          </Text>
-        </XStack>
+        <GlassPanel style={[styles.heroCard, shadows.card]} radius={radii.cardHero} contentStyle={styles.heroInner} overlayColor="rgba(255, 255, 255, 0.45)">
+            <View pointerEvents="none" style={styles.heroGlow} />
+            <View style={styles.rowBetween}>
+              <Text
+                fontFamily={fonts.interMedium}
+                fontSize={13}
+                lineHeight={18}
+                fontWeight="500"
+                color={colors.inkSecondary}>
+                Available balance
+              </Text>
+              {showChangeBadge ? (
+                <View
+                  style={[
+                    styles.chip,
+                    {
+                      backgroundColor: changePositive ? TINTS.income : TINTS.expense,
+                      borderColor: changePositive ? '#3F7A4E40' : '#C0523A40',
+                    },
+                  ]}
+                  accessibilityRole="text"
+                  accessibilityLabel={`${
+                    changePositive ? 'Up' : 'Down'
+                  } ${changePct} percent ${data.compareLabel}`}>
+                  {changePositive ? (
+                    <TrendingUpIcon color={colors.positive} size={13} />
+                  ) : (
+                    <ArrowDownRightIcon color={colors.danger} size={13} />
+                  )}
+                  <Text
+                    fontFamily={fonts.interSemi}
+                    fontSize={11}
+                    lineHeight={15}
+                    fontWeight="600"
+                    color={changePositive ? colors.positive : colors.danger}>
+                    {`${changePositive ? '+' : '−'}${changePct}%`}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Text
+              fontFamily={fonts.outfitBold}
+              fontSize={42}
+              lineHeight={46}
+              fontWeight="700"
+              letterSpacing={-1.05}
+              color={data.balance < 0 ? colors.danger : colors.ink}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.5}
+              style={[tabular, styles.heroAmount]}>
+              {formatMoney(data.balance, currencySymbol, {decimals: 0})}
+            </Text>
+            <PressableScale
+              onPress={reload}
+              accessibilityRole="button"
+              accessibilityLabel={`Sync now. ${syncLabel}`}
+              style={styles.syncRow}>
+              {refreshing || status === 'loading' ? (
+                <ActivityIndicator size="small" color={colors.inkMuted} />
+              ) : status === 'error' ? (
+                <RefreshGlyph color={colors.danger} size={12} />
+              ) : null}
+              <Text
+                fontFamily={fonts.interMedium}
+                fontSize={12}
+                lineHeight={16}
+                fontWeight="500"
+                color={status === 'error' ? colors.danger : colors.inkMuted}
+                numberOfLines={1}>
+                {data.empty
+                  ? 'No activity yet • Tap to sync'
+                  : `This ${rangeWord} • ${syncLabel}`}
+              </Text>
+            </PressableScale>
+        </GlassPanel>
 
         <RangeSwitch range={range} setRange={setRange} />
 
@@ -851,7 +850,7 @@ export function HomeScreen({
         />
 
         {showBudget || showSavings ? (
-          <XStack alignItems="stretch" marginBottom={16} gap={10}>
+          <View style={styles.metricRow}>
             {showBudget ? (
               <BudgetCard
                 budget={data.budget}
@@ -872,9 +871,190 @@ export function HomeScreen({
                 onPress={onSavingsPress}
               />
             ) : null}
-          </XStack>
+          </View>
         ) : null}
       </ScrollView>
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  scroll: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 18,
+  },
+  greeting: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+  },
+  statRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 10,
+    marginBottom: 16,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: 0,
+  },
+  statInner: {
+    padding: 14,
+    gap: 10,
+  },
+  spendCard: {
+    marginBottom: 16,
+  },
+  spendInner: {
+    padding: 20,
+    gap: 18,
+  },
+  spendBody: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  donutLabel: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+  categoryCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    gap: 13,
+  },
+  categoryBlock: {
+    gap: 6,
+  },
+  categoryName: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  track: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: colors.track,
+    overflow: 'hidden',
+  },
+  trackFill: {
+    height: 6,
+    borderRadius: 999,
+  },
+  heroCard: {
+    marginBottom: 18,
+  },
+  heroInner: {
+    padding: 22,
+    overflow: 'hidden',
+  },
+  heroGlow: {
+    position: 'absolute',
+    top: -40,
+    right: -30,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: colors.orb,
+    opacity: 0.45,
+  },
+  heroAmount: {
+    marginTop: 10,
+  },
+  syncRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  metricRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    marginBottom: 16,
+    gap: 12,
+  },
+  metricWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  metricPress: {
+    flex: 1,
+  },
+  metricGlass: {
+    flex: 1,
+  },
+  metricCard: {
+    padding: 16,
+    gap: 12,
+  },
+  metricTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minWidth: 0,
+    flex: 1,
+  },
+  rangeTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.canvasSunk,
+    borderRadius: 999,
+    padding: RANGE_PAD,
+    marginBottom: 16,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairlineStrong,
+  },
+  rangeThumb: {
+    position: 'absolute',
+    top: RANGE_PAD,
+    left: RANGE_PAD,
+    height: RANGE_SEG_H,
+    borderRadius: 999,
+    backgroundColor: colors.ink,
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: {width: 0, height: 2},
+  },
+  rangeSeg: {
+    flex: 1,
+    zIndex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: RANGE_SEG_H,
+  },
+  avatarFace: {
+    width: AVATAR_SIZE,
+    height: AVATAR_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

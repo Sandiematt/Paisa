@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef} from 'react';
+import React, {useEffect, useRef} from 'react';
 import {Animated, StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -14,9 +14,9 @@ import {
   InsightsGlyph,
   PlusGlyph,
 } from '../../components/icons/Glyphs';
-import {PressableScale} from '../../components/ui';
+import {GlassPanel, PressableScale} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
-import {colors, duration, easing, layout, radii, spacing} from '../../theme';
+import {colors, duration, easing, layout, radii, shadows, spacing} from '../../theme';
 
 export const TABS = ['home', 'activity', 'insights', 'ask'] as const;
 export type TabId = (typeof TABS)[number];
@@ -35,10 +35,7 @@ const ITEMS: {id: TabId | 'add'; label: string}[] = [
   {id: 'ask', label: 'Paisa AI'},
 ];
 
-const ITEM_WIDTH = 58;
-const ITEM_HEIGHT = 44;
-const PILL_PAD = 8;
-const INDICATOR = 40;
+const ITEM_HEIGHT = 48;
 
 function TabGlyph({
   id,
@@ -67,22 +64,7 @@ export function NavBar({activeTab, onTabPress, onAddPress}: NavBarProps) {
   const reducedMotion = useReducedMotion();
   const navVisible = useFloatingNavVisible();
   const hideDistance = useFloatingNavClearance() + spacing.lg;
-  const selectedIndex = useMemo(
-    () => ITEMS.findIndex(item => item.id === activeTab),
-    [activeTab],
-  );
-  const indicatorX = useRef(new Animated.Value(selectedIndex * ITEM_WIDTH))
-    .current;
   const hidden = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(indicatorX, {
-      toValue: selectedIndex * ITEM_WIDTH,
-      duration: reducedMotion ? 0 : duration.swap,
-      easing: easing.out,
-      useNativeDriver: true,
-    }).start();
-  }, [indicatorX, reducedMotion, selectedIndex]);
 
   useEffect(() => {
     Animated.timing(hidden, {
@@ -116,14 +98,12 @@ export function NavBar({activeTab, onTabPress, onAddPress}: NavBarProps) {
         {paddingBottom: Math.max(insets.bottom, spacing.sm) + FLOATING_NAV_GAP},
         dockMotion,
       ]}>
-      <View style={styles.pill}>
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.indicator,
-            {transform: [{translateX: indicatorX}]},
-          ]}
-        />
+      <GlassPanel
+        intensity="2xl"
+        overlayColor={colors.surfaceNav}
+        radius={radii.pill}
+        style={[styles.pillWrap, shadows.nav]}
+        contentStyle={styles.pill}>
         {ITEMS.map(item => {
           if (item.id === 'add') {
             return (
@@ -137,7 +117,8 @@ export function NavBar({activeTab, onTabPress, onAddPress}: NavBarProps) {
                 containerStyle={styles.slot}
                 style={styles.hit}>
                 <View style={styles.addFace}>
-                  <PlusGlyph color={colors.ink} size={16} />
+                  <View pointerEvents="none" style={styles.addSheen} />
+                  <PlusGlyph color="#FFFFFF" size={22} />
                 </View>
               </PressableScale>
             );
@@ -145,7 +126,7 @@ export function NavBar({activeTab, onTabPress, onAddPress}: NavBarProps) {
 
           const tabId = item.id;
           const active = activeTab === tabId;
-          const color = active ? colors.ink : colors.inkMuted;
+          const color = active ? colors.accent : colors.inkMuted;
 
           return (
             <PressableScale
@@ -161,7 +142,7 @@ export function NavBar({activeTab, onTabPress, onAddPress}: NavBarProps) {
             </PressableScale>
           );
         })}
-      </View>
+      </GlassPanel>
     </Animated.View>
   );
 }
@@ -172,33 +153,24 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    alignItems: 'center',
+    paddingHorizontal: 20,
     zIndex: 10,
+  },
+  pillWrap: {
+    width: '100%',
   },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: PILL_PAD,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    shadowColor: colors.ink,
-    shadowOpacity: 0.14,
-    shadowRadius: 16,
-    shadowOffset: {width: 0, height: 8},
-    elevation: 8,
-  },
-  indicator: {
-    position: 'absolute',
-    top: PILL_PAD + (ITEM_HEIGHT - INDICATOR) / 2,
-    left: PILL_PAD + (ITEM_WIDTH - INDICATOR) / 2,
-    width: INDICATOR,
-    height: INDICATOR,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accentSoft,
+    justifyContent: 'space-between',
+    paddingHorizontal: 22,
+    paddingVertical: 14,
   },
   slot: {
-    width: ITEM_WIDTH,
+    flex: 1,
     height: ITEM_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   hit: {
     flex: 1,
@@ -206,11 +178,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   addFace: {
-    width: 32,
-    height: 32,
+    width: 48,
+    height: 48,
+    marginTop: -2,
     borderRadius: radii.pill,
-    backgroundColor: colors.accent,
+    backgroundColor: '#D97A1F',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+    ...shadows.add,
+  },
+  addSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F0A63C',
+    opacity: 0.9,
   },
 });

@@ -155,9 +155,24 @@ export function periodFor(range: HomeRange, now = new Date()): Period {
   return {start, end, prevStart, prevEnd};
 }
 
+/** Calendar day from `YYYY-MM-DD` or a full ISO timestamp. */
+export function parseCalendarDate(isoDate: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(isoDate.trim());
+  if (match) {
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+  const fallback = new Date(isoDate);
+  if (Number.isNaN(fallback.getTime())) {
+    return new Date(NaN);
+  }
+  return new Date(fallback.getFullYear(), fallback.getMonth(), fallback.getDate());
+}
+
 function inRange(isoDate: string, start: Date, end: Date): boolean {
-  const [year, month, day] = isoDate.split('-').map(Number);
-  const value = new Date(year, month - 1, day).getTime();
+  const value = parseCalendarDate(isoDate).getTime();
+  if (Number.isNaN(value)) {
+    return false;
+  }
   return value >= start.getTime() && value <= end.getTime();
 }
 
@@ -195,9 +210,32 @@ function changePercent(current: number, previous: number): number | null {
   return Math.round(((current - previous) / Math.abs(previous)) * 100);
 }
 
+function rangeChange(
+  currentNet: number,
+  previousNet: number,
+  currentBalance: number,
+  startBalance: number,
+  empty: boolean,
+): {changePct: number | null; changeAmount: number} {
+  const amount = roundMoney(currentNet - previousNet);
+  if (empty) {
+    return {changePct: null, changeAmount: amount};
+  }
+  const vsPrevious = changePercent(currentNet, previousNet);
+  if (vsPrevious != null) {
+    return {changePct: vsPrevious, changeAmount: amount};
+  }
+  return {
+    changePct: changePercent(currentBalance, startBalance) ?? 0,
+    changeAmount: amount,
+  };
+}
+
 function compareDate(isoDate: string, edge: Date, inclusive: boolean): boolean {
-  const [year, month, day] = isoDate.split('-').map(Number);
-  const value = new Date(year, month - 1, day).getTime();
+  const value = parseCalendarDate(isoDate).getTime();
+  if (Number.isNaN(value)) {
+    return false;
+  }
   return inclusive ? value <= edge.getTime() : value < edge.getTime();
 }
 
@@ -497,8 +535,7 @@ function bucketIndex(
   isoDate: string,
   periodStart: Date,
 ): number {
-  const [year, month, day] = isoDate.split('-').map(Number);
-  const date = new Date(year, month - 1, day);
+  const date = parseCalendarDate(isoDate);
   if (range === 'week') {
     return Math.max(
       0,
@@ -672,15 +709,25 @@ export function buildHomeReport(
   const current = walletParts(currentRows);
   const previous = walletParts(previousRows);
   const lifetime = walletParts(transactions);
+  const startBalance = walletParts(
+    transactions.filter(row => compareDate(row.transactionDate, period.start, false)),
+  ).balance;
   const previousRemaining = walletParts(
     transactions.filter(row =>
       compareDate(row.transactionDate, period.prevEnd, true),
     ),
   ).balance;
+  const empty = transactions.length === 0;
+  const change = rangeChange(
+    current.net,
+    previous.net,
+    lifetime.balance,
+    startBalance,
+    empty,
+  );
   const series = walletSeries(range, period, transactions, now);
   const highlightIndex = Math.max(0, series.length - 1);
   const highlightValue = series[highlightIndex] ?? lifetime.balance;
-  const empty = transactions.length === 0;
   const periodEmpty = currentRows.length === 0;
   const monthPeriod = range === 'month' ? period : periodFor('month', now);
   const monthRows =
@@ -734,8 +781,8 @@ export function buildHomeReport(
     compareLabel: compareLabel(range, now),
     net: current.net,
     balance: lifetime.balance,
-    changePct: changePercent(lifetime.balance, previousRemaining),
-    changeAmount: roundMoney(lifetime.balance - previousRemaining),
+    changePct: change.changePct,
+    changeAmount: change.changeAmount,
     income: roundMoney(current.income),
     spent: roundMoney(current.spent),
     remainingBudget: insight.remainingBudget,

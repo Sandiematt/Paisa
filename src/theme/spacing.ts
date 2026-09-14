@@ -17,12 +17,14 @@ export const radii = {
   input: 14,
   chip: 14,
   card: 20,
+  cardHero: 28,
+  cardMetric: 22,
   sheet: 28,
   pill: 999,
 } as const;
 
 export const layout = {
-  screenPadding: spacing.xxl,
+  screenPadding: 20,
   controlHeight: 56,
   hairlineWidth: 1,
   navIcon: 22,

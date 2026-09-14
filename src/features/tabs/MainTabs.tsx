@@ -203,8 +203,10 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
   stage: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
 });

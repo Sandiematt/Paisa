@@ -1,4 +1,17 @@
 {
-  "name": "expense_tracker",
-  "displayName": "Paisa"
+  "expo": {
+    "name": "Paisa",
+    "slug": "paisa",
+    "scheme": "paisa",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "org.reactjs.native.example.expense-tracker",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.expense_tracker"
+    }
+  }
 }

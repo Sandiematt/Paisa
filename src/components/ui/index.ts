@@ -4,6 +4,7 @@ export {CelebrationBadge} from './CelebrationBadge';
 export {Chip} from './Chip';
 export {DividerLabel} from './DividerLabel';
 export {GhostButton} from './GhostButton';
+export {GlassPanel} from './GlassPanel';
 export {PressableScale} from './PressableScale';
 export {PrimaryButton} from './PrimaryButton';
 export {ProgressBar} from './ProgressBar';
