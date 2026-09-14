@@ -4,25 +4,10 @@ import {StyleSheet, View, type ViewStyle} from 'react-native';
 import {colors} from '../../theme';
 
 /**
- * Wonder HomeScreen backdrop — same construction as the canvas:
- * cream fill, a real linear gold→beige wash, then three radial warm orbs.
- *
- * Uses RN 0.87 `backgroundImage` (linear-gradient / radial-gradient), not
- * stacked colour bands, so the wash stays smooth instead of striped.
+ * Wonder Profile Settings backdrop: cream canvas and two warm orbs
+ * (380px gold at top-left, 340px peach mid-right). Same glow construction
+ * as HomeAmbient so the glass cards frost the same wash.
  */
-const WASH: ViewStyle['backgroundImage'] = [
-  {
-    type: 'linear-gradient',
-    direction: '180deg',
-    colorStops: [
-      {color: colors.orb, positions: ['0%']},
-      {color: '#EBD4A8', positions: ['22%']},
-      {color: colors.canvas, positions: ['48%']},
-      {color: colors.canvas, positions: ['100%']},
-    ],
-  },
-];
-
 function glow(hex: string): NonNullable<ViewStyle['backgroundImage']> {
   return [
     {
@@ -48,13 +33,11 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-export function HomeAmbient() {
+export function ProfileAmbient() {
   return (
     <View pointerEvents="none" style={styles.wash} accessible={false}>
-      <View style={styles.gradient} />
       <View style={[styles.orb, styles.orbOne]} />
       <View style={[styles.orb, styles.orbTwo]} />
-      <View style={[styles.orb, styles.orbThree]} />
     </View>
   );
 }
@@ -64,10 +47,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     overflow: 'hidden',
     backgroundColor: colors.canvas,
-  },
-  gradient: {
-    ...StyleSheet.absoluteFill,
-    backgroundImage: WASH,
   },
   orb: {
     position: 'absolute',
@@ -81,20 +60,12 @@ const styles = StyleSheet.create({
     top: -200,
     backgroundImage: glow(colors.orb),
   },
-  // Wonder Warm Orb Two: 340px #e7b98a, blur 130, top 420, right -80
+  // Wonder Warm Orb Two: 340px #e7b98a, blur 130, top 500, right -80
   orbTwo: {
     width: 600,
     height: 600,
     right: -210,
-    top: 290,
+    top: 370,
     backgroundImage: glow(colors.orbPeach),
-  },
-  // Wonder Warm Orb Three: 320px #e3d2a8, blur 150, left 40, bottom 40
-  orbThree: {
-    width: 620,
-    height: 620,
-    left: -110,
-    bottom: -110,
-    backgroundImage: glow(colors.orbSand),
   },
 });

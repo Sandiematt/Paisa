@@ -300,19 +300,61 @@ export function AskGlyph({color, size = 22, active}: NavGlyphProps) {
   );
 }
 
+/**
+ * Close X with no transforms. Rotated views skip overflow clipping on Android
+ * and paint outside the add button; this stays inside `size` by construction.
+ */
+export function CloseGlyph({color, size = 14}: GlyphProps) {
+  const t = Math.max(2.2, size * 0.18);
+  const last = size - t;
+  const dots = [];
+  for (let i = 0; i <= last; i += 1) {
+    dots.push(
+      <View
+        key={`d${i}`}
+        style={{
+          position: 'absolute',
+          left: i,
+          top: i,
+          width: t,
+          height: t,
+          borderRadius: t / 2,
+          backgroundColor: color,
+        }}
+      />,
+    );
+    dots.push(
+      <View
+        key={`a${i}`}
+        style={{
+          position: 'absolute',
+          left: last - i,
+          top: i,
+          width: t,
+          height: t,
+          borderRadius: t / 2,
+          backgroundColor: color,
+        }}
+      />,
+    );
+  }
+  return <View style={{width: size, height: size}}>{dots}</View>;
+}
+
 export function PlusGlyph({color, size = 22}: GlyphProps) {
   const thickness = Math.max(2.4, size * 0.12);
+  const inset = (size - thickness) / 2;
   return (
     <View
       style={{
         width: size,
         height: size,
-        alignItems: 'center',
-        justifyContent: 'center',
       }}>
       <View
         style={{
           position: 'absolute',
+          left: 0,
+          top: inset,
           width: size,
           height: thickness,
           borderRadius: radii.pill,
@@ -322,8 +364,98 @@ export function PlusGlyph({color, size = 22}: GlyphProps) {
       <View
         style={{
           position: 'absolute',
+          left: inset,
+          top: 0,
           width: thickness,
           height: size,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+        }}
+      />
+    </View>
+  );
+}
+
+/** Feather-style arrow up-right — money going out. */
+export function ArrowUpRightGlyph({color, size = 18}: GlyphProps) {
+  const w = Math.max(1.8, size * 0.12);
+  const arm = size * 0.4;
+  return (
+    <View style={{width: size, height: size}}>
+      <View
+        style={{
+          position: 'absolute',
+          width: size * 0.7,
+          height: w,
+          left: size * 0.15,
+          top: (size - w) / 2,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+          transform: [{rotate: '-45deg'}],
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          width: arm,
+          height: w,
+          left: size - size * 0.14 - arm,
+          top: size * 0.14,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          width: w,
+          height: arm,
+          left: size - size * 0.14 - w,
+          top: size * 0.14,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+        }}
+      />
+    </View>
+  );
+}
+
+/** Feather-style arrow down-left — money coming in. */
+export function ArrowDownLeftGlyph({color, size = 18}: GlyphProps) {
+  const w = Math.max(1.8, size * 0.12);
+  const arm = size * 0.4;
+  return (
+    <View style={{width: size, height: size}}>
+      <View
+        style={{
+          position: 'absolute',
+          width: size * 0.7,
+          height: w,
+          left: size * 0.15,
+          top: (size - w) / 2,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+          transform: [{rotate: '-45deg'}],
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          width: arm,
+          height: w,
+          left: size * 0.14,
+          top: size - size * 0.14 - w,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          width: w,
+          height: arm,
+          left: size * 0.14,
+          top: size - size * 0.14 - arm,
           borderRadius: radii.pill,
           backgroundColor: color,
         }}
@@ -453,6 +585,58 @@ export function LedgerGlyph({color, size = 18}: GlyphProps) {
   );
 }
 
+function FlowTray({
+  color,
+  size,
+  stroke,
+}: {
+  color: string;
+  size: number;
+  stroke: number;
+}) {
+  return (
+    <View
+      style={{
+        width: size * 0.84,
+        height: size * 0.3,
+        borderWidth: stroke,
+        borderTopWidth: 0,
+        borderColor: color,
+        borderBottomLeftRadius: Math.max(3, size * 0.18),
+        borderBottomRightRadius: Math.max(3, size * 0.18),
+      }}
+    />
+  );
+}
+
+function ArrowHead({
+  color,
+  size,
+  direction,
+}: {
+  color: string;
+  size: number;
+  direction: 'up' | 'down';
+}) {
+  const w = size * 0.22;
+  const h = size * 0.2;
+  return (
+    <View
+      style={{
+        width: 0,
+        height: 0,
+        borderLeftWidth: w,
+        borderRightWidth: w,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        ...(direction === 'down'
+          ? {borderTopWidth: h, borderTopColor: color}
+          : {borderBottomWidth: h, borderBottomColor: color}),
+      }}
+    />
+  );
+}
+
 /**
  * Shared money-flow mark. The tray stays on the baseline.
  * Income drops into it. Expense lifts out of it.
@@ -462,12 +646,9 @@ export function MoneyFlowGlyph({
   size = 18,
   direction,
 }: GlyphProps & {direction: 'in' | 'out'}) {
-  const stroke = Math.max(1.7, size * 0.11);
+  const stroke = Math.max(1.8, size * 0.12);
   const incoming = direction === 'in';
-  const trayW = size * 0.82;
-  const trayH = size * 0.3;
-  const shaftH = size * 0.32;
-  const head = size * 0.26;
+  const shaftH = size * 0.28;
 
   return (
     <View
@@ -476,60 +657,27 @@ export function MoneyFlowGlyph({
         height: size,
         alignItems: 'center',
         justifyContent: 'flex-end',
+        gap: size * 0.04,
       }}>
       <View
         style={{
-          flex: 1,
-          width: size,
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: incoming ? 'flex-start' : 'flex-end',
+          height: size * 0.58,
         }}>
-        {incoming ? null : (
-          <View
-            style={{
-              width: head,
-              height: head,
-              borderTopWidth: stroke,
-              borderRightWidth: stroke,
-              borderColor: color,
-              transform: [{rotate: '-45deg'}],
-              marginBottom: -head * 0.45,
-            }}
-          />
-        )}
+        {incoming ? null : <ArrowHead color={color} size={size} direction="up" />}
         <View
           style={{
             width: stroke,
             height: shaftH,
             borderRadius: radii.pill,
             backgroundColor: color,
+            marginVertical: -size * 0.04,
           }}
         />
-        {incoming ? (
-          <View
-            style={{
-              width: head,
-              height: head,
-              borderTopWidth: stroke,
-              borderRightWidth: stroke,
-              borderColor: color,
-              transform: [{rotate: '135deg'}],
-              marginTop: -head * 0.45,
-            }}
-          />
-        ) : null}
+        {incoming ? <ArrowHead color={color} size={size} direction="down" /> : null}
       </View>
-      <View
-        style={{
-          width: trayW,
-          height: trayH,
-          borderWidth: stroke,
-          borderTopWidth: 0,
-          borderColor: color,
-          borderBottomLeftRadius: 5,
-          borderBottomRightRadius: 5,
-        }}
-      />
+      <FlowTray color={color} size={size} stroke={stroke} />
     </View>
   );
 }
@@ -540,6 +688,33 @@ export function MoneyInGlyph({color, size = 18}: GlyphProps) {
 
 export function MoneyOutGlyph({color, size = 18}: GlyphProps) {
   return <MoneyFlowGlyph color={color} size={size} direction="out" />;
+}
+
+/** Coin resting in the same tray — money kept, not flowing. */
+export function SavedGlyph({color, size = 18}: GlyphProps) {
+  const stroke = Math.max(1.8, size * 0.12);
+  const coin = size * 0.42;
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: size * 0.06,
+      }}>
+      <View
+        style={{
+          width: coin,
+          height: coin,
+          borderRadius: coin / 2,
+          borderWidth: stroke,
+          borderColor: color,
+        }}
+      />
+      <FlowTray color={color} size={size} stroke={stroke} />
+    </View>
+  );
 }
 
 export function SearchGlyph({color, size = 18}: GlyphProps) {
@@ -931,6 +1106,71 @@ export function PencilGlyph({color, size = 16}: GlyphProps) {
             borderRightColor: 'transparent',
             borderTopColor: color,
             marginTop: -1,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+export function TrashGlyph({color, size = 17}: GlyphProps) {
+  const stroke = Math.max(1.5, size * 0.1);
+  const canW = size * 0.62;
+  const canH = size * 0.58;
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      <View
+        style={{
+          width: size * 0.72,
+          height: stroke,
+          borderRadius: radii.pill,
+          backgroundColor: color,
+          marginBottom: 2,
+        }}
+      />
+      <View
+        style={{
+          width: size * 0.28,
+          height: size * 0.14,
+          borderWidth: stroke,
+          borderBottomWidth: 0,
+          borderColor: color,
+          borderTopLeftRadius: 2,
+          borderTopRightRadius: 2,
+          marginBottom: 1,
+        }}
+      />
+      <View
+        style={{
+          width: canW,
+          height: canH,
+          borderWidth: stroke,
+          borderColor: color,
+          borderRadius: 2,
+          flexDirection: 'row',
+          justifyContent: 'space-evenly',
+          paddingTop: 3,
+        }}>
+        <View
+          style={{
+            width: stroke,
+            height: canH * 0.55,
+            borderRadius: radii.pill,
+            backgroundColor: color,
+          }}
+        />
+        <View
+          style={{
+            width: stroke,
+            height: canH * 0.55,
+            borderRadius: radii.pill,
+            backgroundColor: color,
           }}
         />
       </View>

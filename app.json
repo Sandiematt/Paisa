@@ -12,6 +12,9 @@
     },
     "android": {
       "package": "com.expense_tracker"
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }

@@ -5,19 +5,32 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {spacing} from '../../theme';
 
 export const FLOATING_NAV_GAP = 12;
-export const FLOATING_NAV_PILL_HEIGHT = 8 * 2 + 44;
+export const FLOATING_NAV_PILL_PAD_V = 14;
+export const FLOATING_NAV_ITEM_HEIGHT = 48;
+export const FLOATING_NAV_PILL_HEIGHT =
+  FLOATING_NAV_PILL_PAD_V * 2 + FLOATING_NAV_ITEM_HEIGHT;
+/** Air between the last home cards and the top of the floating pill. */
+export const FLOATING_NAV_CONTENT_GAP = 40;
 
 /**
- * Space screens need under the last piece of content so it clears the
- * overlay. Matches the pill height plus the gap above the home indicator.
+ * Height of the floating pill plus the gap to the home indicator.
+ * Use this to inset screen content so it does not draw under the bar.
  */
-export function useFloatingNavClearance() {
+export function useFloatingNavDockHeight() {
   const insets = useSafeAreaInsets();
   return (
     FLOATING_NAV_PILL_HEIGHT +
     FLOATING_NAV_GAP +
     Math.max(insets.bottom, spacing.sm)
   );
+}
+
+/**
+ * Space scroll content needs under the last piece of content so it clears
+ * the overlay with breathing room (Budget / Savings stay fully visible).
+ */
+export function useFloatingNavClearance() {
+  return useFloatingNavDockHeight() + FLOATING_NAV_CONTENT_GAP;
 }
 
 type ScrollHandler = (event: NativeSyntheticEvent<NativeScrollEvent>) => void;

@@ -1,8 +1,13 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Alert,
+  Animated,
   Keyboard,
+  KeyboardAvoidingView,
+  LayoutChangeEvent,
   Modal,
+  Platform,
+  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -12,8 +17,9 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
+import {useReducedMotion} from '../../hooks/useReducedMotion';
+
 import {
-  BackspaceGlyph,
   CalendarGlyph,
   MinusGlyph,
   PlusGlyph,
@@ -28,7 +34,13 @@ import {
   loadCategories,
   CategoryRow,
 } from '../../lib/categoriesStore';
-import {createTransaction, localDateISO} from '../../lib/transactionsStore';
+import {
+  TransactionRow,
+  createTransaction,
+  dateFromCalendarISO,
+  localDateISO,
+  updateTransaction,
+} from '../../lib/transactionsStore';
 import {colors, layout, radii, spacing, typography} from '../../theme';
 import {CATEGORIES, CURRENCIES, categoryById} from '../onboarding/constants';
 import {CategoryIcon} from './categoryIcons';
@@ -40,8 +52,9 @@ type AddTransactionScreenProps = {
   initialKind: AddKind;
   currencySymbol: string;
   categoryIds: string[];
+  existing?: TransactionRow | null;
   onClose: () => void;
-  onSaved?: () => void;
+  onSaved?: (row: TransactionRow) => void;
 };
 
 const OTHER_CATEGORY = {id: 'other', label: 'Other', color: colors.slate};
@@ -68,13 +81,6 @@ const INCOME_CATEGORIES = [
   OTHER_CATEGORY,
 ];
 
-const KEYS: string[][] = [
-  ['1', '2', '3'],
-  ['4', '5', '6'],
-  ['7', '8', '9'],
-  ['.', '0', 'back'],
-];
-
 const NOTE_LIMIT = 100;
 
 const KIND_META = {
@@ -94,28 +100,33 @@ const KIND_META = {
   },
 } as const;
 
-function applyKey(current: string, key: string): string {
-  if (key === 'back') {
-    if (current.length <= 1) {
-      return '0';
-    }
-    const next = current.slice(0, -1);
-    return next === '' || next === '-' ? '0' : next;
+const KIND_PAD = 4;
+const KIND_SEG_H = 50;
+const KIND_MOTION = 180;
+const SUBMIT_H = 56;
+const CANVAS_EXPENSE = '#FFF8F4';
+const CANVAS_INCOME = '#D8F0DC';
+const WASH_EXPENSE = '#FFD9D0';
+const WASH_INCOME = '#A8DCB4';
+const THUMB_EXPENSE = KIND_META.expense.accent;
+const THUMB_INCOME = KIND_META.income.accent;
+
+function sanitizeAmount(raw: string): string {
+  const cleaned = raw.replace(/,/g, '').replace(/[^0-9.]/g, '');
+  if (cleaned === '' || cleaned === '.') {
+    return cleaned === '.' ? '0.' : '0';
   }
-  if (key === '.') {
-    return current.includes('.') ? current : `${current}.`;
+  const firstDot = cleaned.indexOf('.');
+  const head =
+    firstDot === -1
+      ? cleaned
+      : `${cleaned.slice(0, firstDot)}.${cleaned.slice(firstDot + 1).replace(/\./g, '')}`;
+  const [wholeRaw, fraction] = head.split('.');
+  const whole = (wholeRaw.replace(/^0+(?=\d)/, '') || '0').slice(0, 9);
+  if (fraction !== undefined) {
+    return `${whole}.${fraction.slice(0, 2)}`;
   }
-  if (current === '0') {
-    return key;
-  }
-  const fraction = current.split('.')[1];
-  if (fraction && fraction.length >= 2) {
-    return current;
-  }
-  if (current.replace('.', '').length >= 9) {
-    return current;
-  }
-  return current + key;
+  return whole;
 }
 
 function formatDateLabel(date: Date): string {
@@ -136,11 +147,100 @@ function currencyCodeFromSymbol(symbol: string): string {
   return CURRENCIES.find(item => item.symbol === symbol)?.code ?? symbol;
 }
 
+function useKindMotion(kind: AddKind, resetToken: boolean) {
+  const reducedMotion = useReducedMotion();
+  const [trackW, setTrackW] = useState(0);
+  const selectedIndex = kind === 'income' ? 1 : 0;
+  const innerW = Math.max(0, trackW - KIND_PAD * 2);
+  const segmentW = innerW > 0 ? innerW / 2 : 0;
+  const slideX = selectedIndex * segmentW;
+
+  const slide = useRef(new Animated.Value(0)).current;
+  const progress = useRef(new Animated.Value(selectedIndex)).current;
+  const placed = useRef(false);
+
+  useEffect(() => {
+    if (resetToken) {
+      placed.current = false;
+    }
+  }, [resetToken]);
+
+  useEffect(() => {
+    if (segmentW <= 0) {
+      return;
+    }
+    if (!placed.current) {
+      slide.setValue(slideX);
+      progress.setValue(selectedIndex);
+      placed.current = true;
+      return;
+    }
+    const duration = reducedMotion ? 0 : KIND_MOTION;
+    Animated.parallel([
+      Animated.timing(slide, {
+        toValue: slideX,
+        duration,
+        useNativeDriver: false,
+      }),
+      Animated.timing(progress, {
+        toValue: selectedIndex,
+        duration,
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [
+    progress,
+    reducedMotion,
+    resetToken,
+    segmentW,
+    selectedIndex,
+    slide,
+    slideX,
+  ]);
+
+  const canvasColor = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [CANVAS_EXPENSE, CANVAS_INCOME],
+  });
+  const thumbColor = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [THUMB_EXPENSE, THUMB_INCOME],
+  });
+  const incomeWashOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.45],
+  });
+  const expenseWashOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.45, 0],
+  });
+
+  const onTrackLayout = (event: LayoutChangeEvent) => {
+    setTrackW(event.nativeEvent.layout.width);
+  };
+
+  return {
+    slide,
+    canvasColor,
+    thumbColor,
+    incomeWashOpacity,
+    expenseWashOpacity,
+    segmentW,
+    onTrackLayout,
+  };
+}
+
+function amountDraft(value: number): string {
+  const rounded = Number(value.toFixed(2));
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+}
+
 export function AddTransactionScreen({
   visible,
   initialKind,
   currencySymbol,
   categoryIds,
+  existing,
   onClose,
   onSaved,
 }: AddTransactionScreenProps) {
@@ -155,24 +255,26 @@ export function AddTransactionScreen({
   const [note, setNote] = useState('');
   const [occurredOn, setOccurredOn] = useState(() => new Date());
   const [dateOpen, setDateOpen] = useState(false);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [dbCategories, setDbCategories] = useState<CategoryRow[]>([]);
+  const amountInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
     if (!visible) {
       return;
     }
-    setKind(initialKind);
-    setAmount('0');
+    setKind(existing?.type ?? initialKind);
+    setAmount(existing ? amountDraft(existing.amount) : '0');
     setCategoryId(null);
     setCustomCategory('');
-    setNote('');
-    setOccurredOn(new Date());
+    setNote(existing?.notes ?? '');
+    setOccurredOn(
+      existing ? dateFromCalendarISO(existing.transactionDate) : new Date(),
+    );
     setDateOpen(false);
     setSaving(false);
-    setShowAllCategories(false);
+    setShowAllCategories(Boolean(existing));
     let cancelled = false;
     loadCategories()
       .then(rows => {
@@ -188,20 +290,37 @@ export function AddTransactionScreen({
     return () => {
       cancelled = true;
     };
-  }, [initialKind, visible]);
+  }, [existing, initialKind, visible]);
 
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => {
-      setKeyboardOpen(true);
-    });
-    const hide = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardOpen(false);
-    });
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, []);
+    if (!visible || !existing) {
+      return;
+    }
+    const match = dbCategories.find(row => row.id === existing.categoryId);
+    if (match?.slug) {
+      setCategoryId(match.slug);
+    }
+  }, [dbCategories, existing, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      amountInputRef.current?.focus();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [visible]);
+
+  const {
+    slide,
+    canvasColor,
+    thumbColor,
+    incomeWashOpacity,
+    expenseWashOpacity,
+    segmentW,
+    onTrackLayout,
+  } = useKindMotion(kind, visible);
 
   const extraExpenseCategories = useMemo(() => {
     const shown = new Set(EXPENSE_GRID.map(item => item.id));
@@ -209,7 +328,7 @@ export function AddTransactionScreen({
       .map(id => categoryById(id))
       .filter(
         (item): item is NonNullable<typeof item> =>
-          Boolean(item) && !shown.has(item.id),
+          item != null && !shown.has(item.id),
       );
     const leftovers = CATEGORIES.filter(item => !shown.has(item.id));
     const merged = [...leftovers, ...fromProfile];
@@ -238,12 +357,28 @@ export function AddTransactionScreen({
 
   const numericAmount = parseAmountInput(amount);
   const canSubmit = numericAmount > 0 && !saving;
-  const submitLabel = saving ? 'Saving…' : KIND_META[kind].verb;
   const tone = KIND_META[kind];
+  const editing = Boolean(existing);
+  const submitLabel = saving
+    ? 'Saving…'
+    : editing
+      ? 'Save changes'
+      : tone.verb;
+  const heading = editing
+    ? kind === 'income'
+      ? 'Edit income'
+      : 'Edit expense'
+    : tone.title;
+  const subtitle = editing
+    ? 'Update the amount, category, or date'
+    : tone.subtitle;
   const currencyCode = currencyCodeFromSymbol(currencySymbol);
   const moreCategories = kind === 'expense' && extraExpenseCategories.length > 0;
 
   const onKindChange = (next: AddKind) => {
+    if (next === kind) {
+      return;
+    }
     setKind(next);
     setCategoryId(null);
     setCustomCategory('');
@@ -274,16 +409,26 @@ export function AddTransactionScreen({
       } else if (!categoryRow && chip?.label) {
         categoryRow = await findOrCreateUserCategory(chip.label, kind);
       }
-      await createTransaction({
+      const payload = {
         type: kind,
         amount: numericAmount,
         categoryId: categoryRow?.id ?? null,
         description: categoryRow?.name ?? categoryName,
-        merchant: categoryRow?.name ?? categoryName,
+        merchant:
+          existing?.merchant?.trim() ||
+          categoryRow?.name ||
+          categoryName,
         transactionDate: localDateISO(occurredOn),
         notes: note.trim() || null,
-      });
-      onSaved?.();
+      };
+      const saved = existing
+        ? await updateTransaction(existing.id, {
+            ...payload,
+            paymentMethod: existing.paymentMethod,
+            isRecurring: existing.isRecurring,
+          })
+        : await createTransaction(payload);
+      onSaved?.(saved);
       onClose();
     } catch (caught) {
       Alert.alert(
@@ -301,9 +446,21 @@ export function AddTransactionScreen({
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={onClose}>
-      <View style={[styles.root, {paddingTop: insets.top}]}>
+      <Animated.View
+        style={[styles.root, {backgroundColor: canvasColor}]}>
+        <KeyboardAvoidingView
+          style={[styles.screen, {paddingTop: insets.top}]}
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === 'android' ? 0 : insets.top}>
         <StatusBar barStyle="dark-content" />
-        <View pointerEvents="none" style={styles.wash} />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.wash, styles.washExpense, {opacity: expenseWashOpacity}]}
+        />
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.wash, styles.washIncome, {opacity: incomeWashOpacity}]}
+        />
 
         <View style={styles.topBar}>
           <PressableScale
@@ -321,10 +478,10 @@ export function AddTransactionScreen({
           </PressableScale>
           <View style={styles.headerCopy}>
             <AppText variant="heading" color={colors.ink}>
-              {tone.title}
+              {heading}
             </AppText>
             <AppText variant="caption" color={colors.inkMuted}>
-              {tone.subtitle}
+              {subtitle}
             </AppText>
           </View>
           <PressableScale
@@ -351,21 +508,37 @@ export function AddTransactionScreen({
           </PressableScale>
         </View>
 
-        <View style={styles.kindTrack}>
+        <View
+          accessibilityRole="tablist"
+          style={styles.kindTrack}
+          onLayout={onTrackLayout}>
+          {segmentW > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.kindThumb,
+                {
+                  width: segmentW,
+                  backgroundColor: thumbColor,
+                  transform: [{translateX: slide}],
+                },
+              ]}
+            />
+          ) : null}
           {(['expense', 'income'] as const).map(item => {
             const selected = kind === item;
             const itemTone = KIND_META[item];
+            const thumbReady = segmentW > 0;
             return (
-              <PressableScale
+              <Pressable
                 key={item}
                 onPress={() => onKindChange(item)}
-                scaleTo={0.98}
-                accessibilityRole="radio"
+                accessibilityRole="tab"
                 accessibilityState={{selected}}
-                containerStyle={styles.kindOption}
+                android_ripple={{color: 'transparent'}}
                 style={[
-                  styles.kindFace,
-                  selected && {backgroundColor: itemTone.accent},
+                  styles.kindOption,
+                  selected && !thumbReady && {backgroundColor: itemTone.accent},
                 ]}>
                 <View
                   style={[
@@ -390,10 +563,10 @@ export function AddTransactionScreen({
                 </View>
                 <AppText
                   variant="bodyStrong"
-                  color={selected ? colors.onInk : colors.ink}>
+                  color={selected ? '#FFFFFF' : colors.ink}>
                   {item === 'expense' ? 'Expense' : 'Income'}
                 </AppText>
-              </PressableScale>
+              </Pressable>
             );
           })}
         </View>
@@ -404,6 +577,7 @@ export function AddTransactionScreen({
             styles.scrollContent,
             compact && styles.scrollCompact,
           ]}
+          keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
           <View style={styles.amountBlock}>
@@ -429,17 +603,38 @@ export function AddTransactionScreen({
               <AppText
                 variant="numericHero"
                 color={colors.ink}
-                numberOfLines={1}
-                adjustsFontSizeToFit
+                style={[
+                  styles.amountSymbol,
+                  {
+                    fontSize: compact ? 40 : 48,
+                    lineHeight: compact ? 46 : 54,
+                  },
+                ]}>
+                {currencySymbol}
+              </AppText>
+              <TextInput
+                ref={amountInputRef}
+                value={amount === '0' ? '' : amount}
+                onChangeText={text => setAmount(sanitizeAmount(text))}
+                placeholder="0"
+                placeholderTextColor={colors.inkMuted}
+                keyboardType="decimal-pad"
+                inputMode="decimal"
+                returnKeyType="done"
+                blurOnSubmit
+                selectTextOnFocus
+                autoCorrect={false}
+                caretHidden={false}
+                underlineColorAndroid="transparent"
+                accessibilityLabel={`Amount, ${formatAmountInput(amount, currencySymbol)}`}
                 style={[
                   styles.amountDigits,
                   {
                     fontSize: compact ? 40 : 48,
                     lineHeight: compact ? 46 : 54,
                   },
-                ]}>
-                {formatAmountInput(amount, currencySymbol)}
-              </AppText>
+                ]}
+              />
               <View style={styles.currencyChip}>
                 <AppText variant="label" color={colors.ink}>
                   {currencyCode}
@@ -520,6 +715,8 @@ export function AddTransactionScreen({
               placeholderTextColor={colors.inkMuted}
               autoCapitalize="words"
               returnKeyType="done"
+              blurOnSubmit
+              underlineColorAndroid="transparent"
               style={styles.otherField}
             />
           ) : null}
@@ -533,7 +730,9 @@ export function AddTransactionScreen({
               placeholderTextColor={colors.inkMuted}
               autoCapitalize="sentences"
               returnKeyType="done"
+              blurOnSubmit
               maxLength={NOTE_LIMIT}
+              underlineColorAndroid="transparent"
               style={styles.noteInput}
             />
             <AppText variant="caption" color={colors.inkMuted}>
@@ -542,44 +741,14 @@ export function AddTransactionScreen({
           </View>
         </ScrollView>
 
-        <View
+        <Animated.View
           style={[
             styles.dock,
-            {paddingBottom: Math.max(insets.bottom, spacing.md)},
+            {
+              backgroundColor: canvasColor,
+              paddingBottom: Math.max(insets.bottom, spacing.md),
+            },
           ]}>
-          {keyboardOpen ? null : (
-            <View style={[styles.keypad, compact && styles.keypadCompact]}>
-              {KEYS.map(row => (
-                <View key={row.join('-')} style={styles.keyRow}>
-                  {row.map(key => (
-                    <PressableScale
-                      key={key}
-                      onPress={() =>
-                        setAmount(current => applyKey(current, key))
-                      }
-                      scaleTo={0.96}
-                      accessibilityRole="button"
-                      accessibilityLabel={key === 'back' ? 'Delete' : key}
-                      containerStyle={styles.keyHit}
-                      style={[
-                        styles.key,
-                        compact && styles.keyCompact,
-                        key === 'back' && styles.utilityKey,
-                      ]}>
-                      {key === 'back' ? (
-                        <BackspaceGlyph color={colors.inkSecondary} size={18} />
-                      ) : (
-                        <AppText variant="heading" color={colors.ink}>
-                          {key}
-                        </AppText>
-                      )}
-                    </PressableScale>
-                  ))}
-                </View>
-              ))}
-            </View>
-          )}
-
           <PressableScale
             onPress={handleSubmit}
             disabled={!canSubmit}
@@ -606,7 +775,7 @@ export function AddTransactionScreen({
               {' →'}
             </AppText>
           </PressableScale>
-        </View>
+        </Animated.View>
 
         <DatePickerSheet
           visible={dateOpen}
@@ -614,7 +783,8 @@ export function AddTransactionScreen({
           onClose={() => setDateOpen(false)}
           onChange={setOccurredOn}
         />
-      </View>
+        </KeyboardAvoidingView>
+      </Animated.View>
     </Modal>
   );
 }
@@ -622,7 +792,9 @@ export function AddTransactionScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#FFF8F4',
+  },
+  screen: {
+    flex: 1,
     overflow: 'hidden',
   },
   wash: {
@@ -632,8 +804,12 @@ const styles = StyleSheet.create({
     width: 220,
     height: 220,
     borderRadius: 110,
-    backgroundColor: '#FFD9D0',
-    opacity: 0.55,
+  },
+  washExpense: {
+    backgroundColor: WASH_EXPENSE,
+  },
+  washIncome: {
+    backgroundColor: WASH_INCOME,
   },
   topBar: {
     flexDirection: 'row',
@@ -691,22 +867,32 @@ const styles = StyleSheet.create({
   },
   kindTrack: {
     flexDirection: 'row',
+    alignItems: 'center',
     marginHorizontal: layout.screenPadding,
     marginTop: spacing.xl,
-    padding: 4,
+    padding: KIND_PAD,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  kindThumb: {
+    position: 'absolute',
+    top: KIND_PAD,
+    left: KIND_PAD,
+    height: KIND_SEG_H,
+    borderRadius: radii.pill,
   },
   kindOption: {
     flex: 1,
-  },
-  kindFace: {
-    height: 50,
+    zIndex: 1,
+    elevation: 0,
+    height: KIND_SEG_H,
     borderRadius: radii.pill,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
+    backgroundColor: 'transparent',
   },
   kindMark: {
     width: 22,
@@ -735,9 +921,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
+  amountSymbol: {
+    fontVariant: ['tabular-nums'],
+  },
   amountDigits: {
     flex: 1,
+    padding: 0,
+    margin: 0,
+    minHeight: 54,
+    ...typography.numericHero,
     fontVariant: ['tabular-nums'],
+    color: colors.ink,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   currencyChip: {
     minHeight: 36,
@@ -819,43 +1015,10 @@ const styles = StyleSheet.create({
   },
   dock: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.sm,
-    gap: spacing.md,
-    backgroundColor: '#FFF8F4',
-  },
-  keypad: {
-    gap: spacing.sm,
-  },
-  keypadCompact: {
-    gap: spacing.xs,
-  },
-  keyRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  keyHit: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  key: {
-    width: 68,
-    height: 68,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-  },
-  utilityKey: {
-    backgroundColor: '#EFEAE4',
-  },
-  keyCompact: {
-    width: 56,
-    height: 56,
+    paddingTop: spacing.md,
   },
   submit: {
-    height: 56,
+    height: SUBMIT_H,
     borderRadius: radii.pill,
     flexDirection: 'row',
     alignItems: 'center',

@@ -20,6 +20,7 @@ export const radii = {
   cardHero: 28,
   cardMetric: 22,
   sheet: 28,
+  sheetLogin: 32,
   pill: 999,
 } as const;
 

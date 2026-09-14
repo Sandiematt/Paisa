@@ -1,5 +1,5 @@
 import React from 'react';
-import {View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 
 import {
   HomeGlyph,
@@ -413,6 +413,43 @@ export function CategoryIcon({id, size = 20}: {id: string; size?: number}) {
         justifyContent: 'center',
       }}>
       <GlyphForId id={id} color={tint.fg} size={size} />
+    </View>
+  );
+}
+
+/** Wonder Activity row disc: 36px, tinted fill + hairline. */
+export function CategoryDisc({
+  id,
+  color,
+  size = 36,
+  iconSize = 16,
+}: {
+  id: string;
+  color?: string;
+  size?: number;
+  iconSize?: number;
+}) {
+  const tint = ICON_TINT[id] ?? ICON_TINT.other;
+  const fg = color ?? tint.fg;
+  const withAlpha = (hex: string, alpha: string) => {
+    if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+      return tint.bg;
+    }
+    return `${hex}${alpha}`;
+  };
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color ? withAlpha(fg, '1A') : tint.bg,
+        borderWidth: StyleSheet.hairlineWidth,
+        borderColor: color ? withAlpha(fg, '33') : `${tint.fg}33`,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}>
+      <GlyphForId id={id} color={fg} size={iconSize} />
     </View>
   );
 }

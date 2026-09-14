@@ -1,3 +1,5 @@
+import {TransactionRow} from '../../lib/transactionsStore';
+
 export type ActivityKind = 'expense' | 'income';
 
 export type ActivityFilter = 'all' | 'expenses' | 'income' | 'recurring';
@@ -6,6 +8,8 @@ export type ActivityTransaction = {
   id: string;
   merchant: string;
   category: string;
+  categorySlug?: string;
+  categoryColor?: string;
   account: string;
   /** Signed: expenses negative, income positive. */
   amount: number;
@@ -14,4 +18,5 @@ export type ActivityTransaction = {
   note: string;
   /** ISO date, local calendar day. */
   date: string;
+  source?: TransactionRow;
 };

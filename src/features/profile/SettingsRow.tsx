@@ -1,37 +1,33 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
+import {Text} from '@tamagui/core';
 
-import {AppText, PressableScale} from '../../components/ui';
-import {colors, layout, radii, spacing} from '../../theme';
+import {ChevronRightIcon} from '../../components/icons/FeatherIcons';
+import {PressableScale} from '../../components/ui';
+import {fonts} from '../../theme';
 
-/**
- * kind controls the right-side affordance:
- *  'nav'    → chevron ›   (opens a sub-screen)
- *  'edit'   → value + subtle pencil mark (inline edit interaction)
- *  'toggle' → caller passes an accessory (Switch)
- *  'info'   → value only, no chevron, no press (display-only)
- */
 export type SettingsRowKind = 'nav' | 'edit' | 'toggle' | 'info';
 
 type SettingsRowProps = {
   label: string;
-  /** Secondary line below the label — shows current setting at a glance. */
   subtitle?: string;
-  /** Current value shown on the right. */
   value?: string;
-  /** Shown in place of value when value is absent — communicates "not set". */
   placeholder?: string;
   onPress?: () => void;
   last?: boolean;
   destructive?: boolean;
-  /**
-   * Row interaction kind. Determines right-side affordance.
-   * Defaults to 'nav' when onPress is provided, 'info' otherwise.
-   */
   kind?: SettingsRowKind;
-  /** Custom right-side slot — used for Switch toggles. */
   accessory?: React.ReactNode;
+  icon?: React.ReactNode;
 };
+
+const INK = '#22201B';
+const MUTED = '#6F634E';
+const CHEVRON = '#B0A488';
+const DIVIDER = '#00000010';
+const CHIP = '#00000008';
+const DANGER = '#B8484A';
+const DANGER_CHIP = '#B8484A1A';
 
 export function SettingsRow({
   label,
@@ -43,65 +39,74 @@ export function SettingsRow({
   destructive = false,
   kind,
   accessory,
+  icon,
 }: SettingsRowProps) {
-  // Resolve effective kind
-  const effectiveKind: SettingsRowKind =
-    kind ?? (onPress ? 'nav' : 'info');
-
-  const labelColor = destructive ? colors.danger : colors.ink;
-
-  // Value display: actual value, or placeholder in muted colour
+  const effectiveKind: SettingsRowKind = kind ?? (onPress ? 'nav' : 'info');
   const displayValue = value ?? placeholder;
   const isPlaceholder = !value && !!placeholder;
+  const labelColor = destructive ? DANGER : INK;
+  const showChevron = effectiveKind === 'nav' || effectiveKind === 'edit';
 
   const content = (
     <View style={[styles.row, !last && styles.rowDivider]}>
-      {/* Left: label + optional subtitle */}
+      {icon ? (
+        <View
+          style={[
+            styles.chip,
+            destructive ? styles.chipDanger : null,
+          ]}>
+          {icon}
+        </View>
+      ) : null}
+
       <View style={styles.labelBlock}>
-        <AppText
-          variant="body"
+        <Text
+          fontFamily={fonts.interSemi}
+          fontSize={15}
+          lineHeight={20}
+          fontWeight={destructive ? '700' : '600'}
           color={labelColor}
           numberOfLines={1}>
           {label}
-        </AppText>
+        </Text>
         {subtitle ? (
-          <AppText
-            variant="caption"
-            color={colors.inkMuted}
-            numberOfLines={1}
-            style={styles.subtitle}>
+          <Text
+            fontFamily={fonts.interMedium}
+            fontSize={12}
+            lineHeight={16}
+            fontWeight="500"
+            color={MUTED}
+            numberOfLines={1}>
             {subtitle}
-          </AppText>
+          </Text>
         ) : null}
       </View>
 
-      {/* Right: accessory slot OR value + chevron */}
       {accessory ?? (
         <View style={styles.trailing}>
           {displayValue ? (
-            <AppText
-              variant="body"
+            <Text
+              fontFamily={fonts.interSemi}
+              fontSize={14}
+              lineHeight={18}
+              fontWeight="600"
               color={
                 destructive
-                  ? colors.danger
-                  : isPlaceholder
-                    ? colors.inkMuted
-                    : colors.inkSecondary
+                  ? DANGER
+                  : isPlaceholder || effectiveKind === 'info'
+                    ? MUTED
+                    : INK
               }
               numberOfLines={1}
               style={styles.value}>
               {displayValue}
-            </AppText>
+            </Text>
           ) : null}
-          {effectiveKind === 'nav' || effectiveKind === 'edit' ? (
-            <View style={styles.chevronWrap}>
-              <AppText
-                variant="body"
-                color={colors.inkMuted}
-                style={styles.chevron}>
-                {'›'}
-              </AppText>
-            </View>
+          {showChevron ? (
+            <ChevronRightIcon
+              color={destructive ? DANGER : CHEVRON}
+              size={16}
+            />
           ) : null}
         </View>
       )}
@@ -134,48 +139,39 @@ const styles = StyleSheet.create({
     minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.md,
+    paddingVertical: 16,
+    gap: 14,
   },
   rowDivider: {
-    borderBottomWidth: layout.hairlineWidth,
-    borderBottomColor: colors.hairline,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: DIVIDER,
+  },
+  chip: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: CHIP,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipDanger: {
+    backgroundColor: DANGER_CHIP,
+    marginRight: 0,
   },
   labelBlock: {
     flex: 1,
-    marginRight: spacing.md,
+    gap: 2,
     justifyContent: 'center',
-  },
-  subtitle: {
-    marginTop: 2,
   },
   trailing: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     flexShrink: 1,
     maxWidth: '55%',
   },
   value: {
     flexShrink: 1,
     textAlign: 'right',
-  },
-  chevronWrap: {
-    width: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chevron: {
-    fontSize: 20,
-    lineHeight: 22,
-    marginLeft: spacing.xs,
-    // Bump visual weight of the chevron to be properly readable
-    includeFontPadding: false,
-  },
-  // Unused but kept for reference — edit rows could show a small pencil dot
-  editDot: {
-    width: 6,
-    height: 6,
-    borderRadius: radii.pill,
-    backgroundColor: colors.accent,
-    marginLeft: spacing.xs,
   },
 });

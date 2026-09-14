@@ -9,6 +9,8 @@ type ScreenProps = {
   edges?: readonly Edge[];
   style?: StyleProp<ViewStyle>;
   backdrop?: React.ReactNode;
+  /** Keeps children above an overlay such as the floating tab bar. */
+  bottomInset?: number;
 };
 
 export function Screen({
@@ -16,6 +18,7 @@ export function Screen({
   edges = ['top', 'bottom'],
   style,
   backdrop,
+  bottomInset = 0,
 }: ScreenProps) {
   return (
     <View style={[styles.root, backdrop ? styles.rootWash : null]} collapsable={false}>
@@ -23,7 +26,9 @@ export function Screen({
           comes from the root view rather than a status bar colour. */}
       <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
       {backdrop}
-      <SafeAreaView style={[styles.safe, style]} edges={edges}>
+      <SafeAreaView
+        style={[styles.safe, bottomInset ? {paddingBottom: bottomInset} : null, style]}
+        edges={edges}>
         {children}
       </SafeAreaView>
     </View>

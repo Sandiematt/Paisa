@@ -1,34 +1,90 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
+import {Text} from '@tamagui/core';
 
-import {AppText} from '../../components/ui';
-import {colors, radii, spacing} from '../../theme';
+import {GlassPanel} from '../../components/ui';
+import {colors, fonts, radii, shadows} from '../../theme';
 
 type SettingsSectionProps = {
   title: string;
   children: React.ReactNode;
   footer?: string;
   danger?: boolean;
+  /** Inner padding. Row lists use horizontal-only so rows can draw full-bleed dividers. */
+  padded?: boolean;
 };
+
+const LABEL = '#9A8C72';
+const DANGER = '#B8484A';
 
 export function SettingsSection({
   title,
   children,
   footer,
   danger = false,
+  padded = false,
 }: SettingsSectionProps) {
+  if (danger) {
+    return (
+      <View style={styles.wrap}>
+        <Text
+          fontFamily={fonts.interSemi}
+          fontSize={11}
+          lineHeight={14}
+          fontWeight="600"
+          letterSpacing={1.32}
+          color={DANGER}
+          textTransform="uppercase"
+          style={styles.title}>
+          {title}
+        </Text>
+        <View style={styles.dangerCard}>{children}</View>
+        {footer ? (
+          <Text
+            fontFamily={fonts.interMedium}
+            fontSize={11}
+            lineHeight={15}
+            fontWeight="500"
+            color="#6F634E"
+            style={styles.footer}>
+            {footer}
+          </Text>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.wrap}>
-      <AppText variant="caption" color={colors.inkMuted} style={styles.title}>
+      <Text
+        fontFamily={fonts.interSemi}
+        fontSize={11}
+        lineHeight={14}
+        fontWeight="600"
+        letterSpacing={1.32}
+        color={LABEL}
+        textTransform="uppercase"
+        style={styles.title}>
         {title}
-      </AppText>
-      <View style={[styles.card, danger && styles.cardDanger]}>
+      </Text>
+      <GlassPanel
+        style={shadows.card}
+        radius={radii.cardHero - 4}
+        intensity="xl"
+        overlayColor={colors.glass}
+        contentStyle={padded ? styles.paddedInner : styles.rowInner}>
         {children}
-      </View>
+      </GlassPanel>
       {footer ? (
-        <AppText variant="caption" color={colors.inkMuted} style={styles.footer}>
+        <Text
+          fontFamily={fonts.interMedium}
+          fontSize={11}
+          lineHeight={15}
+          fontWeight="500"
+          color="#6F634E"
+          style={styles.footer}>
           {footer}
-        </AppText>
+        </Text>
       ) : null}
     </View>
   );
@@ -36,32 +92,27 @@ export function SettingsSection({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginBottom: spacing.xl,
+    gap: 10,
   },
   title: {
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    marginBottom: spacing.sm,
-    marginLeft: spacing.xs,
-    // Slightly stronger weight so section labels read at a glance
-    fontWeight: '600',
+    paddingHorizontal: 4,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    // No outer border on normal sections — surface colour against canvas provides
-    // enough separation without adding visual noise.
-    paddingHorizontal: spacing.lg,
-    overflow: 'hidden',
+  paddedInner: {
+    padding: 20,
+    gap: 16,
   },
-  cardDanger: {
-    // Keep a very subtle danger-tinted border only for the danger zone.
+  rowInner: {
+    paddingHorizontal: 20,
+    paddingVertical: 0,
+  },
+  dangerCard: {
+    backgroundColor: '#B8484A0F',
     borderWidth: 1,
-    borderColor: '#E8C4BC',
+    borderColor: '#B8484A33',
+    borderRadius: 24,
+    paddingHorizontal: 20,
   },
   footer: {
-    marginTop: spacing.sm,
-    marginHorizontal: spacing.xs,
-    lineHeight: 18,
+    paddingHorizontal: 4,
   },
 });

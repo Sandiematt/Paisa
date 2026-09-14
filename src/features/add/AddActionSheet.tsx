@@ -1,18 +1,24 @@
-import React, { useEffect, useRef } from 'react';
+import React, {useEffect, useRef} from 'react';
 import {
   Animated,
   BackHandler,
+  Platform,
   Pressable,
   StyleSheet,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MoneyInGlyph, MoneyOutGlyph } from '../../components/icons/Glyphs';
-import { AppText, PressableScale } from '../../components/ui';
-import { useReducedMotion } from '../../hooks/useReducedMotion';
-import { colors, duration, easing, layout, radii, spacing } from '../../theme';
-import { AddKind } from './types';
+import {
+  ArrowDownLeftGlyph,
+  ArrowUpRightGlyph,
+} from '../../components/icons/Glyphs';
+import {AppText, GlassPanel, PressableScale} from '../../components/ui';
+import {useReducedMotion} from '../../hooks/useReducedMotion';
+import {
+  useFloatingNavDockHeight,
+} from '../NavBar/FloatingNavScroll';
+import {colors, duration, easing, fonts, radii} from '../../theme';
+import {AddKind} from './types';
 
 type AddActionSheetProps = {
   visible: boolean;
@@ -20,26 +26,34 @@ type AddActionSheetProps = {
   onSelect: (kind: AddKind) => void;
 };
 
+const CARD_WIDTH = 250;
+const CARET = 14;
+const CARET_GAP = 14;
+const ROW_HEIGHT = 54;
+
 const OPTIONS: {
   kind: AddKind;
   title: string;
   description: string;
   accent: string;
   accentSoft: string;
+  accentRing: string;
 }[] = [
   {
-    kind: 'expense',
-    title: 'Add expense',
-    description: 'Capture a purchase, bill, fee, or cash spend.',
-    accent: colors.coral,
-    accentSoft: '#FCE9E4',
-  },
-  {
     kind: 'income',
-    title: 'Add income',
-    description: 'Record salary, refunds, transfers, or side income.',
+    title: 'Add Income',
+    description: 'Record money coming in',
     accent: colors.positive,
     accentSoft: colors.alertPositive,
+    accentRing: '#3F7A4E33',
+  },
+  {
+    kind: 'expense',
+    title: 'Add Expense',
+    description: 'Record money going out',
+    accent: colors.coral,
+    accentSoft: colors.alertDanger,
+    accentRing: '#C0523A33',
   },
 ];
 
@@ -48,14 +62,14 @@ export function AddActionSheet({
   onClose,
   onSelect,
 }: AddActionSheetProps) {
-  const insets = useSafeAreaInsets();
+  const dockHeight = useFloatingNavDockHeight();
   const reducedMotion = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(progress, {
       toValue: visible ? 1 : 0,
-      duration: reducedMotion ? 0 : duration.overlay,
+      duration: reducedMotion ? 0 : duration.enter,
       easing: easing.out,
       useNativeDriver: true,
     }).start();
@@ -77,84 +91,77 @@ export function AddActionSheet({
 
   const translateY = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [28, 0],
+    outputRange: [10, 0],
+  });
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.94, 1],
   });
 
   return (
     <View
       style={styles.layer}
       pointerEvents={visible ? 'auto' : 'none'}
-      collapsable={false}
-    >
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose}>
-        <Animated.View style={[styles.scrim, { opacity: progress }]} />
-      </Pressable>
+      collapsable={false}>
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss add menu"
+      />
 
       <Animated.View
+        pointerEvents={visible ? 'box-none' : 'none'}
         style={[
-          styles.sheet,
+          styles.cluster,
           {
-            paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.md,
+            bottom: dockHeight + CARET_GAP,
             opacity: progress,
-            transform: [{ translateY }],
+            transform: [{translateY}, {scale}],
           },
-        ]}
-      >
-        <View style={styles.handle} />
-        <View style={styles.header}>
-          <AppText variant="title" style={styles.title}>
-            Add transaction
-          </AppText>
-          <AppText variant="body" color={colors.inkSecondary}>
-            Choose the flow that matches the money movement.
-          </AppText>
-        </View>
-
-        <View style={styles.options}>
+        ]}>
+        <GlassPanel
+          intensity="2xl"
+          overlayColor="rgba(255, 255, 255, 0.88)"
+          radius={26}
+          style={styles.cardWrap}
+          contentStyle={styles.card}>
           {OPTIONS.map((option, index) => (
-            <PressableScale
-              key={option.kind}
-              onPress={() => onSelect(option.kind)}
-              scaleTo={0.98}
-              accessibilityRole="button"
-              accessibilityLabel={option.title}
-              style={[
-                styles.option,
-                index < OPTIONS.length - 1 && styles.optionGap,
-                { borderColor: option.accentSoft },
-              ]}
-            >
-              <View
-                style={[
-                  styles.mark,
-                  {
-                    backgroundColor: option.accentSoft,
-                    borderColor: option.accent,
-                  },
-                ]}
-              >
-                {option.kind === 'income' ? (
-                  <MoneyInGlyph color={option.accent} size={20} />
-                ) : (
-                  <MoneyOutGlyph color={option.accent} size={20} />
-                )}
-              </View>
-              <View style={styles.optionCopy}>
-                <AppText variant="heading">{option.title}</AppText>
-                <AppText
-                  variant="body"
-                  color={colors.inkSecondary}
-                  style={styles.optionDesc}
-                >
-                  {option.description}
-                </AppText>
-              </View>
-              <AppText variant="heading" color={colors.inkMuted}>
-                {'›'}
-              </AppText>
-            </PressableScale>
+            <React.Fragment key={option.kind}>
+              {index > 0 ? <View style={styles.divider} /> : null}
+              <PressableScale
+                onPress={() => onSelect(option.kind)}
+                scaleTo={0.98}
+                accessibilityRole="button"
+                accessibilityLabel={option.title}
+                style={styles.row}>
+                <View
+                  style={[
+                    styles.mark,
+                    {
+                      backgroundColor: option.accentSoft,
+                      borderColor: option.accentRing,
+                    },
+                  ]}>
+                  {option.kind === 'income' ? (
+                    <ArrowDownLeftGlyph color={option.accent} size={18} />
+                  ) : (
+                    <ArrowUpRightGlyph color={option.accent} size={18} />
+                  )}
+                </View>
+                <View style={styles.copy}>
+                  <AppText variant="heading" style={styles.title}>
+                    {option.title}
+                  </AppText>
+                  <AppText variant="caption" color={colors.inkSoft}>
+                    {option.description}
+                  </AppText>
+                </View>
+              </PressableScale>
+            </React.Fragment>
           ))}
-        </View>
+        </GlassPanel>
+        <View style={styles.caret} />
       </Animated.View>
     </View>
   );
@@ -167,78 +174,70 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     left: 0,
-    justifyContent: 'flex-end',
     zIndex: 20,
   },
-  scrim: {
+  cluster: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: 'rgba(21, 20, 18, 0.28)',
-  },
-  sheet: {
-    backgroundColor: colors.canvas,
-    borderTopLeftRadius: radii.sheet,
-    borderTopRightRadius: radii.sheet,
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.md,
-    shadowColor: colors.ink,
-    shadowOpacity: 0.12,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: -8 },
-    elevation: 12,
-  },
-  handle: {
     alignSelf: 'center',
-    width: 36,
-    height: 4,
-    borderRadius: radii.pill,
-    backgroundColor: colors.hairlineStrong,
-    marginBottom: spacing.xl,
+    alignItems: 'center',
+    width: CARD_WIDTH,
   },
-  header: {
-    marginBottom: spacing.xl,
+  cardWrap: {
+    width: CARD_WIDTH,
+    zIndex: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#78643C',
+        shadowOpacity: 0.18,
+        shadowRadius: 17,
+        shadowOffset: {width: 0, height: 12},
+      },
+      default: {elevation: 10, shadowColor: '#78643C'},
+    }),
   },
-  title: {
-    marginBottom: spacing.xs,
+  card: {
+    padding: 8,
   },
-  options: {
-    flexDirection: 'column',
-  },
-  option: {
+  row: {
+    height: ROW_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radii.sheet,
-    borderWidth: 1.5,
-    borderColor: colors.hairline,
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    shadowColor: colors.ink,
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
-  optionGap: {
-    marginBottom: spacing.md,
+    paddingLeft: 10,
+    paddingRight: 14,
+    borderRadius: 18,
+    gap: 14,
   },
   mark: {
-    width: 44,
-    height: 44,
+    width: 38,
+    height: 38,
     borderRadius: radii.pill,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.lg,
   },
-  optionCopy: {
+  copy: {
     flex: 1,
-    paddingRight: spacing.md,
   },
-  optionDesc: {
-    marginTop: 2,
+  title: {
+    fontFamily: fonts.outfitSemi,
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '600',
+    letterSpacing: -0.2,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(0, 0, 0, 0.06)',
+    marginVertical: 4,
+  },
+  caret: {
+    width: CARET,
+    height: CARET,
+    marginTop: -CARET / 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.87)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0, 0, 0, 0.07)',
+    transform: [{rotate: '45deg'}],
   },
 });

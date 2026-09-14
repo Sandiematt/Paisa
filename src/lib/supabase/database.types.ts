@@ -93,6 +93,7 @@ export type Database = {
           transaction_date: string;
           payment_method: string | null;
           notes: string | null;
+          is_recurring: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -107,6 +108,7 @@ export type Database = {
           transaction_date?: string;
           payment_method?: string | null;
           notes?: string | null;
+          is_recurring?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -121,6 +123,7 @@ export type Database = {
           transaction_date?: string;
           payment_method?: string | null;
           notes?: string | null;
+          is_recurring?: boolean;
           created_at?: string;
           updated_at?: string;
         };

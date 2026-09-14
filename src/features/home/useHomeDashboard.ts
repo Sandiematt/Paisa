@@ -5,7 +5,9 @@ import {CategoryRow, loadCategories} from '../../lib/categoriesStore';
 import {
   TransactionRow,
   loadTransactions,
+  removeLedgerRow,
   seedOpeningBalance,
+  upsertLedgerRow,
 } from '../../lib/transactionsStore';
 import {
   EMPTY_MONEY_PLAN,
@@ -30,6 +32,18 @@ export function useHomeDashboard(
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+
+  const upsertLocal = useCallback((row: TransactionRow) => {
+    setTransactions(current => upsertLedgerRow(current, row));
+    setUpdatedAt(new Date());
+    setStatus('ready');
+    setError(null);
+  }, []);
+
+  const removeLocal = useCallback((id: string) => {
+    setTransactions(current => removeLedgerRow(current, id));
+    setUpdatedAt(new Date());
+  }, []);
 
   const reload = useCallback(async () => {
     if (!user) {
@@ -86,5 +100,7 @@ export function useHomeDashboard(
     error,
     updatedAt,
     reload,
+    upsertLocal,
+    removeLocal,
   };
 }

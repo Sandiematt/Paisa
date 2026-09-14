@@ -9,8 +9,14 @@
  */
 export const colors = {
   canvas: '#EDE5D6',
+  /** Wonder login form sheet */
+  sheet: '#F4EFE4',
+  field: '#FBF8F1',
+  fieldStroke: '#E2D8C4',
+  googleStroke: '#DCD2BD',
   canvasSunk: 'rgba(0, 0, 0, 0.031)',
   surface: '#FFFFFF',
+  /** Wonder balance card fill: #ffffffa6 */
   glass: 'rgba(255, 255, 255, 0.65)',
   surfaceNav: 'rgba(255, 255, 255, 0.9)',
   track: 'rgba(0, 0, 0, 0.06)',

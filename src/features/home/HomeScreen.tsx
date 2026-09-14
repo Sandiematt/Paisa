@@ -15,17 +15,21 @@ import {Text} from '@tamagui/core';
 
 import {
   ArrowDownRightIcon,
-  ArrowUpRightIcon,
   ChevronRightIcon,
   CreditCardIcon,
   TrendingUpIcon,
 } from '../../components/icons/FeatherIcons';
-import {RefreshGlyph} from '../../components/icons/Glyphs';
+import {
+  MoneyInGlyph,
+  MoneyOutGlyph,
+  RefreshGlyph,
+  SavedGlyph,
+} from '../../components/icons/Glyphs';
 import {GlassPanel, PressableScale, ProgressBar, Screen} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
 import {colors, fonts, layout, radii, shadows} from '../../theme';
-import {useFloatingNavClearance, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
+import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {DonutChart} from './charts';
 import {HomeAmbient} from './HomeAmbient';
 import {HomeRange, HomeReport, SpendSlice, rangeScopeLabel} from './homeReport';
@@ -164,12 +168,12 @@ type SummaryKind = 'income' | 'expense' | 'saved';
 
 const SummaryIcon = React.memo(function SummaryIcon({kind}: {kind: SummaryKind}) {
   if (kind === 'income') {
-    return <ArrowUpRightIcon color={colors.positive} size={15} />;
+    return <MoneyInGlyph color={colors.positive} size={16} />;
   }
   if (kind === 'expense') {
-    return <ArrowDownRightIcon color={colors.danger} size={15} />;
+    return <MoneyOutGlyph color={colors.danger} size={16} />;
   }
-  return <TrendingUpIcon color="#C88A2E" size={15} />;
+  return <SavedGlyph color="#C88A2E" size={16} />;
 });
 
 function IconDisk({
@@ -220,7 +224,7 @@ function StatTile({
 
   return (
     <GlassPanel style={[styles.statCard, shadows.cardSoft]} radius={radii.card} contentStyle={styles.statInner}>
-      <IconDisk size={30} {...disk}>
+      <IconDisk size={32} {...disk}>
         <SummaryIcon kind={kind} />
       </IconDisk>
       <Text
@@ -657,6 +661,7 @@ export function HomeScreen({
   setRange,
 }: HomeScreenProps) {
   const navClearance = useFloatingNavClearance();
+  const navDockHeight = useFloatingNavDockHeight();
   const navScroll = useFloatingNavScroll();
 
   useEffect(() => {
@@ -683,13 +688,13 @@ export function HomeScreen({
   const showBudget = data.monthlyBudget > 0;
   const showSavings = data.monthlySavingsGoal > 0;
   return (
-    <Screen edges={['top']} backdrop={<HomeAmbient />}>
+    <Screen edges={['top']} backdrop={<HomeAmbient />} bottomInset={navDockHeight}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={{
           paddingHorizontal: layout.screenPadding,
           paddingTop: 8,
-          paddingBottom: navClearance,
+          paddingBottom: navClearance - navDockHeight,
         }}
         onScroll={navScroll.onScroll}
         scrollEventThrottle={navScroll.scrollEventThrottle}
@@ -756,7 +761,11 @@ export function HomeScreen({
           </PressableScale>
         </View>
 
-        <GlassPanel style={[styles.heroCard, shadows.card]} radius={radii.cardHero} contentStyle={styles.heroInner} overlayColor="rgba(255, 255, 255, 0.45)">
+        <GlassPanel
+          style={styles.heroCard}
+          radius={radii.cardHero}
+          contentStyle={styles.heroInner}
+          overlayColor={colors.glass}>
             <View pointerEvents="none" style={styles.heroGlow} />
             <View style={styles.rowBetween}>
               <Text
@@ -791,7 +800,7 @@ export function HomeScreen({
                     lineHeight={15}
                     fontWeight="600"
                     color={changePositive ? colors.positive : colors.danger}>
-                    {`${changePositive ? '+' : '−'}${changePct}%`}
+                    {`${changePositive ? '' : '−'}${changePct}%`}
                   </Text>
                 </View>
               ) : null}
@@ -799,7 +808,7 @@ export function HomeScreen({
             <Text
               fontFamily={fonts.outfitBold}
               fontSize={42}
-              lineHeight={46}
+              lineHeight={42}
               fontWeight="700"
               letterSpacing={-1.05}
               color={data.balance < 0 ? colors.danger : colors.ink}
@@ -969,6 +978,21 @@ const styles = StyleSheet.create({
   },
   heroCard: {
     marginBottom: 18,
+    boxShadow: [
+      {
+        offsetX: 0,
+        offsetY: 8,
+        blurRadius: 28,
+        color: 'rgba(120, 100, 60, 0.12)',
+      },
+      {
+        offsetX: 0,
+        offsetY: 1,
+        blurRadius: 1,
+        color: 'rgba(255, 255, 255, 0.6)',
+        inset: true,
+      },
+    ],
   },
   heroInner: {
     padding: 22,
@@ -976,16 +1000,28 @@ const styles = StyleSheet.create({
   },
   heroGlow: {
     position: 'absolute',
-    top: -40,
-    right: -30,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: colors.orb,
-    opacity: 0.45,
+    top: -110,
+    right: -100,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundImage: [
+      {
+        type: 'radial-gradient',
+        shape: 'circle',
+        size: 'farthest-side',
+        position: {top: '50%', left: '50%'},
+        colorStops: [
+          {color: colors.orb, positions: ['0%']},
+          {color: 'rgba(240, 200, 120, 0.45)', positions: ['40%']},
+          {color: 'rgba(240, 200, 120, 0)', positions: ['72%']},
+        ],
+      },
+    ],
   },
   heroAmount: {
     marginTop: 10,
+    includeFontPadding: false,
   },
   syncRow: {
     flexDirection: 'row',
@@ -997,7 +1033,7 @@ const styles = StyleSheet.create({
   metricRow: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    marginBottom: 16,
+    marginBottom: 8,
     gap: 12,
   },
   metricWrap: {

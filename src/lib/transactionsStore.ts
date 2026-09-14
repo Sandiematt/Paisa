@@ -1,6 +1,6 @@
 import {categoryForSlug, loadCategories} from './categoriesStore';
 import {supabase} from './supabase/client';
-import {MoneyFlow} from './supabase/database.types';
+import {Database, MoneyFlow} from './supabase/database.types';
 import {dataErrorMessage} from './supabase/errors';
 
 export type TransactionRow = {
@@ -14,6 +14,7 @@ export type TransactionRow = {
   transactionDate: string;
   paymentMethod: string | null;
   notes: string | null;
+  isRecurring: boolean;
   createdAt: string;
   updatedAt: string;
 };
@@ -27,6 +28,19 @@ export type NewTransaction = {
   transactionDate: string;
   paymentMethod?: string | null;
   notes?: string | null;
+  isRecurring?: boolean;
+};
+
+export type TransactionPatch = {
+  type?: MoneyFlow;
+  amount?: number;
+  categoryId?: string | null;
+  description?: string | null;
+  merchant?: string | null;
+  transactionDate?: string;
+  paymentMethod?: string | null;
+  notes?: string | null;
+  isRecurring?: boolean;
 };
 
 export const OPENING_BALANCE_NOTE = 'opening_balance';
@@ -72,6 +86,7 @@ function mapRow(row: {
   transaction_date: string;
   payment_method: string | null;
   notes: string | null;
+  is_recurring?: boolean | null;
   created_at: string;
   updated_at: string;
 }): TransactionRow {
@@ -83,16 +98,17 @@ function mapRow(row: {
     categoryId: row.category_id,
     description: row.description,
     merchant: row.merchant,
-    transactionDate: row.transaction_date,
+    transactionDate: calendarDateISO(row.transaction_date),
     paymentMethod: row.payment_method,
     notes: row.notes,
+    isRecurring: Boolean(row.is_recurring),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
 const SELECT_COLUMNS =
-  'id, user_id, type, amount, category_id, description, merchant, transaction_date, payment_method, notes, created_at, updated_at';
+  'id, user_id, type, amount, category_id, description, merchant, transaction_date, payment_method, notes, is_recurring, created_at, updated_at';
 
 export async function loadTransactions(): Promise<TransactionRow[]> {
   const {data, error} = await supabase
@@ -129,6 +145,7 @@ export async function createTransaction(
       transaction_date: input.transactionDate,
       payment_method: input.paymentMethod ?? null,
       notes: input.notes ?? null,
+      is_recurring: input.isRecurring ?? false,
     })
     .select(SELECT_COLUMNS)
     .single();
@@ -223,9 +240,124 @@ export async function applyWalletAdjustment(
   return true;
 }
 
+export async function updateTransaction(
+  id: string,
+  patch: TransactionPatch,
+): Promise<TransactionRow> {
+  const payload: Database['public']['Tables']['transactions']['Update'] = {};
+  if (patch.type !== undefined) {
+    payload.type = patch.type;
+  }
+  if (patch.amount !== undefined) {
+    payload.amount = patch.amount;
+  }
+  if (patch.categoryId !== undefined) {
+    payload.category_id = patch.categoryId;
+  }
+  if (patch.description !== undefined) {
+    payload.description = patch.description;
+  }
+  if (patch.merchant !== undefined) {
+    payload.merchant = patch.merchant;
+  }
+  if (patch.transactionDate !== undefined) {
+    payload.transaction_date = patch.transactionDate;
+  }
+  if (patch.paymentMethod !== undefined) {
+    payload.payment_method = patch.paymentMethod;
+  }
+  if (patch.notes !== undefined) {
+    payload.notes = patch.notes;
+  }
+  if (patch.isRecurring !== undefined) {
+    payload.is_recurring = patch.isRecurring;
+  }
+
+  const {data, error} = await supabase
+    .from('transactions')
+    .update(payload)
+    .eq('id', id)
+    .select(SELECT_COLUMNS)
+    .single();
+
+  if (error || !data) {
+    throw new Error(dataErrorMessage(error));
+  }
+
+  return mapRow(data);
+}
+
+export async function deleteTransaction(id: string): Promise<void> {
+  const {error} = await supabase.from('transactions').delete().eq('id', id);
+  if (error) {
+    throw new Error(dataErrorMessage(error));
+  }
+}
+
+export async function duplicateTransaction(
+  row: TransactionRow,
+): Promise<TransactionRow> {
+  return createTransaction({
+    type: row.type,
+    amount: row.amount,
+    categoryId: row.categoryId,
+    description: row.description,
+    merchant: row.merchant,
+    transactionDate: row.transactionDate,
+    paymentMethod: row.paymentMethod,
+    notes: row.notes,
+    isRecurring: row.isRecurring,
+  });
+}
+
 export function localDateISO(date = new Date()): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/** Calendar day `YYYY-MM-DD` from a date column or a full timestamp. */
+export function calendarDateISO(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+  if (match) {
+    return `${match[1]}-${match[2]}-${match[3]}`;
+  }
+  const fallback = new Date(value);
+  if (Number.isNaN(fallback.getTime())) {
+    return localDateISO();
+  }
+  return localDateISO(fallback);
+}
+
+export function dateFromCalendarISO(iso: string): Date {
+  const stamp = calendarDateISO(iso);
+  const [year, month, day] = stamp.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+export function sortLedger(rows: TransactionRow[]): TransactionRow[] {
+  return [...rows].sort((a, b) => {
+    if (a.transactionDate !== b.transactionDate) {
+      return a.transactionDate < b.transactionDate ? -1 : 1;
+    }
+    if (a.createdAt !== b.createdAt) {
+      return a.createdAt < b.createdAt ? -1 : 1;
+    }
+    return a.id < b.id ? -1 : 1;
+  });
+}
+
+export function upsertLedgerRow(
+  rows: TransactionRow[],
+  row: TransactionRow,
+): TransactionRow[] {
+  return sortLedger([...rows.filter(item => item.id !== row.id), row]);
+}
+
+export function removeLedgerRow(
+  rows: TransactionRow[],
+  id: string,
+): TransactionRow[] {
+  return rows.filter(item => item.id !== id);
 }

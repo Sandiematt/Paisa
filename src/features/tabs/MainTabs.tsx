@@ -15,6 +15,7 @@ import {NavBar, TabId} from '../NavBar/NavBar';
 import {currencyByCode} from '../onboarding/constants';
 import {OnboardingDraft} from '../onboarding/types';
 import {SaveProfileOptions} from '../../lib/profileStore';
+import {TransactionRow} from '../../lib/transactionsStore';
 import {InsightsScreen} from '../insights/InsightsScreen';
 import {PaisaAIScreen} from '../paisaAI/PaisaAIScreen';
 import {ProfileScreen} from '../profile/ProfileScreen';
@@ -34,9 +35,11 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('all');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [addKind, setAddKind] = useState<AddKind | null>(null);
+  const [editRow, setEditRow] = useState<TransactionRow | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [savingsOpen, setSavingsOpen] = useState(false);
+  const [ledgerFocus, setLedgerFocus] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
@@ -60,11 +63,15 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     range,
     setRange,
     report,
+    categories,
+    transactions,
     status,
     refreshing,
     error,
     updatedAt,
     reload,
+    upsertLocal,
+    removeLocal,
   } = useHomeDashboard(
     refreshNonce,
     Number(profileDraft.startingBalance) || 0,
@@ -73,10 +80,15 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
 
   const openComposer = useCallback((kind: AddKind) => {
     setSheetOpen(false);
+    setEditRow(null);
     setAddKind(kind);
   }, []);
 
   const onAddPress = useCallback(() => {
+    if (sheetOpen) {
+      setSheetOpen(false);
+      return;
+    }
     if (tab === 'activity' && activityFilter === 'expenses') {
       openComposer('expense');
       return;
@@ -86,7 +98,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       return;
     }
     setSheetOpen(true);
-  }, [activityFilter, openComposer, tab]);
+  }, [activityFilter, openComposer, sheetOpen, tab]);
 
   let page = null;
   if (tab === 'home') {
@@ -114,6 +126,17 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
         currencySymbol={currency.symbol}
         filter={activityFilter}
         onFilterChange={setActivityFilter}
+        transactions={transactions}
+        categories={categories}
+        refreshing={refreshing}
+        reload={reload}
+        onUpsert={upsertLocal}
+        onRemove={removeLocal}
+        onEdit={row => {
+          setEditRow(row);
+          setAddKind(row.type);
+        }}
+        focusDate={ledgerFocus}
       />
     );
   } else if (tab === 'insights') {
@@ -124,7 +147,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
 
   return (
     <FloatingNavScrollProvider
-      resetKey={`${tab}:${profileOpen}:${budgetOpen}:${savingsOpen}:${sheetOpen}:${addKind ?? ''}`}>
+          resetKey={`${tab}:${profileOpen}:${budgetOpen}:${savingsOpen}:${sheetOpen}:${addKind ?? ''}:${editRow?.id ?? ''}`}>
       <View style={styles.root} collapsable={false}>
         <View style={styles.stage} collapsable={false}>
           {page}
@@ -132,8 +155,12 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
 
         <NavBar
           activeTab={tab}
-          onTabPress={setTab}
+          onTabPress={next => {
+            setSheetOpen(false);
+            setTab(next);
+          }}
           onAddPress={onAddPress}
+          addOpen={sheetOpen && addKind === null}
         />
 
         <AddActionSheet
@@ -147,8 +174,16 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           initialKind={addKind ?? 'expense'}
           currencySymbol={currency.symbol}
           categoryIds={profileDraft.categoryIds}
-          onClose={() => setAddKind(null)}
-          onSaved={() => setRefreshNonce(value => value + 1)}
+          existing={editRow}
+          onClose={() => {
+            setAddKind(null);
+            setEditRow(null);
+          }}
+          onSaved={row => {
+            upsertLocal(row);
+            setLedgerFocus(row.transactionDate);
+            setRefreshNonce(value => value + 1);
+          }}
         />
 
         {/* Budget Details — opens from the Budget card on the dashboard */}
@@ -190,7 +225,6 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
             setProfileDraft(updated);
             onProfileSave(updated, options);
             setRefreshNonce(value => value + 1);
-            setProfileOpen(false);
           }}
           onSignOut={onSignOut}
           onClose={() => setProfileOpen(false)}
