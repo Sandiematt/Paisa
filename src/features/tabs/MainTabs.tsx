@@ -140,9 +140,32 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       />
     );
   } else if (tab === 'insights') {
-    page = <InsightsScreen currencySymbol={currency.symbol} />;
+    page = (
+      <InsightsScreen
+        currencySymbol={currency.symbol}
+        name={profileDraft.name}
+        avatarUrl={profileDraft.avatarUrl}
+        onProfilePress={() => setProfileOpen(true)}
+      />
+    );
   } else {
-    page = <PaisaAIScreen currencySymbol={currency.symbol} />;
+    page = (
+      <PaisaAIScreen
+        currencySymbol={currency.symbol}
+        monthlyBudget={moneyPlan.monthlyBudget}
+        monthlySpent={report.monthlySpent}
+        remainingBudget={report.monthlyRemainingBudget}
+        transactions={transactions}
+        categories={categories}
+        draft={profileDraft}
+        onSave={updated => {
+          setProfileDraft(updated);
+          void onProfileSave(updated);
+        }}
+        onDetailsPress={() => setTab('insights')}
+        onActivityPress={() => setTab('activity')}
+      />
+    );
   }
 
   return (

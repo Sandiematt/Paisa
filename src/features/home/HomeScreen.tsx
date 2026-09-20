@@ -11,7 +11,6 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import {Text} from '@tamagui/core';
 
 import {
   ArrowDownRightIcon,
@@ -25,7 +24,7 @@ import {
   RefreshGlyph,
   SavedGlyph,
 } from '../../components/icons/Glyphs';
-import {GlassPanel, PressableScale, ProgressBar, Screen} from '../../components/ui';
+import {GlassPanel, PressableScale, ProgressBar, Screen, Text} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
 import {colors, fonts, layout, radii, shadows} from '../../theme';

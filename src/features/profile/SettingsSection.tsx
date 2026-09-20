@@ -1,8 +1,7 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
-import {Text} from '@tamagui/core';
 
-import {GlassPanel} from '../../components/ui';
+import {GlassPanel, Text} from '../../components/ui';
 import {colors, fonts, radii, shadows} from '../../theme';
 
 type SettingsSectionProps = {

@@ -14,5 +14,6 @@ export {SecondaryButton} from './SecondaryButton';
 export {SelectCard} from './SelectCard';
 export {SlideSwap} from './SlideSwap';
 export {Stagger} from './Stagger';
+export {Text} from './Text';
 export {TextField} from './TextField';
 export {TogglePill} from './TogglePill';

@@ -12,17 +12,14 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {Text} from '@tamagui/core';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {
-  BoltIcon,
   ChevronLeftIcon,
   DollarSignIcon,
   DownloadIcon,
   LockIcon,
   LogOutIcon,
-  TargetIcon,
 } from '../../components/icons/FeatherIcons';
 import {
   BellGlyph,
@@ -31,7 +28,7 @@ import {
   PencilGlyph,
   TrashGlyph,
 } from '../../components/icons/Glyphs';
-import {GlassPanel, PressableScale, Screen} from '../../components/ui';
+import {GlassPanel, PressableScale, Screen, Text} from '../../components/ui';
 import {SaveProfileOptions, textToMoney} from '../../lib/profileStore';
 import {
   loadTransactions,
@@ -39,8 +36,6 @@ import {
 } from '../../lib/transactionsStore';
 import {colors, duration, easing, fonts, radii, shadows} from '../../theme';
 import {
-  CATEGORIES,
-  MIN_CATEGORIES,
   currencyByCode,
 } from '../onboarding/constants';
 import {scaleMonthly} from '../home/homeReport';
@@ -48,10 +43,7 @@ import {GoalId, OnboardingDraft} from '../onboarding/types';
 import {AvatarPickerModal} from './AvatarPickerModal';
 import {ProfileAmbient} from './ProfileAmbient';
 import {
-  AiPreferencesSheet,
-  CategoriesSheet,
   CurrencySheet,
-  GoalSheet,
   NotificationsSheet,
 } from './ProfileSheets';
 import {SettingsRow} from './SettingsRow';
@@ -69,7 +61,6 @@ type ProfileScreenProps = {
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PREVIEW_CATEGORY_COUNT = 4;
 const TOAST_DURATION_MS = 2200;
 
 const INK = '#22201B';
@@ -290,22 +281,16 @@ export function ProfileScreen({
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(draft.avatarUrl);
   const [nameError, setNameError] = useState<string | undefined>();
   const [nameEditing, setNameEditing] = useState(false);
-  const [categoryError, setCategoryError] = useState<string | undefined>();
 
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [currencyOpen, setCurrencyOpen] = useState(false);
-  const [goalOpen, setGoalOpen] = useState(false);
-  const [categoriesOpen, setCategoriesOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
 
   const [notifyPrefs, setNotifyPrefs] = useState({
     spend: true,
     monthly: true,
     ai: false,
   });
-  const [autoCategorize, setAutoCategorize] = useState(true);
-  const [aiTone, setAiTone] = useState<'short' | 'detailed'>('short');
   const [biometric, setBiometric] = useState(false);
 
   const [toastVisible, setToastVisible] = useState(false);
@@ -344,7 +329,6 @@ export function ProfileScreen({
     setCategoryIds(draft.categoryIds);
     setAvatarUrl(draft.avatarUrl);
     setNameError(undefined);
-    setCategoryError(undefined);
     setNameEditing(false);
   }, [draft, visible]);
 
@@ -385,47 +369,16 @@ export function ProfileScreen({
   const yearlyPotential = scaleMonthly(savingsNumber, 'year', new Date());
   const emailVerified = EMAIL_PATTERN.test(email.trim());
 
-  const goalLabel =
-    goal === 'track'
-      ? 'Track spending'
-      : goal === 'save'
-        ? 'Save more'
-        : goal === 'split'
-          ? 'Split bills'
-          : undefined;
-
-  const previewCategories = useMemo(() => {
-    const selected = CATEGORIES.filter(item => categoryIds.includes(item.id));
-    return {
-      shown: selected.slice(0, PREVIEW_CATEGORY_COUNT),
-      extra: Math.max(0, selected.length - PREVIEW_CATEGORY_COUNT),
-    };
-  }, [categoryIds]);
-
   const notifSubtitle = useMemo(() => {
     const enabledCount = Object.values(notifyPrefs).filter(Boolean).length;
     const total = Object.keys(notifyPrefs).length;
     return `${enabledCount} of ${total} enabled`;
   }, [notifyPrefs]);
 
-  const aiSubtitle = useMemo(() => {
-    const tonePart = aiTone === 'short' ? 'Short replies' : 'Detailed replies';
-    const sortPart = autoCategorize ? 'Auto-sort on' : 'Auto-sort off';
-    return `${tonePart} · ${sortPart}`;
-  }, [aiTone, autoCategorize]);
-
   const handleSave = () => {
     if (!name.trim()) {
       setNameError('Please enter your name.');
       Alert.alert('Name needed', 'Add your name before saving.');
-      return;
-    }
-    if (categoryIds.length < MIN_CATEGORIES) {
-      setCategoryError(`Choose at least ${MIN_CATEGORIES} categories.`);
-      Alert.alert(
-        'Categories',
-        `Keep at least ${MIN_CATEGORIES} tracked categories.`,
-      );
       return;
     }
 
@@ -724,15 +677,8 @@ export function ProfileScreen({
                 label="Notifications"
                 subtitle={notifSubtitle}
                 kind="nav"
-                onPress={() => setNotificationsOpen(true)}
-              />
-              <SettingsRow
-                icon={<BoltIcon color={ICON} size={16} />}
-                label="AI Preferences"
-                subtitle={aiSubtitle}
-                kind="nav"
                 last
-                onPress={() => setAiOpen(true)}
+                onPress={() => setNotificationsOpen(true)}
               />
             </SettingsSection>
 
@@ -803,77 +749,6 @@ export function ProfileScreen({
                 </>
               ) : null}
               {dailyHint ? <HelperText>{dailyHint}</HelperText> : null}
-            </SettingsSection>
-
-            <SettingsSection title="Insights">
-              <SettingsRow
-                icon={<TargetIcon color={ICON} size={16} />}
-                label="Primary Goal"
-                value={goalLabel}
-                placeholder="Not set"
-                kind="nav"
-                onPress={() => setGoalOpen(true)}
-              />
-              <View style={styles.categoryBlock}>
-                <View style={styles.categoryHeader}>
-                  <Text
-                    fontFamily={fonts.interSemi}
-                    fontSize={15}
-                    lineHeight={20}
-                    fontWeight="600"
-                    color={INK}>
-                    Tracked Categories
-                  </Text>
-                  <Text
-                    fontFamily={fonts.interMedium}
-                    fontSize={12}
-                    lineHeight={16}
-                    color={MUTED}>
-                    {categoryIds.length} active
-                  </Text>
-                </View>
-                <View style={styles.previewRow}>
-                  {previewCategories.shown.map(item => (
-                    <View key={item.id} style={styles.previewChip}>
-                      <View
-                        style={[styles.previewDot, {backgroundColor: item.color}]}
-                      />
-                      <Text
-                        fontFamily={fonts.interMedium}
-                        fontSize={12}
-                        lineHeight={16}
-                        fontWeight="500"
-                        color="#4A4235">
-                        {item.label}
-                      </Text>
-                    </View>
-                  ))}
-                  {previewCategories.extra > 0 ? (
-                    <View style={styles.previewChip}>
-                      <Text
-                        fontFamily={fonts.interMedium}
-                        fontSize={12}
-                        color={MUTED}>
-                        +{previewCategories.extra} more
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                {categoryError ? (
-                  <Text
-                    fontFamily={fonts.interMedium}
-                    fontSize={11}
-                    color={DANGER}>
-                    {categoryError}
-                  </Text>
-                ) : null}
-              </View>
-              <SettingsRow
-                label="Manage Categories"
-                kind="nav"
-                last
-                onPress={() => setCategoriesOpen(true)}
-              />
             </SettingsSection>
 
             <SettingsSection title="Security & Data">
@@ -967,21 +842,6 @@ export function ProfileScreen({
           onSelect={setCurrency}
           onClose={() => setCurrencyOpen(false)}
         />
-        <GoalSheet
-          visible={goalOpen}
-          value={goal}
-          onSelect={setGoal}
-          onClose={() => setGoalOpen(false)}
-        />
-        <CategoriesSheet
-          visible={categoriesOpen}
-          selectedIds={categoryIds}
-          onChange={ids => {
-            setCategoryIds(ids);
-            setCategoryError(undefined);
-          }}
-          onClose={() => setCategoriesOpen(false)}
-        />
         <NotificationsSheet
           visible={notificationsOpen}
           values={notifyPrefs}
@@ -989,14 +849,6 @@ export function ProfileScreen({
             setNotifyPrefs(current => ({...current, [id]: value}))
           }
           onClose={() => setNotificationsOpen(false)}
-        />
-        <AiPreferencesSheet
-          visible={aiOpen}
-          autoCategorize={autoCategorize}
-          onAutoCategorize={setAutoCategorize}
-          tone={aiTone}
-          onTone={setAiTone}
-          onClose={() => setAiOpen(false)}
         />
       </Screen>
     </Modal>

@@ -1,13 +1,12 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Animated, LayoutChangeEvent, PanResponder, StyleSheet, View} from 'react-native';
-import {Text} from '@tamagui/core';
 
 import {
   PencilGlyph,
   RefreshGlyph,
   TrashGlyph,
 } from '../../components/icons/Glyphs';
-import {PressableScale} from '../../components/ui';
+import {PressableScale, Text} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
 import {colors, duration, easing, fonts} from '../../theme';

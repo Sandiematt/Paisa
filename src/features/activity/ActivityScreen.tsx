@@ -7,10 +7,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {Text} from '@tamagui/core';
 
 import {SearchGlyph} from '../../components/icons/Glyphs';
-import {GlassPanel, PressableScale, Screen} from '../../components/ui';
+import {GlassPanel, PressableScale, Screen, Text} from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {

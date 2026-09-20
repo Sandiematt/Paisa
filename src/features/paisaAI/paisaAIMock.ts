@@ -127,6 +127,51 @@ export function parseExpenseFromText(input: string): ParsedExpense | null {
   };
 }
 
+export type CompanionContext = {
+  currencySymbol: string;
+  spent: number;
+  remainingBudget: number;
+  budget: number;
+  periodLabel: string;
+};
+
+export function generateCompanionReply(
+  input: string,
+  context: CompanionContext,
+): {text: string; parsedExpense?: ParsedExpense} {
+  const lower = input.toLowerCase();
+  const spent = formatMoney(context.spent, context.currencySymbol, {decimals: 0});
+  const remaining = formatMoney(Math.max(0, context.remainingBudget), context.currencySymbol, {
+    decimals: 0,
+  });
+  const budget = formatMoney(context.budget, context.currencySymbol, {decimals: 0});
+
+  if (/spend(ing)? this (week|month|year)|show my spend/.test(lower)) {
+    return {
+      text: `You've spent ${spent} ${context.periodLabel}, against a ${budget} budget.`,
+    };
+  }
+  if (/how much can i spend|left to spend|remaining/.test(lower)) {
+    return {
+      text: `You can still spend ${remaining} before you hit this period's ${budget} budget.`,
+    };
+  }
+  if (/savings goal/.test(lower)) {
+    return {
+      text: 'I can help you set a savings goal. Open Profile to update monthly savings, or tell me an amount to log as savings.',
+    };
+  }
+
+  const parsed = parseExpenseFromText(input);
+  if (parsed) {
+    return {text: generateAIResponse(parsed, context.currencySymbol), parsedExpense: parsed};
+  }
+
+  return {
+    text: 'Hmm, I couldn\'t quite understand that. Try something like "Spent 500 on lunch at Subway".',
+  };
+}
+
 export function generateAIResponse(parsed: ParsedExpense, currencySymbol: string): string {
   const formattedAmount = formatMoney(parsed.amount, currencySymbol, {
     decimals: parsed.amount % 1 === 0 ? 0 : 2,

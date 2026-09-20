@@ -82,12 +82,145 @@ export function TrendingUpIcon({color, size = 15}: IconProps) {
   );
 }
 
+/** Mirror of TrendingUpIcon — a line descending to a bottom-right arrowhead. */
+export function TrendingDownIcon({color, size = 15}: IconProps) {
+  const s = Math.max(1.4, size * 0.12);
+  return (
+    <View style={{width: size, height: size}}>
+      <Stroke color={color} width={size * 0.38} height={s} left={size * 0.08} top={size * 0.28} rotate="28deg" />
+      <Stroke color={color} width={size * 0.42} height={s} left={size * 0.38} top={size * 0.52} rotate="38deg" />
+      <Stroke color={color} width={s} height={size * 0.28} left={size * 0.68} top={size * 0.56} />
+      <Stroke color={color} width={size * 0.28} height={s} left={size * 0.56} top={size * 0.68} />
+    </View>
+  );
+}
+
 export function ChevronRightIcon({color, size = 16}: IconProps) {
   const s = Math.max(1.4, size * 0.12);
   return (
     <View style={{width: size, height: size}}>
       <Stroke color={color} width={size * 0.42} height={s} left={size * 0.32} top={size * 0.28} rotate="45deg" />
       <Stroke color={color} width={size * 0.42} height={s} left={size * 0.32} top={size * 0.62} rotate="-45deg" />
+    </View>
+  );
+}
+
+export function ChevronDownIcon({color, size = 16}: IconProps) {
+  return (
+    <View style={{width: size, height: size, transform: [{rotate: '90deg'}]}}>
+      <ChevronRightIcon color={color} size={size} />
+    </View>
+  );
+}
+
+export function GearIcon({color, size = 20}: IconProps) {
+  const stroke = Math.max(1.7, size * 0.09);
+  const toothW = Math.max(3.2, size * 0.18);
+  const toothH = size * 0.22;
+  const ring = size * 0.58;
+  const hole = size * 0.26;
+  const teeth = [0, 60, 120, 180, 240, 300];
+  return (
+    <View style={{width: size, height: size, alignItems: 'center', justifyContent: 'center'}}>
+      {teeth.map(deg => (
+        <View
+          key={deg}
+          style={{
+            position: 'absolute',
+            width: size,
+            height: size,
+            transform: [{rotate: `${deg}deg`}],
+          }}>
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: (size - toothW) / 2,
+              width: toothW,
+              height: toothH,
+              borderRadius: toothW / 2,
+              backgroundColor: color,
+            }}
+          />
+        </View>
+      ))}
+      <View
+        style={{
+          width: ring,
+          height: ring,
+          borderRadius: ring / 2,
+          borderWidth: stroke,
+          borderColor: color,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'transparent',
+        }}>
+        <View
+          style={{
+            width: hole,
+            height: hole,
+            borderRadius: hole / 2,
+            borderWidth: stroke,
+            borderColor: color,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
+export function PaperclipIcon({color, size = 20}: IconProps) {
+  const stroke = Math.max(1.7, size * 0.1);
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+        transform: [{rotate: '-45deg'}],
+      }}>
+      <View
+        style={{
+          width: size * 0.42,
+          height: size * 0.78,
+          borderWidth: stroke,
+          borderColor: color,
+          borderRadius: size,
+        }}
+      />
+    </View>
+  );
+}
+
+export function SendPlaneIcon({color, size = 16}: IconProps) {
+  const s = Math.max(1.5, size * 0.14);
+  return (
+    <View style={{width: size, height: size, transform: [{rotate: '45deg'}]}}>
+      <Stroke color={color} width={size * 0.78} height={s} left={size * 0.08} top={size * 0.46} />
+      <Stroke color={color} width={s} height={size * 0.42} left={size * 0.72} top={size * 0.18} />
+      <Stroke color={color} width={size * 0.38} height={s} left={size * 0.42} top={size * 0.18} />
+    </View>
+  );
+}
+
+export function BarChartIcon({color, size = 16}: IconProps) {
+  return (
+    <View style={{width: size, height: size, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between'}}>
+      <View style={{width: size * 0.22, height: size * 0.52, borderRadius: 2, backgroundColor: color}} />
+      <View style={{width: size * 0.22, height: size * 0.78, borderRadius: 2, backgroundColor: color}} />
+      <View style={{width: size * 0.22, height: size * 0.38, borderRadius: 2, backgroundColor: color}} />
+    </View>
+  );
+}
+
+export function ArrowDownLongIcon({color, size = 12}: IconProps) {
+  const s = Math.max(1.5, size * 0.16);
+  return (
+    <View style={{width: size, height: size}}>
+      <Stroke color={color} width={s} height={size * 0.72} left={size * 0.44} top={size * 0.08} />
+      <Stroke color={color} width={size * 0.38} height={s} left={size * 0.18} top={size * 0.58} rotate="45deg" />
+      <Stroke color={color} width={size * 0.38} height={s} left={size * 0.44} top={size * 0.58} rotate="-45deg" />
     </View>
   );
 }

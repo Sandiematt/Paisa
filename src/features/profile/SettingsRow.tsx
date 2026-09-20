@@ -1,9 +1,8 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
-import {Text} from '@tamagui/core';
 
 import {ChevronRightIcon} from '../../components/icons/FeatherIcons';
-import {PressableScale} from '../../components/ui';
+import {PressableScale, Text} from '../../components/ui';
 import {fonts} from '../../theme';
 
 export type SettingsRowKind = 'nav' | 'edit' | 'toggle' | 'info';

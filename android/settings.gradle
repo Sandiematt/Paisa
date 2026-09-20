@@ -22,6 +22,10 @@ plugins {
     id("expo-autolinking-settings")
 }
 
+// JS app root (where package.json lives). Gradle's rootDir is android/,
+// and Expo config fails if it looks for android/package.json.
+expoAutolinking.projectRoot = rootDir.parentFile
+
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
     if (System.getenv('EXPO_USE_COMMUNITY_AUTOLINKING') == '1') {
         ex.autolinkLibrariesFromCommand()

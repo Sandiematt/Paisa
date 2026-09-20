@@ -1,9 +1,8 @@
 import React, {useEffect, useMemo, useRef} from 'react';
 import {ScrollView, StyleSheet, View} from 'react-native';
-import {Text} from '@tamagui/core';
 
 import {CalendarGlyph} from '../../components/icons/Glyphs';
-import {GlassPanel, PressableScale} from '../../components/ui';
+import {GlassPanel, PressableScale, Text} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
 import {localDateISO} from '../../lib/transactionsStore';

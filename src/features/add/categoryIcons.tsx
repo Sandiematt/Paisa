@@ -400,6 +400,23 @@ function GlyphForId({id, color, size}: {id: string; color: string; size: number}
   }
 }
 
+export function categoryTint(id: string): {bg: string; fg: string} {
+  return ICON_TINT[id] ?? ICON_TINT.other;
+}
+
+export function CategoryMark({
+  id,
+  color,
+  size = 16,
+}: {
+  id: string;
+  color?: string;
+  size?: number;
+}) {
+  const tint = categoryTint(id);
+  return <GlyphForId id={id} color={color ?? tint.fg} size={size} />;
+}
+
 export function CategoryIcon({id, size = 20}: {id: string; size?: number}) {
   const tint = ICON_TINT[id] ?? ICON_TINT.other;
   return (
