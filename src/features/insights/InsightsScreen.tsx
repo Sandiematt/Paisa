@@ -1,4 +1,4 @@
-import React, {useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Animated, Image, LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View} from 'react-native';
 
 import {
@@ -14,7 +14,9 @@ import {formatMoney} from '../../lib/formatMoney';
 import {colors, fonts, layout, radii, shadows} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {InsightsAmbient} from './InsightsAmbient';
-import {InsightsPeriod, insightsData, previousPeriodLabel} from './insightsPlaceholder';
+import {ChangeKind, InsightsData, InsightsPeriod, insightsData, previousPeriodLabel} from './insightsPlaceholder';
+import {buildInsightsDataFromResponse} from './mapInsights';
+import {useInsights} from './useInsights';
 
 export type InsightsScreenProps = {
   currencySymbol: string;
@@ -34,6 +36,21 @@ const TAB_SEG_H = 34;
 const AVATAR_SIZE = 44;
 
 const tabular = {fontVariant: ['tabular-nums'] as const};
+
+/**
+ * Deterministic font size for the hero amount, based on rendered length.
+ *
+ * We intentionally don't use `adjustsFontSizeToFit`: RN re-measures that
+ * natively on every text change, and briefly paints at a shrunk scale
+ * before settling — visible as a "small, then normal" flash whenever the
+ * amount changes (e.g. switching Week/Month/Year, or data finishing load).
+ * Sizing from the string length up front avoids that remeasure entirely.
+ */
+function amountFontSize(amountText: string): {fontSize: number; lineHeight: number} {
+  if (amountText.length > 11) return {fontSize: 28, lineHeight: 32};
+  if (amountText.length > 8) return {fontSize: 34, lineHeight: 38};
+  return {fontSize: 42, lineHeight: 44};
+}
 
 function isSafeAvatarUrl(url: string | undefined): url is string {
   if (!url) return false;
@@ -117,18 +134,26 @@ function PeriodTabs({period, onChange}: {period: InsightsPeriod; onChange: (peri
   );
 }
 
-function ComparisonCard({
-  currencySymbol,
-  period,
-}: {
-  currencySymbol: string;
-  period: InsightsPeriod;
-}) {
-  const data = useMemo(() => insightsData(currencySymbol, period), [currencySymbol, period]);
-  const isDecrease = data.changePct < 0;
-  const chipTone = isDecrease ? colors.positive : colors.coral;
-  const chipTint = isDecrease ? colors.alertPositive : colors.alertDanger;
-  const chipBorder = isDecrease ? '#3F7A4E40' : '#C0523A40';
+function ComparisonCard({data, currencySymbol}: {data: InsightsData; currencySymbol: string}) {
+  const isDecrease = data.changeKind === 'decrease';
+  const isNew = data.changeKind === 'new';
+  const isNoChange = data.changeKind === 'no-change';
+
+  const chipTone = isNoChange ? colors.inkMuted : isDecrease ? colors.positive : colors.coral;
+  const chipTint = isNoChange ? 'rgba(0, 0, 0, 0.05)' : isDecrease ? colors.alertPositive : colors.alertDanger;
+  const chipBorder = isNoChange ? colors.hairlineStrong : isDecrease ? '#3F7A4E40' : '#C0523A40';
+  const chipLabel = isNoChange ? 'No change' : isNew ? 'New' : `${Math.abs(data.changePct ?? 0)}%`;
+
+  const deltaText = isNoChange
+    ? 'No change'
+    : isNew
+    ? `+${formatMoney(data.deltaAmount, currencySymbol, {decimals: 0})} new spending`
+    : `${isDecrease ? '↓' : '↑'} ${formatMoney(data.deltaAmount, currencySymbol, {decimals: 0})} ${
+        isDecrease ? 'less' : 'more'
+      }`;
+
+  const amountText = formatMoney(data.currentTotal, currencySymbol, {decimals: 0});
+  const amountSize = amountFontSize(amountText);
 
   return (
     <GlassPanel style={[styles.comparisonWrap, shadows.card]} radius={radii.cardHero} contentStyle={styles.comparisonInner}>
@@ -138,36 +163,34 @@ function ComparisonCard({
           {`Spent ${data.periodNoun}`}
         </Text>
         <View style={[styles.chip, {backgroundColor: chipTint, borderColor: chipBorder}]}>
-          {isDecrease ? (
-            <ArrowDownRightIcon color={chipTone} size={13} />
-          ) : (
-            <ArrowUpRightIcon color={chipTone} size={13} />
-          )}
+          {!isNoChange ? (
+            isDecrease ? (
+              <ArrowDownRightIcon color={chipTone} size={13} />
+            ) : (
+              <ArrowUpRightIcon color={chipTone} size={13} />
+            )
+          ) : null}
           <Text fontFamily={fonts.interSemi} fontSize={11} lineHeight={15} fontWeight="600" color={chipTone}>
-            {`${Math.abs(data.changePct)}%`}
+            {chipLabel}
           </Text>
         </View>
       </View>
 
       <Text
         fontFamily={fonts.outfitBold}
-        fontSize={42}
-        lineHeight={44}
+        fontSize={amountSize.fontSize}
+        lineHeight={amountSize.lineHeight}
         fontWeight="700"
         letterSpacing={-1.05}
         color={colors.ink}
         numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.6}
         style={[tabular, styles.comparisonAmount]}>
-        {formatMoney(data.currentTotal, currencySymbol, {decimals: 0})}
+        {amountText}
       </Text>
 
       <View style={styles.comparisonDeltaRow}>
         <Text fontFamily={fonts.interSemi} fontSize={13} lineHeight={18} fontWeight="600" color={chipTone}>
-          {`${isDecrease ? '↓' : '↑'} ${formatMoney(data.deltaAmount, currencySymbol, {decimals: 0})} ${
-            isDecrease ? 'less' : 'more'
-          }`}
+          {deltaText}
         </Text>
         <Text fontFamily={fonts.interMedium} fontSize={13} lineHeight={18} fontWeight="500" color={colors.inkMuted}>
           {data.comparisonLabel}
@@ -190,9 +213,7 @@ function ComparisonCard({
   );
 }
 
-function AiSummaryCard({currencySymbol, period}: {currencySymbol: string; period: InsightsPeriod}) {
-  const data = useMemo(() => insightsData(currencySymbol, period), [currencySymbol, period]);
-
+function AiSummaryCard({data}: {data: InsightsData}) {
   return (
     <View style={[styles.aiCard, shadows.card]}>
       <View pointerEvents="none" style={styles.aiGlow} />
@@ -240,16 +261,36 @@ function AiSummaryCard({currencySymbol, period}: {currencySymbol: string; period
   );
 }
 
-function MovementRow({label, spent, deltaPct, currencySymbol}: {label: string; spent: number; deltaPct: number; currencySymbol: string}) {
-  const isDecrease = deltaPct < 0;
-  const tone = isDecrease ? colors.positive : colors.coral;
-  const tint = isDecrease ? colors.alertPositive : colors.alertDanger;
-  const border = isDecrease ? '#3F7A4E33' : '#C0523A33';
+function MovementRow({
+  label,
+  spent,
+  deltaPct,
+  changeKind,
+  currencySymbol,
+}: {
+  label: string;
+  spent: number;
+  deltaPct: number | null;
+  changeKind: ChangeKind;
+  currencySymbol: string;
+}) {
+  const isDecrease = changeKind === 'decrease';
+  const isNoChange = changeKind === 'no-change';
+  const isNew = changeKind === 'new';
+
+  const tone = isNoChange ? colors.inkMuted : isDecrease ? colors.positive : colors.coral;
+  const tint = isNoChange ? 'rgba(0, 0, 0, 0.05)' : isDecrease ? colors.alertPositive : colors.alertDanger;
+  const border = isNoChange ? colors.hairlineStrong : isDecrease ? '#3F7A4E33' : '#C0523A33';
+  const valueLabel = isNoChange ? 'No change' : isNew ? 'New' : `${(deltaPct ?? 0) > 0 ? '+' : ''}${deltaPct}%`;
 
   return (
     <View style={styles.movementRow}>
       <View style={[styles.movementIconWrap, {backgroundColor: tint, borderColor: border}]}>
-        {isDecrease ? <ArrowDownRightIcon color={tone} size={16} /> : <ArrowUpRightIcon color={tone} size={16} />}
+        {isNoChange ? null : isDecrease ? (
+          <ArrowDownRightIcon color={tone} size={16} />
+        ) : (
+          <ArrowUpRightIcon color={tone} size={16} />
+        )}
       </View>
       <View style={styles.movementText}>
         <Text fontFamily={fonts.interSemi} fontSize={14} lineHeight={19} fontWeight="600" color={colors.ink}>
@@ -260,15 +301,21 @@ function MovementRow({label, spent, deltaPct, currencySymbol}: {label: string; s
         </Text>
       </View>
       <Text fontFamily={fonts.interSemi} fontSize={14} lineHeight={19} fontWeight="600" color={tone}>
-        {`${deltaPct > 0 ? '+' : ''}${deltaPct}%`}
+        {valueLabel}
       </Text>
     </View>
   );
 }
 
-function CategoryMovementPanel({currencySymbol, period}: {currencySymbol: string; period: InsightsPeriod}) {
-  const data = useMemo(() => insightsData(currencySymbol, period), [currencySymbol, period]);
-
+function CategoryMovementPanel({
+  data,
+  currencySymbol,
+  period,
+}: {
+  data: InsightsData;
+  currencySymbol: string;
+  period: InsightsPeriod;
+}) {
   return (
     <GlassPanel style={styles.movementWrap} radius={24} contentStyle={styles.movementInner}>
       <View style={styles.rowBetween}>
@@ -286,11 +333,87 @@ function CategoryMovementPanel({currencySymbol, period}: {currencySymbol: string
             label={item.label}
             spent={item.spent}
             deltaPct={item.deltaPct}
+            changeKind={item.changeKind}
             currencySymbol={currencySymbol}
           />
         ))}
       </View>
     </GlassPanel>
+  );
+}
+
+/** Pulsing opacity used to animate skeleton blocks while insights are loading. */
+function useSkeletonPulse(reducedMotion: boolean): Animated.Value {
+  const opacity = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    if (reducedMotion) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {toValue: 1, duration: 650, useNativeDriver: true}),
+        Animated.timing(opacity, {toValue: 0.5, duration: 650, useNativeDriver: true}),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity, reducedMotion]);
+
+  return opacity;
+}
+
+function SkeletonBlock({opacity, style}: {opacity: Animated.Value; style?: object}) {
+  return <Animated.View style={[styles.skeletonBlock, style, {opacity}]} />;
+}
+
+/** Shown while the first fetch for a period is in flight — no fabricated numbers. */
+function InsightsSkeleton() {
+  const reducedMotion = useReducedMotion();
+  const opacity = useSkeletonPulse(reducedMotion);
+
+  return (
+    <View>
+      <GlassPanel style={[styles.comparisonWrap, shadows.card]} radius={radii.cardHero} contentStyle={styles.comparisonInner}>
+        <View style={styles.rowBetween}>
+          <SkeletonBlock opacity={opacity} style={styles.skeletonLabel} />
+          <SkeletonBlock opacity={opacity} style={styles.skeletonChip} />
+        </View>
+        <SkeletonBlock opacity={opacity} style={styles.skeletonAmount} />
+        <SkeletonBlock opacity={opacity} style={styles.skeletonDelta} />
+        <View style={styles.miniBarRow}>
+          {[0, 1, 2, 3].map(index => (
+            <View key={index} style={styles.miniBarCol}>
+              <SkeletonBlock opacity={opacity} style={styles.skeletonBar} />
+            </View>
+          ))}
+        </View>
+      </GlassPanel>
+
+      <View style={[styles.aiCard, shadows.card]}>
+        <View style={styles.aiHeaderRow}>
+          <SkeletonBlock opacity={opacity} style={styles.skeletonAiIcon} />
+          <SkeletonBlock opacity={opacity} style={styles.skeletonAiTitle} />
+        </View>
+        <SkeletonBlock opacity={opacity} style={[styles.skeletonLine, {marginTop: 16}]} />
+        <SkeletonBlock opacity={opacity} style={[styles.skeletonLine, {width: '82%', marginTop: 8}]} />
+        <SkeletonBlock opacity={opacity} style={[styles.skeletonLine, {width: '58%', marginTop: 8}]} />
+      </View>
+
+      <GlassPanel style={styles.movementWrap} radius={24} contentStyle={styles.movementInner}>
+        <SkeletonBlock opacity={opacity} style={styles.skeletonSectionTitle} />
+        <View style={styles.movementList}>
+          {[0, 1, 2, 3].map(index => (
+            <View key={index} style={styles.movementRow}>
+              <SkeletonBlock opacity={opacity} style={styles.skeletonMovementIcon} />
+              <View style={styles.movementText}>
+                <SkeletonBlock opacity={opacity} style={styles.skeletonMovementLabel} />
+                <SkeletonBlock opacity={opacity} style={styles.skeletonMovementSub} />
+              </View>
+              <SkeletonBlock opacity={opacity} style={styles.skeletonMovementValue} />
+            </View>
+          ))}
+        </View>
+      </GlassPanel>
+    </View>
   );
 }
 
@@ -300,6 +423,16 @@ export function InsightsScreen({currencySymbol, name = 'there', avatarUrl, onPro
   const [period, setPeriod] = useState<InsightsPeriod>('month');
   const hasSecureAvatar = isSafeAvatarUrl(avatarUrl);
   const initials = initialsFrom(name);
+
+  const insights = useInsights(period);
+  const isLive = insights.status === 'ready' && insights.data !== null;
+  const showSkeleton = insights.status === 'loading' && !isLive;
+  const data = useMemo<InsightsData>(() => {
+    if (isLive && insights.data) {
+      return buildInsightsDataFromResponse(insights.data);
+    }
+    return insightsData(currencySymbol, period);
+  }, [currencySymbol, isLive, insights.data, period]);
 
   return (
     <Screen edges={['top']} backdrop={<InsightsAmbient />}>
@@ -345,11 +478,21 @@ export function InsightsScreen({currencySymbol, name = 'there', avatarUrl, onPro
 
         <PeriodTabs period={period} onChange={setPeriod} />
 
-        <ComparisonCard currencySymbol={currencySymbol} period={period} />
+        {insights.status === 'error' ? (
+          <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} fontWeight="500" color={colors.inkMuted} style={styles.liveErrorNote}>
+            Couldn't refresh this {period}'s insights — showing example data.
+          </Text>
+        ) : null}
 
-        <AiSummaryCard currencySymbol={currencySymbol} period={period} />
-
-        <CategoryMovementPanel currencySymbol={currencySymbol} period={period} />
+        {showSkeleton ? (
+          <InsightsSkeleton />
+        ) : (
+          <>
+            <ComparisonCard data={data} currencySymbol={currencySymbol} />
+            <AiSummaryCard data={data} />
+            <CategoryMovementPanel data={data} currencySymbol={currencySymbol} period={period} />
+          </>
+        )}
       </ScrollView>
     </Screen>
   );
@@ -418,6 +561,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: TAB_SEG_H,
+  },
+  liveErrorNote: {
+    marginTop: -6,
+    marginBottom: 16,
   },
 
   // Comparison hero card
@@ -616,5 +763,78 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     gap: 2,
+  },
+
+  // Loading skeleton
+  skeletonBlock: {
+    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+  },
+  skeletonLabel: {
+    width: 96,
+    height: 14,
+    borderRadius: 7,
+  },
+  skeletonChip: {
+    width: 56,
+    height: 21,
+    borderRadius: 999,
+  },
+  skeletonAmount: {
+    width: 170,
+    height: 40,
+    borderRadius: 10,
+    marginTop: 12,
+  },
+  skeletonDelta: {
+    width: 190,
+    height: 14,
+    borderRadius: 7,
+    marginTop: 12,
+  },
+  skeletonBar: {
+    width: '100%',
+    height: 46,
+    borderRadius: 7,
+  },
+  skeletonAiIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  skeletonAiTitle: {
+    width: 110,
+    height: 16,
+    borderRadius: 8,
+  },
+  skeletonLine: {
+    width: '100%',
+    height: 13,
+    borderRadius: 6,
+  },
+  skeletonSectionTitle: {
+    width: 120,
+    height: 18,
+    borderRadius: 9,
+  },
+  skeletonMovementIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  skeletonMovementLabel: {
+    width: '55%',
+    height: 14,
+    borderRadius: 7,
+  },
+  skeletonMovementSub: {
+    width: '35%',
+    height: 12,
+    borderRadius: 6,
+    marginTop: 4,
+  },
+  skeletonMovementValue: {
+    width: 42,
+    height: 14,
+    borderRadius: 7,
   },
 });

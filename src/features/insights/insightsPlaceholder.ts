@@ -2,6 +2,18 @@ import {formatMoney} from '../../lib/formatMoney';
 
 export type InsightsPeriod = 'week' | 'month' | 'year';
 
+/**
+ * How a current-vs-previous comparison should be displayed:
+ *
+ *   previous  current  changeKind   display
+ *   ₹500      ₹0       decrease     -100%
+ *   ₹500      ₹250     decrease     -50%
+ *   ₹500      ₹750     increase     +50%
+ *   ₹0        ₹500     new          New / +₹500
+ *   ₹0        ₹0       no-change    No change
+ */
+export type ChangeKind = 'increase' | 'decrease' | 'new' | 'no-change';
+
 export type WeeklyBar = {
   label: string;
   percent: number;
@@ -12,7 +24,9 @@ export type CategoryMovement = {
   id: string;
   label: string;
   spent: number;
-  deltaPct: number;
+  /** Null for "new" / "no-change" — those render a label instead of a percentage. */
+  deltaPct: number | null;
+  changeKind: ChangeKind;
 };
 
 export type AiHighlight = {
@@ -24,7 +38,10 @@ export type AiHighlight = {
 export type InsightsData = {
   periodNoun: string;
   currentTotal: number;
-  changePct: number;
+  previousTotal: number;
+  /** Null for "new" / "no-change" — those render a label instead of a percentage. */
+  changePct: number | null;
+  changeKind: ChangeKind;
   deltaAmount: number;
   comparisonLabel: string;
   weeklyBars: WeeklyBar[];
@@ -50,7 +67,9 @@ export function insightsData(currencySymbol: string, period: InsightsPeriod = 'm
     return {
       periodNoun: 'this week',
       currentTotal: 740,
+      previousTotal: 806,
       changePct: -8,
+      changeKind: 'decrease',
       deltaAmount: 66,
       comparisonLabel: 'than last week',
       weeklyBars: [
@@ -65,11 +84,11 @@ export function insightsData(currencySymbol: string, period: InsightsPeriod = 'm
         {id: '2', tone: 'warning', text: `Transport crept up ${money(20)} this week`},
       ],
       movements: [
-        {id: 'dining', label: 'Dining', spent: 62, deltaPct: -22},
-        {id: 'shopping', label: 'Shopping', spent: 21, deltaPct: -18},
-        {id: 'groceries', label: 'Groceries', spent: 96, deltaPct: -4},
-        {id: 'subscriptions', label: 'Subscriptions', spent: 60, deltaPct: 6},
-        {id: 'transport', label: 'Transport', spent: 41, deltaPct: 12},
+        {id: 'dining', label: 'Dining', spent: 62, deltaPct: -22, changeKind: 'decrease'},
+        {id: 'shopping', label: 'Shopping', spent: 21, deltaPct: -18, changeKind: 'decrease'},
+        {id: 'groceries', label: 'Groceries', spent: 96, deltaPct: -4, changeKind: 'decrease'},
+        {id: 'subscriptions', label: 'Subscriptions', spent: 60, deltaPct: 6, changeKind: 'increase'},
+        {id: 'transport', label: 'Transport', spent: 41, deltaPct: 12, changeKind: 'increase'},
       ],
     };
   }
@@ -78,7 +97,9 @@ export function insightsData(currencySymbol: string, period: InsightsPeriod = 'm
     return {
       periodNoun: 'this year',
       currentTotal: 34120,
+      previousTotal: 36300,
       changePct: -6,
+      changeKind: 'decrease',
       deltaAmount: 2180,
       comparisonLabel: 'than last year',
       weeklyBars: [
@@ -93,11 +114,11 @@ export function insightsData(currencySymbol: string, period: InsightsPeriod = 'm
         {id: '2', tone: 'warning', text: `Subscriptions crept up ${money(640)} this year`},
       ],
       movements: [
-        {id: 'dining', label: 'Dining', spent: 3120, deltaPct: -18},
-        {id: 'shopping', label: 'Shopping', spent: 1040, deltaPct: -31},
-        {id: 'groceries', label: 'Groceries', spent: 4890, deltaPct: -6},
-        {id: 'subscriptions', label: 'Subscriptions', spent: 2860, deltaPct: 14},
-        {id: 'transport', label: 'Transport', spent: 2110, deltaPct: 9},
+        {id: 'dining', label: 'Dining', spent: 3120, deltaPct: -18, changeKind: 'decrease'},
+        {id: 'shopping', label: 'Shopping', spent: 1040, deltaPct: -31, changeKind: 'decrease'},
+        {id: 'groceries', label: 'Groceries', spent: 4890, deltaPct: -6, changeKind: 'decrease'},
+        {id: 'subscriptions', label: 'Subscriptions', spent: 2860, deltaPct: 14, changeKind: 'increase'},
+        {id: 'transport', label: 'Transport', spent: 2110, deltaPct: 9, changeKind: 'increase'},
       ],
     };
   }
@@ -105,7 +126,9 @@ export function insightsData(currencySymbol: string, period: InsightsPeriod = 'm
   return {
     periodNoun: 'this month',
     currentTotal: 2961,
+    previousTotal: 3380,
     changePct: -12.4,
+    changeKind: 'decrease',
     deltaAmount: 419,
     comparisonLabel: `than last month`,
     weeklyBars: [
@@ -120,11 +143,11 @@ export function insightsData(currencySymbol: string, period: InsightsPeriod = 'm
       {id: '2', tone: 'warning', text: `Subscriptions crept up ${money(60)} this month`},
     ],
     movements: [
-      {id: 'dining', label: 'Dining', spent: 266, deltaPct: -18},
-      {id: 'shopping', label: 'Shopping', spent: 89, deltaPct: -31},
-      {id: 'groceries', label: 'Groceries', spent: 412, deltaPct: -6},
-      {id: 'subscriptions', label: 'Subscriptions', spent: 240, deltaPct: 14},
-      {id: 'transport', label: 'Transport', spent: 178, deltaPct: 9},
+      {id: 'dining', label: 'Dining', spent: 266, deltaPct: -18, changeKind: 'decrease'},
+      {id: 'shopping', label: 'Shopping', spent: 89, deltaPct: -31, changeKind: 'decrease'},
+      {id: 'groceries', label: 'Groceries', spent: 412, deltaPct: -6, changeKind: 'decrease'},
+      {id: 'subscriptions', label: 'Subscriptions', spent: 240, deltaPct: 14, changeKind: 'increase'},
+      {id: 'transport', label: 'Transport', spent: 178, deltaPct: 9, changeKind: 'increase'},
     ],
   };
 }
