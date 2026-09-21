@@ -1,7 +1,6 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   Alert,
-  Animated,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -15,10 +14,9 @@ import {ArrowDownLongIcon, ArrowUpRightIcon, GearIcon} from '../../components/ic
 import {MicGlyph, SparkleGlyph} from '../../components/icons/Glyphs';
 import {GlassPanel, PressableScale, ProgressBar, Screen, Text} from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
-import {CategoryRow} from '../../lib/categoriesStore';
-import {TransactionRow} from '../../lib/transactionsStore';
+import {CategoryRow, categoryByName} from '../../lib/categoriesStore';
+import {TransactionRow, createTransaction} from '../../lib/transactionsStore';
 import {colors, fonts, layout, radii, shadows, spacing} from '../../theme';
-import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {OnboardingDraft} from '../onboarding/types';
 import {CategoryMark} from '../add/categoryIcons';
 import {HomeAmbient} from '../home/HomeAmbient';
@@ -29,7 +27,8 @@ import {
 } from '../NavBar/FloatingNavScroll';
 import {ChatBubble} from './ChatBubble';
 import {CompanionSettingsScreen} from './CompanionSettingsScreen';
-import {generateCompanionReply} from './paisaAIMock';
+import {loadCompanionPrefs} from './companionPrefs';
+import {getCompanionReply} from './paisaAIMock';
 import {buildPaisaMonthSummary, periodHeaderLabel} from './paisaMonth';
 import {buildRecentSpending} from './recentSpending';
 import {ChatMessage} from './types';
@@ -45,44 +44,15 @@ export type PaisaAIScreenProps = {
   onSave: (updated: OnboardingDraft) => void;
   onDetailsPress?: () => void;
   onActivityPress?: () => void;
+  /** Called after an AI-parsed expense is actually saved, so the caller can refresh shared state. */
+  onTransactionAdded?: (row: TransactionRow) => void;
 };
 
 const RANGES: HomeRange[] = ['week', 'month', 'year'];
 
-const QUICK_ASKS = ['How much can I spend today?', 'Food vs last week'];
+const QUICK_ASKS = ['How much can I spend today?', 'Where did it go?', 'Log a spend'];
 
 const tabular = {fontVariant: ['tabular-nums'] as const};
-
-function PulseDot({color}: {color: string}) {
-  const reducedMotion = useReducedMotion();
-  const pulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (reducedMotion) {
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {toValue: 1, duration: 900, useNativeDriver: true}),
-        Animated.timing(pulse, {toValue: 0, duration: 900, useNativeDriver: true}),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [pulse, reducedMotion]);
-
-  const opacity = pulse.interpolate({inputRange: [0, 1], outputRange: [1, 0.35]});
-  const scale = pulse.interpolate({inputRange: [0, 1], outputRange: [1, 1.35]});
-
-  return (
-    <View style={styles.pulseWrap}>
-      <Animated.View
-        style={[styles.pulseRing, {backgroundColor: color, opacity, transform: [{scale}]}]}
-      />
-      <View style={[styles.pulseCore, {backgroundColor: color}]} />
-    </View>
-  );
-}
 
 export function PaisaAIScreen({
   currencySymbol,
@@ -95,14 +65,31 @@ export function PaisaAIScreen({
   onSave,
   onDetailsPress,
   onActivityPress,
+  onTransactionAdded,
 }: PaisaAIScreenProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [range, setRange] = useState<HomeRange>('month');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tone, setTone] = useState<'short' | 'detailed'>('short');
   const flatListRef = useRef<FlatList>(null);
   const navScroll = useFloatingNavScroll();
   const dockHeight = useFloatingNavDockHeight();
+
+  useEffect(() => {
+    if (settingsOpen) {
+      return;
+    }
+    let cancelled = false;
+    loadCompanionPrefs().then(prefs => {
+      if (!cancelled) {
+        setTone(prefs.tone);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen]);
 
   const budgetForRange =
     range === 'week' ? monthlyBudget / 4 : range === 'year' ? monthlyBudget * 12 : monthlyBudget;
@@ -122,47 +109,96 @@ export function PaisaAIScreen({
 
   const handleSend = useCallback(
     (text: string) => {
-      if (!text.trim()) {
+      const trimmed = text.trim();
+      if (!trimmed) {
         return;
       }
 
       const userMessage: ChatMessage = {
         id: Date.now().toString(),
         role: 'user',
-        text: text.trim(),
+        text: trimmed,
+      };
+      const thinkingId = `thinking-${userMessage.id}`;
+      const thinkingMessage: ChatMessage = {
+        id: thinkingId,
+        role: 'ai',
+        text: '',
+        isTyping: true,
       };
 
-      setMessages(prev => [userMessage, ...prev]);
+      setMessages(prev => [thinkingMessage, userMessage, ...prev]);
       setInputText('');
 
-      setTimeout(() => {
-        const reply = generateCompanionReply(userMessage.text, {
-          currencySymbol,
-          spent: summary.spent,
-          remainingBudget: summary.remaining,
-          budget: summary.budget,
-          periodLabel: range === 'week' ? 'this week' : range === 'year' ? 'this year' : 'this month',
+      const context = {
+        currencySymbol,
+        spent: summary.spent,
+        remainingBudget: summary.remaining,
+        budget: summary.budget,
+        periodLabel: range === 'week' ? 'this week' : range === 'year' ? 'this year' : 'this month',
+      };
+
+      getCompanionReply(trimmed, context, tone)
+        .then(reply => {
+          const aiMessage: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'ai',
+            text: reply.text,
+            parsedExpense: reply.parsedExpense,
+            status: reply.parsedExpense ? 'pending' : undefined,
+            suggestions: reply.suggestions,
+          };
+          setMessages(prev => [aiMessage, ...prev.filter(msg => msg.id !== thinkingId)]);
+        })
+        .catch(() => {
+          const aiMessage: ChatMessage = {
+            id: (Date.now() + 1).toString(),
+            role: 'ai',
+            text: 'Something went wrong. Try again in a moment.',
+          };
+          setMessages(prev => [aiMessage, ...prev.filter(msg => msg.id !== thinkingId)]);
         });
-
-        const aiMessage: ChatMessage = {
-          id: (Date.now() + 1).toString(),
-          role: 'ai',
-          text: reply.text,
-          parsedExpense: reply.parsedExpense,
-          status: reply.parsedExpense ? 'pending' : undefined,
-        };
-
-        setMessages(prev => [aiMessage, ...prev]);
-      }, 400);
     },
-    [currencySymbol, range, summary.budget, summary.remaining, summary.spent],
+    [currencySymbol, range, summary.budget, summary.remaining, summary.spent, tone],
   );
 
-  const handleAddExpense = useCallback((messageId: string) => {
-    setMessages(prev =>
-      prev.map(msg => (msg.id === messageId ? {...msg, status: 'confirmed'} : msg)),
-    );
-  }, []);
+  const handleAddExpense = useCallback(
+    async (messageId: string) => {
+      const target = messages.find(msg => msg.id === messageId);
+      const parsed = target?.parsedExpense;
+      if (!parsed) {
+        return;
+      }
+
+      try {
+        const category =
+          parsed.categoryId != null
+            ? categories.find(item => item.id === parsed.categoryId)
+            : categoryByName(categories, parsed.category, 'expense');
+
+        const row = await createTransaction({
+          type: 'expense',
+          amount: parsed.amount,
+          categoryId: category?.id ?? null,
+          description: parsed.description || parsed.merchant,
+          merchant: parsed.merchant,
+          transactionDate: parsed.date,
+          paymentMethod: parsed.paymentMethod ?? null,
+        });
+
+        onTransactionAdded?.(row);
+        setMessages(prev =>
+          prev.map(msg => (msg.id === messageId ? {...msg, status: 'confirmed'} : msg)),
+        );
+      } catch (error) {
+        Alert.alert(
+          'Could not add expense',
+          error instanceof Error ? error.message : 'Try again.',
+        );
+      }
+    },
+    [categories, messages, onTransactionAdded],
+  );
 
   const handleEditExpense = useCallback((_messageId: string) => {
     Alert.alert('Edit Expense', 'Mock edit action triggered.');
@@ -184,24 +220,24 @@ export function PaisaAIScreen({
   return (
     <Screen edges={['top']} backdrop={<HomeAmbient />}>
       <View style={styles.header}>
-        <View style={styles.brandRow}>
-          <Text fontFamily={fonts.outfitBold} fontSize={26} fontWeight="700" letterSpacing={-0.4} color={colors.ink}>
-            Paisa
-          </Text>
-          <SparkleGlyph color={colors.accent} size={16} />
-        </View>
-        <View style={styles.headerActions}>
-          <View style={styles.aiBadge}>
-            <PulseDot color={colors.positive} />
+        <View style={styles.brandBlock}>
+          <View style={styles.brandRow}>
+            <Text fontFamily={fonts.outfitSemi} fontSize={22} lineHeight={28} fontWeight="600" letterSpacing={-0.5} color={colors.ink}>
+              Paisa AI
+            </Text>
+            <SparkleGlyph color={colors.accent} size={14} />
           </View>
-          <PressableScale
-            accessibilityLabel="Settings"
-            onPress={() => setSettingsOpen(true)}
-            style={styles.gearButton}
-            scaleTo={0.94}>
-            <GearIcon color="#70665A" size={20} />
-          </PressableScale>
+          <Text fontFamily={fonts.interMedium} fontSize={13} lineHeight={18} color={colors.inkMuted}>
+            {chatting ? 'Ask a follow-up, or log another spend.' : 'Ask about this month, or log a spend in one sentence.'}
+          </Text>
         </View>
+        <PressableScale
+          accessibilityLabel="Settings"
+          onPress={() => setSettingsOpen(true)}
+          style={styles.gearButton}
+          scaleTo={0.94}>
+          <GearIcon color={colors.inkSecondary} size={20} />
+        </PressableScale>
       </View>
 
       {chatting ? (
@@ -210,10 +246,12 @@ export function PaisaAIScreen({
           data={messages}
           inverted
           keyExtractor={item => item.id}
-          renderItem={({item}) => (
+          renderItem={({item, index}) => (
             <ChatBubble
               message={item}
               currencySymbol={currencySymbol}
+              showSuggestions={index === 0 && item.role === 'ai'}
+              onSuggestion={handleSend}
               onAddExpense={handleAddExpense}
               onEditExpense={handleEditExpense}
             />
@@ -320,7 +358,7 @@ export function PaisaAIScreen({
                 <Text fontFamily={fonts.outfitBold} fontSize={15} fontWeight="700" color={colors.ink} style={[styles.miniTileValue, tabular]}>
                   {formatMoney(summary.dailySafe, currencySymbol, {decimals: 0})}
                 </Text>
-                <Text fontFamily={fonts.interMedium} fontSize={10} fontWeight="500" color="#9A9080">
+                <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} fontWeight="500" color="#9A9080">
                   {`for ${summary.daysLeft} days`}
                 </Text>
               </View>
@@ -333,7 +371,8 @@ export function PaisaAIScreen({
                 </Text>
                 <Text
                   fontFamily={fonts.interMedium}
-                  fontSize={10}
+                  fontSize={12}
+                  lineHeight={16}
                   fontWeight="500"
                   color={summary.remaining >= 0 ? colors.positive : colors.coral}>
                   {summary.remaining >= 0 ? 'On track' : 'Over budget'}
@@ -352,7 +391,7 @@ export function PaisaAIScreen({
                   style={styles.miniTileValue}>
                   {topCategory?.label ?? 'None yet'}
                 </Text>
-                <Text fontFamily={fonts.interMedium} fontSize={10} fontWeight="500" color="#9A9080" style={tabular}>
+                <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} fontWeight="500" color="#9A9080" style={tabular}>
                   {topCategory
                     ? `${formatMoney(topCategory.amount, currencySymbol, {decimals: 0})} (${summary.topCategoryPct}%)`
                     : 'No spend yet'}
@@ -430,7 +469,7 @@ export function PaisaAIScreen({
                   <Text fontFamily={fonts.outfitBold} fontSize={13} fontWeight="700" color={colors.ink} style={tabular}>
                     {formatMoney(tile.amount, currencySymbol, {decimals: 0})}
                   </Text>
-                  <Text fontFamily={fonts.interMedium} fontSize={10.5} fontWeight="500" color="#8F8172" numberOfLines={1}>
+                  <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} fontWeight="500" color="#8F8172" numberOfLines={1}>
                     {tile.label}
                   </Text>
                 </View>
@@ -457,8 +496,8 @@ export function PaisaAIScreen({
                 style={styles.input}
                 value={inputText}
                 onChangeText={setInputText}
-                placeholder="Ask Paisa or log spend (e.g. Spent 300)..."
-                placeholderTextColor="#9E978C"
+                placeholder="Ask, or type Spent 300 on lunch"
+                placeholderTextColor={colors.inkMuted}
                 returnKeyType="send"
                 onSubmitEditing={() => handleSend(inputText)}
               />
@@ -482,8 +521,8 @@ export function PaisaAIScreen({
                   scaleTo={0.97}
                   style={styles.quickAskTag}
                   onPress={() => handleSend(tag)}>
-                  <Text fontFamily={fonts.interMedium} fontSize={11} fontWeight="500" color="#5F5648">
-                    {`"${tag}"`}
+                  <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} color={colors.inkSecondary}>
+                    {tag}
                   </Text>
                 </PressableScale>
               ))}
@@ -504,48 +543,21 @@ export function PaisaAIScreen({
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
+    gap: spacing.md,
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.lg,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.md,
+  },
+  brandBlock: {
+    flex: 1,
+    gap: 2,
   },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  aiBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#E9DFD0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pulseWrap: {
-    width: 10,
-    height: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pulseRing: {
-    position: 'absolute',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  pulseCore: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   gearButton: {
     width: 40,
@@ -730,14 +742,14 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   composerCard: {
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderRadius: 22,
+    backgroundColor: colors.field,
+    borderRadius: radii.cardHero,
     borderWidth: 1,
-    borderColor: 'rgba(232,223,207,0.65)',
+    borderColor: colors.fieldStroke,
     paddingHorizontal: 6,
     paddingTop: 6,
-    paddingBottom: 8,
-    ...shadows.card,
+    paddingBottom: 10,
+    ...shadows.cardSoft,
   },
   composerInputRow: {
     flexDirection: 'row',
@@ -752,9 +764,10 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontFamily: fonts.interMedium,
-    fontSize: 13,
+    fontSize: 15,
+    lineHeight: 20,
     color: colors.ink,
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 4,
   },
   sendButton: {
@@ -774,9 +787,11 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   quickAskTag: {
-    backgroundColor: '#F7F2E8',
-    borderRadius: radii.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    backgroundColor: colors.surface,
+    borderRadius: radii.chip,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.fieldStroke,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
 });

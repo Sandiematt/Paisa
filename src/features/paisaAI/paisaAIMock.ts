@@ -1,5 +1,6 @@
 import { ParsedExpense } from './types';
 import { formatMoney } from '../../lib/formatMoney';
+import { ChatTone, sendChatMessage } from '../../lib/supabase/chat';
 
 export function parseExpenseFromText(input: string): ParsedExpense | null {
   // Extract Amount
@@ -181,4 +182,44 @@ export function generateAIResponse(parsed: ParsedExpense, currencySymbol: string
     return `Got it! I found an expense of ${formattedAmount} for ${parsed.merchant} under ${parsed.category} → ${parsed.subcategory}.`;
   }
   return `Got it! I found an expense of ${formattedAmount} under ${parsed.category} → ${parsed.subcategory}.`;
+}
+
+export type CompanionReplyResult = {
+  text: string;
+  parsedExpense?: ParsedExpense;
+  suggestions?: string[];
+  aiGenerated: boolean;
+};
+
+/**
+ * Tries the `paisaai-chat` Edge Function first — real Gemini-backed
+ * replies, expense parsing against the user's own categories, and
+ * anomaly/forecast awareness, all computed server-side from the user's
+ * real transactions. Falls back to the fully offline pattern-matching
+ * engine above (`generateCompanionReply`) if the network call fails (no
+ * connection, expired session, Edge Function down), so the chat never
+ * goes silent.
+ */
+export async function getCompanionReply(
+  input: string,
+  context: CompanionContext,
+  tone: ChatTone = 'short',
+): Promise<CompanionReplyResult> {
+  try {
+    const response = await sendChatMessage({message: input, tone});
+    return {
+      text: response.text,
+      parsedExpense: response.parsedExpense,
+      suggestions: response.suggestions,
+      aiGenerated: response.aiGenerated,
+    };
+  } catch (error) {
+    console.warn('paisaAI: falling back to offline reply', error);
+    const fallback = generateCompanionReply(input, context);
+    return {
+      text: fallback.text,
+      parsedExpense: fallback.parsedExpense,
+      aiGenerated: false,
+    };
+  }
 }

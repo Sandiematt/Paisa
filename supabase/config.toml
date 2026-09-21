@@ -389,6 +389,11 @@ deno_version = 2
 # service role) so Row Level Security scopes every query to the caller.
 verify_jwt = true
 
+[functions.paisaai-chat]
+# Requires a valid user JWT on every request; the function uses it (not the
+# service role) so Row Level Security scopes every query to the caller.
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

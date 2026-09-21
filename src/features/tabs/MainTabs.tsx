@@ -164,6 +164,11 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
         }}
         onDetailsPress={() => setTab('insights')}
         onActivityPress={() => setTab('activity')}
+        onTransactionAdded={row => {
+          upsertLocal(row);
+          setLedgerFocus(row.transactionDate);
+          setRefreshNonce(value => value + 1);
+        }}
       />
     );
   }

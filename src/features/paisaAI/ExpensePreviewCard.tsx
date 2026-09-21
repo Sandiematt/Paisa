@@ -1,25 +1,16 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { AppText, PressableScale } from '../../components/ui';
-import { colors, radii, spacing, typography, layout } from '../../theme';
-import { ParsedExpense } from './types';
-import { formatMoney } from '../../lib/formatMoney';
+import {StyleSheet, View} from 'react-native';
+
+import {PressableScale, Text} from '../../components/ui';
+import {formatMoney} from '../../lib/formatMoney';
+import {colors, fonts, radii, spacing} from '../../theme';
+import {ParsedExpense} from './types';
 
 export type ExpensePreviewCardProps = {
   expense: ParsedExpense;
   currencySymbol: string;
   onAdd: () => void;
   onEdit: () => void;
-};
-
-const CATEGORY_EMOJI: Record<string, string> = {
-  Food: '🍕',
-  Shopping: '🛍️',
-  Travel: '✈️',
-  Bills: '📄',
-  Entertainment: '🎬',
-  Health: '💊',
-  Other: '📦'
 };
 
 function getDisplayDate(dateStr: string) {
@@ -33,49 +24,67 @@ function getDisplayDate(dateStr: string) {
   return dateStr;
 }
 
-export function ExpensePreviewCard({ expense, currencySymbol, onAdd, onEdit }: ExpensePreviewCardProps) {
-  const emoji = CATEGORY_EMOJI[expense.category] || CATEGORY_EMOJI['Other'];
+export function ExpensePreviewCard({expense, currencySymbol, onAdd, onEdit}: ExpensePreviewCardProps) {
   const formattedAmount = formatMoney(expense.amount, currencySymbol, {
     decimals: expense.amount % 1 === 0 ? 0 : 2,
   });
   const displayDate = getDisplayDate(expense.date);
+  const categoryLine = expense.subcategory && expense.subcategory !== expense.category
+    ? `${expense.category} · ${expense.subcategory}`
+    : expense.category;
 
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
-        <AppText variant="heading" style={styles.amountText}>{formattedAmount}</AppText>
+        <Text
+          fontFamily={fonts.outfitSemi}
+          fontSize={22}
+          lineHeight={28}
+          fontWeight="600"
+          letterSpacing={-0.4}
+          color={colors.ink}
+          style={styles.amountText}>
+          {formattedAmount}
+        </Text>
         {expense.merchant ? (
-          <AppText variant="bodyStrong" style={styles.merchant} numberOfLines={1}>
+          <Text
+            fontFamily={fonts.interSemi}
+            fontSize={15}
+            lineHeight={22}
+            fontWeight="600"
+            color={colors.inkSecondary}
+            numberOfLines={1}
+            style={styles.merchant}>
             {expense.merchant}
-          </AppText>
+          </Text>
         ) : null}
       </View>
-      
-      <AppText variant="caption" style={styles.categoryInfo}>
-        {emoji} {expense.category} → {expense.subcategory}
-      </AppText>
-      
-      <AppText variant="caption" style={styles.dateInfo}>
-        {displayDate}
-      </AppText>
 
-      {expense.paymentMethod && (
+      <Text fontFamily={fonts.interMedium} fontSize={13} lineHeight={18} color={colors.inkMuted}>
+        {categoryLine}
+      </Text>
+      <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={17} color={colors.inkMuted} style={styles.dateInfo}>
+        {displayDate}
+      </Text>
+
+      {expense.paymentMethod ? (
         <View style={styles.paymentMethod}>
-          <AppText variant="caption" style={styles.paymentMethodText}>{expense.paymentMethod}</AppText>
+          <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={17} color={colors.inkSecondary}>
+            {expense.paymentMethod}
+          </Text>
         </View>
-      )}
+      ) : null}
 
       <View style={styles.actions}>
-        <PressableScale style={styles.addButton} onPress={onAdd}>
-          <AppText variant="label" style={styles.addButtonText} numberOfLines={1}>
-            Add Expense
-          </AppText>
+        <PressableScale style={styles.addButton} onPress={onAdd} scaleTo={0.98}>
+          <Text fontFamily={fonts.interSemi} fontSize={14} lineHeight={18} fontWeight="600" color={colors.onInk} numberOfLines={1}>
+            Add expense
+          </Text>
         </PressableScale>
-        
-        <PressableScale style={styles.editButton} onPress={onEdit}>
-          <AppText variant="label" style={styles.editButtonText} numberOfLines={1}>
+        <PressableScale style={styles.editButton} onPress={onEdit} scaleTo={0.98}>
+          <Text fontFamily={fonts.interSemi} fontSize={14} lineHeight={18} fontWeight="600" color={colors.ink} numberOfLines={1}>
             Edit
-          </AppText>
+          </Text>
         </PressableScale>
       </View>
     </View>
@@ -99,12 +108,7 @@ const styles = StyleSheet.create({
     marginRight: spacing.md,
   },
   merchant: {
-    color: colors.inkSecondary,
     flexShrink: 1,
-  },
-  categoryInfo: {
-    color: colors.inkMuted,
-    marginBottom: spacing.xs,
   },
   dateInfo: {
     color: colors.inkMuted,
@@ -119,9 +123,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.hairline,
-  },
-  paymentMethodText: {
-    color: colors.inkSecondary,
   },
   actions: {
     flexDirection: 'row',
@@ -139,10 +140,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  addButtonText: {
-    color: colors.onInk,
-    fontWeight: '600',
-  },
   editButton: {
     backgroundColor: colors.surface,
     borderWidth: 1.5,
@@ -153,9 +150,5 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  editButtonText: {
-    color: colors.ink,
-    fontWeight: '600',
   },
 });
