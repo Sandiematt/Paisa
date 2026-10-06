@@ -14,7 +14,6 @@ import {
   Chip,
   PressableScale,
   SelectCard,
-  TogglePill,
 } from '../../components/ui';
 import {colors, layout, radii, spacing} from '../../theme';
 import {
@@ -169,7 +168,7 @@ export function CategoriesSheet({
   return (
     <SheetFrame visible={visible} title="Tracked Categories" onClose={onClose}>
       <AppText variant="body" color={colors.inkSecondary} style={styles.lead}>
-        Used for expenses and AI sorting. Choose at least {MIN_CATEGORIES}.
+        Used for expenses. Choose at least {MIN_CATEGORIES}.
       </AppText>
       <View style={styles.chipWrap}>
         {CATEGORIES.map(category => (
@@ -294,69 +293,8 @@ export function NotificationsSheet(props: NotificationsSheetProps) {
           label: 'Monthly summary',
           caption: 'A recap when the month closes.',
         },
-        {
-          id: 'ai',
-          label: 'Paisa AI tips',
-          caption: 'Occasional nudges from chat insights.',
-        },
       ]}
     />
-  );
-}
-
-type AiPreferencesSheetProps = {
-  visible: boolean;
-  autoCategorize: boolean;
-  onAutoCategorize: (value: boolean) => void;
-  tone: 'short' | 'detailed';
-  onTone: (value: 'short' | 'detailed') => void;
-  onClose: () => void;
-};
-
-export function AiPreferencesSheet({
-  visible,
-  autoCategorize,
-  onAutoCategorize,
-  tone,
-  onTone,
-  onClose,
-}: AiPreferencesSheetProps) {
-  return (
-    <SheetFrame visible={visible} title="AI Preferences" onClose={onClose}>
-      <AppText variant="body" color={colors.inkSecondary} style={styles.lead}>
-        How Paisa reads new expenses and talks back.
-      </AppText>
-      <SettingsSection title="Sorting">
-        <View style={styles.toggleRow}>
-          <View style={styles.toggleCopy}>
-            <AppText variant="body">Auto-categorize</AppText>
-            <AppText variant="caption" color={colors.inkMuted}>
-              Guess a category from the merchant and note.
-            </AppText>
-          </View>
-          <Switch
-            value={autoCategorize}
-            onValueChange={onAutoCategorize}
-            trackColor={{false: colors.canvasSunk, true: colors.accent}}
-            thumbColor={colors.surface}
-          />
-        </View>
-      </SettingsSection>
-      <SettingsSection title="Reply length">
-        <View style={styles.toneRow}>
-          <TogglePill
-            label="Short"
-            selected={tone === 'short'}
-            onPress={() => onTone('short')}
-          />
-          <TogglePill
-            label="Detailed"
-            selected={tone === 'detailed'}
-            onPress={() => onTone('detailed')}
-          />
-        </View>
-      </SettingsSection>
-    </SheetFrame>
   );
 }
 
@@ -423,10 +361,5 @@ const styles = StyleSheet.create({
   toggleCopy: {
     flex: 1,
     marginRight: spacing.md,
-  },
-  toneRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
   },
 });

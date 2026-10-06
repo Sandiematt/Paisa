@@ -389,9 +389,9 @@ deno_version = 2
 # service role) so Row Level Security scopes every query to the caller.
 verify_jwt = true
 
-[functions.paisaai-chat]
-# Requires a valid user JWT on every request; the function uses it (not the
-# service role) so Row Level Security scopes every query to the caller.
+[functions.delete-account]
+# Identifies the caller from their JWT, then deletes only that user with the
+# service role. Profile, categories, and transactions cascade from auth.users.
 verify_jwt = true
 
 [analytics]

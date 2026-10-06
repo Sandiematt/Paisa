@@ -7,6 +7,6 @@
 .env.local
 .env.*.local
 
-# Edge Function secrets — never commit real API keys (e.g. GEMINI_API_KEY).
+# Edge Function secrets live in the root .env — never commit real API keys.
 functions/.env
 functions/**/.env

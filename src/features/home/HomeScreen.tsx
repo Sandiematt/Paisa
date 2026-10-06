@@ -3,7 +3,6 @@ import {
   AccessibilityInfo,
   ActivityIndicator,
   Animated,
-  Image,
   LayoutChangeEvent,
   Pressable,
   RefreshControl,
@@ -38,8 +37,6 @@ type DashboardStatus = 'loading' | 'ready' | 'error';
 type HomeScreenProps = {
   name: string;
   currencySymbol: string;
-  avatarUrl?: string;
-  onProfilePress?: () => void;
   onBudgetPress?: () => void;
   onSavingsPress?: () => void;
   report: HomeReport;
@@ -58,7 +55,6 @@ const RANGES: {id: HomeRange; label: string}[] = [
   {id: 'year', label: 'Year'},
 ];
 
-const AVATAR_SIZE = 44;
 const DONUT_SIZE = 104;
 const MAX_VISIBLE_SLICES = 4;
 const RANGE_PAD = 5;
@@ -112,26 +108,6 @@ function timeGreeting(): string {
   if (hour < 17) return 'Good afternoon,';
   if (hour < 21) return 'Good evening,';
   return 'Good night,';
-}
-
-function isSafeAvatarUrl(url: string | undefined): url is string {
-  if (!url) return false;
-  try {
-    return new URL(url).protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function initialsFrom(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) {
-    return 'S';
-  }
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase();
-  }
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
 function syncCaption(
@@ -646,8 +622,6 @@ function RangeSwitch({
 export function HomeScreen({
   name,
   currencySymbol,
-  avatarUrl,
-  onProfilePress,
   onBudgetPress,
   onSavingsPress,
   report: data,
@@ -669,15 +643,11 @@ export function HomeScreen({
     }
   }, [status, error]);
 
-  const {firstName, initials} = useMemo(() => {
-    const trimmedName = name.trim() || 'there';
-    return {
-      firstName: trimmedName.split(/\s+/)[0],
-      initials: initialsFrom(trimmedName),
-    };
-  }, [name]);
+  const firstName = useMemo(
+    () => (name.trim() || 'there').split(/\s+/)[0],
+    [name],
+  );
 
-  const hasSecureAvatar = isSafeAvatarUrl(avatarUrl);
   const changePositive = (data.changePct ?? data.changeAmount ?? 0) >= 0;
   const showChangeBadge = !data.empty;
   const changePct = Math.abs(data.changePct ?? 0);
@@ -728,36 +698,6 @@ export function HomeScreen({
               {firstName}
             </Text>
           </View>
-          <PressableScale
-            scaleTo={0.94}
-            onPress={onProfilePress}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-            style={shadows.avatar}>
-            <GlassPanel
-              intensity="md"
-              overlayColor="#FFFFFFCC"
-              radius={AVATAR_SIZE / 2}
-              contentStyle={styles.avatarFace}>
-              {hasSecureAvatar ? (
-                <Image
-                  source={{uri: avatarUrl}}
-                  style={{width: AVATAR_SIZE, height: AVATAR_SIZE}}
-                  resizeMode="cover"
-                />
-              ) : (
-                <Text
-                  fontFamily={fonts.outfitSemi}
-                  fontSize={15}
-                  lineHeight={18}
-                  fontWeight="600"
-                  color={colors.gold}>
-                  {initials}
-                </Text>
-              )}
-            </GlassPanel>
-          </PressableScale>
         </View>
 
         <GlassPanel
@@ -1085,11 +1025,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: RANGE_SEG_H,
-  },
-  avatarFace: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

@@ -1,4 +1,4 @@
-// AI summary writer for Paisa Insights, powered by Google Gemini.
+// AI summary writer for Paisa Insights, powered by OpenRouter.
 //
 // CRITICAL: the AI is only ever shown the *already-calculated* statistics
 // from calculations.ts, and it is only allowed to produce one field —
@@ -10,9 +10,9 @@
 
 import type {CalculatedStats, PeriodKind} from './types.ts';
 
-const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+const DEFAULT_MODEL = 'google/gemini-3.5-flash-lite';
 const REQUEST_TIMEOUT_MS = 8000;
-const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const SYSTEM_PROMPT = `You are the writing layer for Paisa, a personal finance app.
 You will receive pre-calculated, already-verified financial statistics as JSON, covering a "week", "month", or "year" period (see "period" in the JSON).
@@ -154,50 +154,60 @@ export function buildFallbackSummary(stats: CalculatedStats): string {
 
 export async function generateSummary(stats: CalculatedStats): Promise<{summary: string; aiGenerated: boolean}> {
   const fallback = buildFallbackSummary(stats);
-  const apiKey = Deno.env.get('GEMINI_API_KEY');
+  const apiKey = Deno.env.get('OPEN_ROUTER_API_KEY');
   if (!apiKey) {
     return {summary: fallback, aiGenerated: false};
   }
 
-  const model = Deno.env.get('GEMINI_MODEL') || DEFAULT_MODEL;
+  const model = Deno.env.get('AI_MODEL') || DEFAULT_MODEL;
   const context = buildAiContext(stats);
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(`${GEMINI_API_BASE}/${model}:generateContent?key=${apiKey}`, {
+    const response = await fetch(OPENROUTER_CHAT_URL, {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'X-Title': 'Paisa Insights',
+      },
       body: JSON.stringify({
-        systemInstruction: {parts: [{text: SYSTEM_PROMPT}]},
-        contents: [{role: 'user', parts: [{text: JSON.stringify(context)}]}],
-        generationConfig: {
-          temperature: 0.4,
-          maxOutputTokens: 120,
-          responseMimeType: 'application/json',
-        },
+        model,
+        messages: [
+          {role: 'system', content: SYSTEM_PROMPT},
+          {role: 'user', content: JSON.stringify(context)},
+        ],
+        temperature: 0.4,
+        max_tokens: 120,
+        response_format: {type: 'json_object'},
       }),
       signal: controller.signal,
     });
 
     if (!response.ok) {
-      console.error('generate-insights: Gemini request failed', response.status, await response.text());
+      console.error('generate-insights: OpenRouter request failed', response.status, await response.text());
       return {summary: fallback, aiGenerated: false};
     }
 
     const payload = await response.json();
-    const content = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const content = payload?.choices?.[0]?.message?.content;
     if (typeof content !== 'string') {
-      console.error('generate-insights: Gemini response missing content', JSON.stringify(payload).slice(0, 500));
+      console.error('generate-insights: OpenRouter response missing content', JSON.stringify(payload).slice(0, 500));
       return {summary: fallback, aiGenerated: false};
     }
 
     let parsed: unknown;
     try {
-      parsed = JSON.parse(content);
+      parsed = JSON.parse(
+        content
+          .trim()
+          .replace(/^```(?:json)?\s*/i, '')
+          .replace(/\s*```$/, ''),
+      );
     } catch {
-      console.error('generate-insights: Gemini response was not valid JSON');
+      console.error('generate-insights: OpenRouter response was not valid JSON');
       return {summary: fallback, aiGenerated: false};
     }
 

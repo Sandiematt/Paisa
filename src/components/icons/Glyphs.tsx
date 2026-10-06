@@ -202,105 +202,6 @@ export function InsightsGlyph({color, size = 22, active}: NavGlyphProps) {
 }
 
 /**
- * Modern Paisa AI glyph:
- * Dual AI stars/sparkles indicating personal financial intelligence.
- */
-export function AskGlyph({color, size = 22, active}: NavGlyphProps) {
-  const starColor = active ? colors.accentPress : color;
-  const majorSize = size * 0.8;
-  const minorSize = size * 0.42;
-
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-      {/* Primary 4-point AI sparkle */}
-      <View
-        style={{
-          width: majorSize,
-          height: majorSize,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-        <View
-          style={{
-            position: 'absolute',
-            width: majorSize * 0.22,
-            height: majorSize,
-            borderRadius: radii.pill,
-            backgroundColor: starColor,
-          }}
-        />
-        <View
-          style={{
-            position: 'absolute',
-            width: majorSize,
-            height: majorSize * 0.22,
-            borderRadius: radii.pill,
-            backgroundColor: starColor,
-          }}
-        />
-        <View
-          style={{
-            position: 'absolute',
-            width: majorSize * 0.18,
-            height: majorSize * 0.7,
-            borderRadius: radii.pill,
-            backgroundColor: starColor,
-            transform: [{rotate: '45deg'}],
-          }}
-        />
-        <View
-          style={{
-            position: 'absolute',
-            width: majorSize * 0.18,
-            height: majorSize * 0.7,
-            borderRadius: radii.pill,
-            backgroundColor: starColor,
-            transform: [{rotate: '-45deg'}],
-          }}
-        />
-      </View>
-
-      {/* Secondary accent sparkle on top right */}
-      <View
-        style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          width: minorSize,
-          height: minorSize,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-        <View
-          style={{
-            position: 'absolute',
-            width: minorSize * 0.26,
-            height: minorSize,
-            borderRadius: radii.pill,
-            backgroundColor: active ? colors.accent : color,
-          }}
-        />
-        <View
-          style={{
-            position: 'absolute',
-            width: minorSize,
-            height: minorSize * 0.26,
-            borderRadius: radii.pill,
-            backgroundColor: active ? colors.accent : color,
-          }}
-        />
-      </View>
-    </View>
-  );
-}
-
-/**
  * Close X with no transforms. Rotated views skip overflow clipping on Android
  * and paint outside the add button; this stays inside `size` by construction.
  */
@@ -1216,6 +1117,48 @@ export function TrendUpGlyph({color, size = 10}: GlyphProps) {
         borderBottomColor: color,
       }}
     />
+  );
+}
+
+/** Profile glyph: head circle over rounded shoulders; filled when active. */
+export function ProfileGlyph({color, size = 22, active}: NavGlyphProps) {
+  const headD = size * 0.38;
+  const bodyW = size * 0.72;
+  const bodyH = size * 0.34;
+  const stroke = 2;
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: size * 0.08,
+      }}>
+      <View
+        style={{
+          width: headD,
+          height: headD,
+          borderRadius: headD / 2,
+          backgroundColor: active ? color : 'transparent',
+          borderWidth: active ? 0 : stroke,
+          borderColor: color,
+        }}
+      />
+      <View
+        style={{
+          width: bodyW,
+          height: bodyH,
+          borderTopLeftRadius: bodyH,
+          borderTopRightRadius: bodyH,
+          borderBottomLeftRadius: 3,
+          borderBottomRightRadius: 3,
+          backgroundColor: active ? color : 'transparent',
+          borderWidth: active ? 0 : stroke,
+          borderColor: color,
+        }}
+      />
+    </View>
   );
 }
 

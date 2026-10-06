@@ -17,7 +17,6 @@ import {OnboardingDraft} from '../onboarding/types';
 import {SaveProfileOptions} from '../../lib/profileStore';
 import {TransactionRow} from '../../lib/transactionsStore';
 import {InsightsScreen} from '../insights/InsightsScreen';
-import {PaisaAIScreen} from '../paisaAI/PaisaAIScreen';
 import {ProfileScreen} from '../profile/ProfileScreen';
 
 type MainTabsProps = {
@@ -106,8 +105,6 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       <HomeScreen
         name={profileDraft.name}
         currencySymbol={currency.symbol}
-        avatarUrl={profileDraft.avatarUrl}
-        onProfilePress={() => setProfileOpen(true)}
         onBudgetPress={() => setBudgetOpen(true)}
         onSavingsPress={() => setSavingsOpen(true)}
         report={report}
@@ -139,36 +136,13 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
         focusDate={ledgerFocus}
       />
     );
-  } else if (tab === 'insights') {
+  } else {
     page = (
       <InsightsScreen
         currencySymbol={currency.symbol}
         name={profileDraft.name}
         avatarUrl={profileDraft.avatarUrl}
         onProfilePress={() => setProfileOpen(true)}
-      />
-    );
-  } else {
-    page = (
-      <PaisaAIScreen
-        currencySymbol={currency.symbol}
-        monthlyBudget={moneyPlan.monthlyBudget}
-        monthlySpent={report.monthlySpent}
-        remainingBudget={report.monthlyRemainingBudget}
-        transactions={transactions}
-        categories={categories}
-        draft={profileDraft}
-        onSave={updated => {
-          setProfileDraft(updated);
-          void onProfileSave(updated);
-        }}
-        onDetailsPress={() => setTab('insights')}
-        onActivityPress={() => setTab('activity')}
-        onTransactionAdded={row => {
-          upsertLocal(row);
-          setLedgerFocus(row.transactionDate);
-          setRefreshNonce(value => value + 1);
-        }}
       />
     );
   }
@@ -188,6 +162,10 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
             setTab(next);
           }}
           onAddPress={onAddPress}
+          onProfilePress={() => {
+            setSheetOpen(false);
+            setProfileOpen(true);
+          }}
           addOpen={sheetOpen && addKind === null}
         />
 

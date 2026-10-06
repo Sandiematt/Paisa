@@ -14,7 +14,13 @@
       "package": "com.expense_tracker"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Paisa uses Face ID to keep your finances locked."
+        }
+      ]
     ]
   }
 }

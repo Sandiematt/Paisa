@@ -29,7 +29,9 @@ import {
   TrashGlyph,
 } from '../../components/icons/Glyphs';
 import {GlassPanel, PressableScale, Screen, Text} from '../../components/ui';
+import {exportTransactionsCsv} from '../../lib/exportCsv';
 import {SaveProfileOptions, textToMoney} from '../../lib/profileStore';
+import {deleteAccount} from '../../lib/supabase/account';
 import {
   loadTransactions,
   walletBalanceFrom,
@@ -40,6 +42,7 @@ import {
 } from '../onboarding/constants';
 import {scaleMonthly} from '../home/homeReport';
 import {GoalId, OnboardingDraft} from '../onboarding/types';
+import {useBiometricLock} from '../security/BiometricLockProvider';
 import {AvatarPickerModal} from './AvatarPickerModal';
 import {ProfileAmbient} from './ProfileAmbient';
 import {
@@ -289,9 +292,12 @@ export function ProfileScreen({
   const [notifyPrefs, setNotifyPrefs] = useState({
     spend: true,
     monthly: true,
-    ai: false,
   });
-  const [biometric, setBiometric] = useState(false);
+  const biometricLock = useBiometricLock();
+  const [biometricBusy, setBiometricBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const [toastVisible, setToastVisible] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -405,39 +411,109 @@ export function ProfileScreen({
     showToast();
   };
 
+  const signOut = async () => {
+    if (!onSignOut || signingOut) {
+      return;
+    }
+    setSigningOut(true);
+    try {
+      await onSignOut();
+    } catch {
+      setSigningOut(false);
+      Alert.alert('Could not sign out', 'Check your connection and try again.');
+    }
+  };
+
   const confirmSignOut = () => {
     Alert.alert('Sign out?', 'You can sign back in with the same email.', [
       {text: 'Stay', style: 'cancel'},
       {
         text: 'Sign out',
         style: 'destructive',
-        onPress: () => onSignOut?.(),
+        onPress: signOut,
       },
     ]);
   };
 
-  const exportData = () => {
-    Alert.alert(
-      'Export Data',
-      'A CSV of this profile is ready to wire. Transactions will join the export once they sync.',
-    );
+  const toggleBiometric = async (next: boolean) => {
+    if (biometricBusy) {
+      return;
+    }
+    setBiometricBusy(true);
+    try {
+      const result = await biometricLock.setEnabled(next);
+      if (!result.ok && result.message) {
+        Alert.alert('Biometric Lock', result.message);
+      }
+    } catch {
+      Alert.alert('Biometric Lock', 'Could not change this setting. Try again.');
+    } finally {
+      setBiometricBusy(false);
+    }
+  };
+
+  const exportData = async () => {
+    if (exporting) {
+      return;
+    }
+    setExporting(true);
+    try {
+      const result = await exportTransactionsCsv(draft.currency);
+      if (result.rows === 0) {
+        Alert.alert(
+          'Nothing to export yet',
+          'Add a transaction first, then export your CSV.',
+        );
+      }
+    } catch (caught) {
+      Alert.alert(
+        'Export failed',
+        caught instanceof Error ? caught.message : 'Try again in a moment.',
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const runDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      Alert.alert('Account deleted', 'Your account and all its data are gone.');
+    } catch (caught) {
+      setDeleting(false);
+      Alert.alert(
+        'Could not delete account',
+        caught instanceof Error ? caught.message : 'Try again in a moment.',
+      );
+    }
   };
 
   const confirmDelete = () => {
+    if (deleting) {
+      return;
+    }
     Alert.alert(
       'Delete account?',
-      'This cannot be undone. Your login and profile will be removed from this device.',
+      'Your login, profile, categories, and every transaction will be permanently deleted. Export a CSV first if you want a copy.',
       [
         {text: 'Cancel', style: 'cancel'},
         {
-          text: 'Delete account',
+          text: 'Continue',
           style: 'destructive',
-          onPress: () => {
+          onPress: () =>
             Alert.alert(
-              'Delete Account',
-              'Server-side deletion is prepared here. Sign out for now, then finish removal from Supabase Auth.',
-            );
-          },
+              'This cannot be undone',
+              'Delete this account and all of its data now?',
+              [
+                {text: 'Keep account', style: 'cancel'},
+                {
+                  text: 'Delete forever',
+                  style: 'destructive',
+                  onPress: runDelete,
+                },
+              ],
+            ),
         },
       ],
     );
@@ -755,23 +831,26 @@ export function ProfileScreen({
               <SettingsRow
                 icon={<DownloadIcon color={ICON} size={16} />}
                 label="Export Data"
-                subtitle="CSV of expenses"
+                subtitle="CSV of all transactions"
+                value={exporting ? 'Preparing…' : undefined}
                 kind="nav"
                 onPress={exportData}
               />
               <SettingsRow
                 icon={<LockIcon color={ICON} size={16} />}
                 label="Biometric Lock"
+                subtitle="Ask to unlock when Paisa opens"
                 last
                 kind="toggle"
                 accessory={
                   <Switch
-                    value={biometric}
-                    onValueChange={setBiometric}
+                    value={biometricLock.enabled}
+                    onValueChange={toggleBiometric}
+                    disabled={biometricBusy}
                     trackColor={{false: 'rgba(0,0,0,0.08)', true: colors.accent}}
                     thumbColor="#FFFFFF"
                     ios_backgroundColor="rgba(0,0,0,0.08)"
-                    accessibilityLabel={`Biometric Lock, ${biometric ? 'on' : 'off'}`}
+                    accessibilityLabel={`Biometric Lock, ${biometricLock.enabled ? 'on' : 'off'}`}
                   />
                 }
               />
@@ -789,9 +868,11 @@ export function ProfileScreen({
               {onSignOut ? (
                 <PressableScale
                   onPress={confirmSignOut}
+                  disabled={signingOut}
                   scaleTo={0.98}
                   accessibilityRole="button"
                   accessibilityLabel="Sign out"
+                  accessibilityState={{disabled: signingOut}}
                   containerStyle={styles.signOutWrap}
                   style={styles.signOutShadow}>
                   <GlassPanel
@@ -807,7 +888,7 @@ export function ProfileScreen({
                       lineHeight={20}
                       fontWeight="700"
                       color={INK}>
-                      Sign out
+                      {signingOut ? 'Signing out…' : 'Sign out'}
                     </Text>
                   </GlassPanel>
                 </PressableScale>
@@ -817,10 +898,11 @@ export function ProfileScreen({
             <SettingsSection
               title="Danger Zone"
               danger
-              footer="Deletes this account and its profile. This cannot be undone.">
+              footer="Deletes this account, its profile, and every transaction. This cannot be undone.">
               <SettingsRow
                 icon={<TrashGlyph color={DANGER} size={16} />}
                 label="Delete Account"
+                value={deleting ? 'Deleting…' : undefined}
                 last
                 destructive
                 kind="nav"

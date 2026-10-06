@@ -192,6 +192,10 @@ async function trySeedOpeningBalance(startingBalance: string) {
   }
 }
 
+export async function clearProfileCache(userId: string): Promise<void> {
+  await AsyncStorage.removeItem(cacheKey(userId));
+}
+
 async function readCache(userId: string): Promise<OnboardingDraft | null> {
   const raw = await AsyncStorage.getItem(cacheKey(userId));
   if (!raw) {

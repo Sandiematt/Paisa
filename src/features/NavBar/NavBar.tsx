@@ -11,34 +11,44 @@ import {
 } from './FloatingNavScroll';
 import {
   ActivityGlyph,
-  AskGlyph,
   CloseGlyph,
   HomeGlyph,
   InsightsGlyph,
+  ProfileGlyph,
 } from '../../components/icons/Glyphs';
 import {GlassPanel, PressableScale} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
-import {colors, duration, easing, layout, radii, shadows, spacing} from '../../theme';
+import {
+  colors,
+  duration,
+  easing,
+  layout,
+  radii,
+  shadows,
+  spacing,
+} from '../../theme';
 
-export const TABS = ['home', 'activity', 'insights', 'ask'] as const;
+export const TABS = ['home', 'activity', 'insights'] as const;
 export type TabId = (typeof TABS)[number];
 
 type NavBarProps = {
   activeTab: TabId;
   onTabPress: (tab: TabId) => void;
   onAddPress: () => void;
+  onProfilePress: () => void;
   addOpen?: boolean;
 };
 
-const ITEMS: {id: TabId | 'add'; label: string}[] = [
+const LEFT_TABS: {id: TabId; label: string}[] = [
   {id: 'home', label: 'Home'},
   {id: 'activity', label: 'Activity'},
-  {id: 'add', label: 'Add transaction'},
+];
+const RIGHT_TABS: {id: TabId; label: string}[] = [
   {id: 'insights', label: 'Insights'},
-  {id: 'ask', label: 'Paisa AI'},
 ];
 
 const ITEM_HEIGHT = FLOATING_NAV_ITEM_HEIGHT;
+const SLOT_WIDTH = 74;
 const ADD_FACE = 48;
 const ADD_ARM = 14;
 const ADD_THICK = 2;
@@ -82,8 +92,6 @@ function TabGlyph({
       return <ActivityGlyph color={color} size={size} active={active} />;
     case 'insights':
       return <InsightsGlyph color={color} size={size} active={active} />;
-    case 'ask':
-      return <AskGlyph color={color} size={size} active={active} />;
   }
 }
 
@@ -91,6 +99,7 @@ export function NavBar({
   activeTab,
   onTabPress,
   onAddPress,
+  onProfilePress,
   addOpen = false,
 }: NavBarProps) {
   const insets = useSafeAreaInsets();
@@ -152,45 +161,70 @@ export function NavBar({
         radius={radii.pill}
         style={[styles.pillWrap, shadows.nav]}
         contentStyle={styles.pill}>
-        {ITEMS.map(item => {
-          if (item.id === 'add') {
+        <View style={styles.cluster}>
+          {LEFT_TABS.map(item => {
+            const active = activeTab === item.id;
+            const color = active ? colors.accent : colors.inkMuted;
             return (
-              <Pressable
-                key="add"
-                onPress={onAddPress}
-                accessibilityRole="button"
+              <PressableScale
+                key={item.id}
+                onPress={() => onTabPress(item.id)}
+                scaleTo={0.94}
+                accessibilityRole="tab"
+                accessibilityState={{selected: active}}
                 accessibilityLabel={item.label}
-                accessibilityHint="Adds an expense or income"
-                style={styles.slot}>
-                <View collapsable={false} style={styles.addFace}>
-                  <View pointerEvents="none" style={styles.addShade} />
-                  <View pointerEvents="none" style={styles.addSheen} />
-                  <View pointerEvents="none" style={styles.addIconSlot}>
-                    <AddPlusMark twist={plusTwist} />
-                  </View>
-                </View>
-              </Pressable>
+                containerStyle={styles.slot}
+                style={styles.hit}>
+                <TabGlyph id={item.id} color={color} active={active} />
+              </PressableScale>
             );
-          }
-
-          const tabId = item.id;
-          const active = activeTab === tabId;
-          const color = active ? colors.accent : colors.inkMuted;
-
-          return (
-            <PressableScale
-              key={tabId}
-              onPress={() => onTabPress(tabId)}
-              scaleTo={0.94}
-              accessibilityRole="tab"
-              accessibilityState={{selected: active}}
-              accessibilityLabel={item.label}
-              containerStyle={styles.slot}
-              style={styles.hit}>
-              <TabGlyph id={tabId} color={color} active={active} />
-            </PressableScale>
-          );
-        })}
+          })}
+        </View>
+        <Pressable
+          onPress={onAddPress}
+          accessibilityRole="button"
+          accessibilityLabel="Add transaction"
+          accessibilityHint="Adds an expense or income"
+          style={styles.addSlot}>
+          <View collapsable={false} style={styles.addFace}>
+            <View pointerEvents="none" style={styles.addShade} />
+            <View pointerEvents="none" style={styles.addSheen} />
+            <View pointerEvents="none" style={styles.addIconSlot}>
+              <AddPlusMark twist={plusTwist} />
+            </View>
+          </View>
+        </Pressable>
+        <View style={styles.cluster}>
+          {RIGHT_TABS.map(item => {
+            const active = activeTab === item.id;
+            const color = active ? colors.accent : colors.inkMuted;
+            return (
+              <PressableScale
+                key={item.id}
+                onPress={() => onTabPress(item.id)}
+                scaleTo={0.94}
+                accessibilityRole="tab"
+                accessibilityState={{selected: active}}
+                accessibilityLabel={item.label}
+                containerStyle={styles.slot}
+                style={styles.hit}>
+                <TabGlyph id={item.id} color={color} active={active} />
+              </PressableScale>
+            );
+          })}
+          <PressableScale
+            onPress={onProfilePress}
+            scaleTo={0.94}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+            containerStyle={styles.slot}
+            style={styles.hit}>
+            <ProfileGlyph
+              color={colors.inkMuted}
+              size={layout.navIcon}
+            />
+          </PressableScale>
+        </View>
       </GlassPanel>
     </Animated.View>
   );
@@ -202,7 +236,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    paddingHorizontal: 20,
+    alignItems: 'center',
     zIndex: 10,
   },
 
@@ -211,7 +245,7 @@ const styles = StyleSheet.create({
   },
 
   pillWrap: {
-    width: '100%',
+    alignSelf: 'center',
     overflow: 'hidden',
     borderRadius: radii.pill,
   },
@@ -220,18 +254,30 @@ const styles = StyleSheet.create({
     height: ITEM_HEIGHT + FLOATING_NAV_PILL_PAD_V * 2,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 22,
+    paddingHorizontal: 8,
     paddingVertical: FLOATING_NAV_PILL_PAD_V,
     overflow: 'hidden',
   },
 
+  cluster: {
+    height: ITEM_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+
   slot: {
-    flex: 1,
+    width: SLOT_WIDTH,
     height: ITEM_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+  },
+
+  addSlot: {
+    width: ADD_FACE,
+    height: ITEM_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   hit: {
