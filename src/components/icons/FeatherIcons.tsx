@@ -424,44 +424,47 @@ export function MailIcon({color, size = 18}: IconProps) {
 }
 
 export function EyeIcon({color, size = 18}: IconProps) {
-  const s = Math.max(1.3, size * 0.11);
+  const s = Math.max(1.5, size * 0.1);
+  const h = size * 0.68;
   return (
     <View style={{width: size, height: size, alignItems: 'center', justifyContent: 'center'}}>
       <View
         style={{
-          width: size,
-          height: size * 0.52,
+          width: size * 1.1,
+          height: h,
           borderWidth: s,
           borderColor: color,
-          borderRadius: size,
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          width: size * 0.3,
-          height: size * 0.3,
-          borderRadius: size,
-          borderWidth: s,
-          borderColor: color,
-        }}
-      />
+          borderRadius: h / 2,
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}>
+        <View
+          style={{
+            width: size * 0.3,
+            height: size * 0.3,
+            borderRadius: size * 0.15,
+            backgroundColor: color,
+          }}
+        />
+      </View>
     </View>
   );
 }
 
 export function EyeOffIcon({color, size = 18}: IconProps) {
-  const s = Math.max(1.3, size * 0.11);
+  const s = Math.max(1.5, size * 0.1);
   return (
     <View style={{width: size, height: size, alignItems: 'center', justifyContent: 'center'}}>
       <EyeIcon color={color} size={size} />
-      <Stroke
-        color={color}
-        width={size * 0.92}
-        height={s}
-        left={size * 0.04}
-        top={size * 0.48}
-        rotate="-28deg"
+      <View
+        style={{
+          position: 'absolute',
+          width: size * 1.2,
+          height: s,
+          borderRadius: s,
+          backgroundColor: color,
+          transform: [{rotate: '-40deg'}],
+        }}
       />
     </View>
   );

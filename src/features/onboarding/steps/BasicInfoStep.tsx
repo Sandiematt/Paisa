@@ -14,9 +14,15 @@ type BasicInfoStepProps = {
     key: K,
     value: OnboardingDraft[K],
   ) => void;
+  passwordless?: boolean;
 };
 
-export function BasicInfoStep({draft, errors, onChange}: BasicInfoStepProps) {
+export function BasicInfoStep({
+  draft,
+  errors,
+  onChange,
+  passwordless = false,
+}: BasicInfoStepProps) {
   const copy = STEP_TITLES.basics;
 
   return (
@@ -47,26 +53,33 @@ export function BasicInfoStep({draft, errors, onChange}: BasicInfoStepProps) {
           autoComplete="email"
           textContentType="emailAddress"
           returnKeyType="done"
-          helper="Used for sign-in and monthly summaries."
+          editable={!passwordless}
+          helper={
+            passwordless
+              ? 'From your Google account.'
+              : 'Used for sign-in and monthly summaries.'
+          }
           error={errors.email}
         />
       </Stagger>
 
-      <Stagger index={3} style={styles.spaced}>
-        <TextField
-          label="Password"
-          placeholder="At least 6 characters"
-          value={draft.password ?? ''}
-          onChangeText={value => onChange('password', value)}
-          secureTextEntry
-          autoCapitalize="none"
-          autoComplete="new-password"
-          textContentType="newPassword"
-          returnKeyType="done"
-          helper="This is how you will sign back in."
-          error={errors.password}
-        />
-      </Stagger>
+      {passwordless ? null : (
+        <Stagger index={3} style={styles.spaced}>
+          <TextField
+            label="Password"
+            placeholder="At least 6 characters"
+            value={draft.password ?? ''}
+            onChangeText={value => onChange('password', value)}
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="new-password"
+            textContentType="newPassword"
+            returnKeyType="done"
+            helper="This is how you will sign back in."
+            error={errors.password}
+          />
+        </Stagger>
+      )}
 
       <View style={styles.tail} />
     </StepLayout>

@@ -1,5 +1,24 @@
+function readableAuthText(value: string): string {
+  let current = value.replace(/\+/g, ' ').trim();
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (!current.includes('%')) {
+      break;
+    }
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) {
+        break;
+      }
+      current = decoded;
+    } catch {
+      break;
+    }
+  }
+  return current;
+}
+
 export function authErrorMessage(error: {message?: string} | null): string {
-  const message = error?.message?.trim() ?? '';
+  const message = readableAuthText(error?.message?.trim() ?? '');
   const normalized = message.toLowerCase();
 
   if (!message) {
@@ -19,6 +38,13 @@ export function authErrorMessage(error: {message?: string} | null): string {
   }
   if (normalized.includes('rate limit') || normalized.includes('too many')) {
     return 'Too many attempts. Wait a moment, then try again.';
+  }
+  if (
+    normalized.includes('unable to exchange external code') ||
+    normalized.includes('invalid_client') ||
+    normalized.includes('client secret')
+  ) {
+    return 'Google rejected the client secret saved in Supabase. In Authentication → Providers → Google, paste the Client Secret from the same Web client as the Client ID, then try again.';
   }
   if (normalized.includes('network') || normalized.includes('fetch')) {
     return 'Could not reach the server. Check your connection.';

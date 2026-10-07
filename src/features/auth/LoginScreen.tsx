@@ -1,6 +1,5 @@
 import React, {useState} from 'react';
 import {
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -24,6 +23,7 @@ import {
   MailIcon,
 } from '../../components/icons/FeatherIcons';
 import {colors, fonts, radii, spacing} from '../../theme';
+import {ForgotPasswordModal} from './components/ForgotPasswordModal';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const HERO_BODY = 306;
@@ -32,6 +32,9 @@ type LoginScreenProps = {
   onSubmit: (email: string, password: string) => Promise<string | null>;
   onCreateAccount: () => void;
   onForgotPassword: (email: string) => Promise<string | null>;
+  onVerifyResetCode: (email: string, code: string) => Promise<string | null>;
+  onUpdatePassword: (newPassword: string) => Promise<string | null>;
+  onCancelReset: () => void;
   onGoogle: () => void;
   onBack: () => void;
 };
@@ -40,6 +43,9 @@ export function LoginScreen({
   onSubmit,
   onCreateAccount,
   onForgotPassword,
+  onVerifyResetCode,
+  onUpdatePassword,
+  onCancelReset,
   onGoogle,
   onBack,
 }: LoginScreenProps) {
@@ -50,7 +56,7 @@ export function LoginScreen({
   const [revealed, setRevealed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
-
+  const [resetOpen, setResetOpen] = useState(false);
   const handleSignIn = async () => {
     if (!EMAIL_PATTERN.test(email.trim())) {
       setError('Enter a valid email address.');
@@ -70,26 +76,7 @@ export function LoginScreen({
     }
   };
 
-  const handleForgot = async () => {
-    if (!EMAIL_PATTERN.test(email.trim())) {
-      Alert.alert(
-        'Email first',
-        'Type the email on your account, then tap Forgot.',
-      );
-      return;
-    }
-    setBusy(true);
-    const message = await onForgotPassword(email);
-    setBusy(false);
-    if (message) {
-      Alert.alert('Could not send reset', message);
-      return;
-    }
-    Alert.alert(
-      'Check your email',
-      'If that address has an account, we sent a reset link.',
-    );
-  };
+  const openForgot = () => setResetOpen(true);
 
   const heroHeight = HERO_BODY + insets.top;
   const photoHeight = heroHeight + 32;
@@ -202,7 +189,7 @@ export function LoginScreen({
               <View style={styles.passwordLabelRow}>
                 <AppText style={styles.fieldLabel}>PASSWORD</AppText>
                 <PressableScale
-                  onPress={handleForgot}
+                  onPress={openForgot}
                   scaleTo={0.96}
                   hitSlop={8}
                   accessibilityRole="button"
@@ -273,7 +260,7 @@ export function LoginScreen({
                 disabled={busy}
                 scaleTo={0.975}
                 accessibilityRole="button"
-                accessibilityHint="Google sign-in is not connected yet"
+                accessibilityHint="Opens Google to sign in"
                 style={styles.google}>
                 <Image
                   source={require('../../../assets/brand/google-g.png')}
@@ -300,6 +287,23 @@ export function LoginScreen({
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
+
+      <ForgotPasswordModal
+        visible={resetOpen}
+        initialEmail={email}
+        onSendCode={onForgotPassword}
+        onVerifyCode={onVerifyResetCode}
+        onUpdatePassword={onUpdatePassword}
+        onCancel={() => {
+          setResetOpen(false);
+          onCancelReset();
+        }}
+        onFinished={resetEmail => {
+          setResetOpen(false);
+          setEmail(resetEmail);
+          setPassword('');
+        }}
+      />
     </View>
   );
 }

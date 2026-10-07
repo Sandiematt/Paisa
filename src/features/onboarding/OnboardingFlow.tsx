@@ -17,14 +17,18 @@ import {CategoriesStep} from './steps/CategoriesStep';
 import {CurrencyIncomeStep} from './steps/CurrencyIncomeStep';
 import {GoalStep} from './steps/GoalStep';
 import {OnboardingDraft, StepKey} from './types';
-import {useOnboarding} from './useOnboarding';
+import {OnboardingOptions, useOnboarding} from './useOnboarding';
 
-type OnboardingFlowProps = {
+type OnboardingFlowProps = OnboardingOptions & {
   onComplete: (draft: OnboardingDraft) => void | Promise<void>;
 };
 
-export function OnboardingFlow({onComplete}: OnboardingFlowProps) {
-  const flow = useOnboarding(onComplete);
+export function OnboardingFlow({
+  onComplete,
+  initialDraft,
+  passwordless,
+}: OnboardingFlowProps) {
+  const flow = useOnboarding(onComplete, {initialDraft, passwordless});
   const scrollRef = useRef<ScrollViewInstance>(null);
 
   // A new step always starts at the top; carrying the previous scroll offset
@@ -42,6 +46,7 @@ export function OnboardingFlow({onComplete}: OnboardingFlowProps) {
               draft={flow.draft}
               errors={flow.errors}
               onChange={flow.update}
+              passwordless={flow.passwordless}
             />
           );
         case 'money':

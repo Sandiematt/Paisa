@@ -19,10 +19,20 @@ const INITIAL_DRAFT: OnboardingDraft = {
 
 export type OnboardingController = ReturnType<typeof useOnboarding>;
 
+export type OnboardingOptions = {
+  initialDraft?: Partial<OnboardingDraft>;
+  /** OAuth sign-ups already have an account, so no password is collected. */
+  passwordless?: boolean;
+};
+
 export function useOnboarding(
   onComplete: (draft: OnboardingDraft) => void | Promise<void>,
+  {initialDraft, passwordless = false}: OnboardingOptions = {},
 ) {
-  const [draft, setDraft] = useState<OnboardingDraft>(INITIAL_DRAFT);
+  const [draft, setDraft] = useState<OnboardingDraft>(() => ({
+    ...INITIAL_DRAFT,
+    ...initialDraft,
+  }));
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [showErrors, setShowErrors] = useState(false);
@@ -53,7 +63,7 @@ export function useOnboarding(
     if (!EMAIL_PATTERN.test(draft.email.trim())) {
       next.email = 'That email address looks incomplete.';
     }
-    if ((draft.password ?? '').length < 6) {
+    if (!passwordless && (draft.password ?? '').length < 6) {
       next.password = 'Use at least 6 characters.';
     }
     if (draft.goal === null) {
@@ -63,7 +73,14 @@ export function useOnboarding(
       next.categoryIds = `Choose at least ${MIN_CATEGORIES} categories.`;
     }
     return next;
-  }, [draft.categoryIds.length, draft.email, draft.goal, draft.name, draft.password]);
+  }, [
+    draft.categoryIds.length,
+    draft.email,
+    draft.goal,
+    draft.name,
+    draft.password,
+    passwordless,
+  ]);
 
   const validity = useMemo<Record<StepKey, StepValidity>>(
     () => ({
@@ -124,6 +141,7 @@ export function useOnboarding(
 
   return {
     draft,
+    passwordless,
     update,
     toggleCategory,
     stepKey,

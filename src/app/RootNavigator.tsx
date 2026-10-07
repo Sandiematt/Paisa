@@ -22,11 +22,24 @@ import {useRouter} from './useRouter';
 
 export function RootNavigator() {
   const router = useRouter('splash');
-  const {ready, session, user, signIn, signUp, signOut, resetPassword} =
-    useAuth();
+  const {
+    ready,
+    session,
+    user,
+    signIn,
+    signInWithGoogle,
+    signUp,
+    signOut,
+    resetPassword,
+    verifyResetCode,
+    updateRecoveredPassword,
+    cancelPasswordReset,
+  } = useAuth();
   const [draft, setDraft] = useState<OnboardingDraft | null>(null);
   const [profileReady, setProfileReady] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const hadUser = useRef(false);
+  const googleBusy = useRef(false);
 
   useEffect(() => {
     if (!ready) {
@@ -35,6 +48,7 @@ export function RootNavigator() {
     if (!user) {
       hadUser.current = false;
       setDraft(null);
+      setNeedsSetup(false);
       setProfileReady(true);
       router.reset('splash');
       return;
@@ -48,6 +62,10 @@ export function RootNavigator() {
       if (cancelled) {
         return;
       }
+      // Email sign-ups finish onboarding before the account exists; OAuth
+      // sign-ups get an account first and still owe a profile.
+      const provider = user.app_metadata?.provider;
+      setNeedsSetup(!stored && !!provider && provider !== 'email');
       setDraft(draftFromUser(user, stored));
       setProfileReady(true);
     });
@@ -110,12 +128,52 @@ export function RootNavigator() {
     [resetPassword],
   );
 
-  const handleGoogle = useCallback(() => {
-    Alert.alert(
-      'Google coming next',
-      'Email and password are connected. Google sign-in needs a provider set up in Supabase.',
-    );
-  }, []);
+  const handleVerifyResetCode = useCallback(
+    async (email: string, code: string) => {
+      const {error} = await verifyResetCode(email, code);
+      return error;
+    },
+    [verifyResetCode],
+  );
+
+  const handleUpdatePassword = useCallback(
+    async (newPassword: string) => {
+      const {error} = await updateRecoveredPassword(newPassword);
+      return error;
+    },
+    [updateRecoveredPassword],
+  );
+
+  const handleGoogle = useCallback(async () => {
+    if (googleBusy.current) {
+      return;
+    }
+    googleBusy.current = true;
+    const {error} = await signInWithGoogle();
+    googleBusy.current = false;
+    if (error) {
+      Alert.alert('Google sign-in failed', error);
+    }
+  }, [signInWithGoogle]);
+
+  const handleOAuthSetup = useCallback(
+    async (completed: OnboardingDraft) => {
+      if (!user?.id) {
+        return;
+      }
+      try {
+        await saveProfile(user.id, completed);
+      } catch {
+        Alert.alert(
+          'Could not save to Supabase',
+          'Your setup is on this device. Check your connection, then save your profile again from Profile.',
+        );
+      }
+      setDraft(completed);
+      setNeedsSetup(false);
+    },
+    [user?.id],
+  );
 
   const handleProfileSave = useCallback(
     async (updated: OnboardingDraft, options?: SaveProfileOptions) => {
@@ -143,6 +201,16 @@ export function RootNavigator() {
           <SplashScreen
             ready={false}
             onGetStarted={() => {}}
+          />
+        );
+      }
+
+      if (session && draft && needsSetup) {
+        return (
+          <OnboardingFlow
+            initialDraft={draft}
+            passwordless
+            onComplete={handleOAuthSetup}
           />
         );
       }
@@ -182,6 +250,9 @@ export function RootNavigator() {
               onSubmit={handleSignIn}
               onCreateAccount={() => router.replace('onboarding')}
               onForgotPassword={handleForgot}
+              onVerifyResetCode={handleVerifyResetCode}
+              onUpdatePassword={handleUpdatePassword}
+              onCancelReset={cancelPasswordReset}
               onGoogle={handleGoogle}
               onBack={router.pop}
             />
@@ -203,9 +274,14 @@ export function RootNavigator() {
       draft,
       handleComplete,
       handleForgot,
+      handleVerifyResetCode,
+      handleUpdatePassword,
+      cancelPasswordReset,
       handleGoogle,
+      handleOAuthSetup,
       handleProfileSave,
       handleSignIn,
+      needsSetup,
       profileReady,
       ready,
       router,
@@ -216,7 +292,9 @@ export function RootNavigator() {
 
   return (
     <SlideSwap
-      swapKey={session && draft ? 'home' : router.route}
+      swapKey={
+        session && draft ? (needsSetup ? 'setup' : 'home') : router.route
+      }
       direction={router.direction}
       distance={travel.screen}
       render={renderRoute}

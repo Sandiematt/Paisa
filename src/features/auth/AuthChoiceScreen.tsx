@@ -60,7 +60,7 @@ export function AuthChoiceScreen({
 
           <DividerLabel label="or" style={styles.divider} />
 
-          <GoogleButton label="Sign in with Google" onPress={onGoogle} />
+          <GoogleButton label="Sign up with Google" onPress={onGoogle} />
 
           <View style={styles.footer}>
             <AppText variant="body" color={colors.inkSecondary}>

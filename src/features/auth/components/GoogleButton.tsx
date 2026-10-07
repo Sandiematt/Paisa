@@ -9,14 +9,14 @@ type GoogleButtonProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Official Google G (FirebaseUI asset). OAuth provider wiring comes next. */
+/** Official Google G (FirebaseUI asset). */
 export function GoogleButton({label, onPress, style}: GoogleButtonProps) {
   return (
     <SecondaryButton
       label={label}
       onPress={onPress}
       style={style}
-      accessibilityHint="Google sign-in is not connected yet"
+      accessibilityHint="Opens Google to sign in"
       leading={
         <Image
           source={require('../../../../assets/brand/google-g.png')}
