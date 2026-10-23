@@ -27,6 +27,7 @@ import {
 } from '../../components/icons/Glyphs';
 import {AppText, DividerLabel, PressableScale} from '../../components/ui';
 import {formatAmountInput, parseAmountInput} from '../../lib/formatMoney';
+import {buildTransactionPayload} from './transactionPayload';
 import {
   categoryByName,
   categoryForSlug,
@@ -409,25 +410,31 @@ export function AddTransactionScreen({
       } else if (!categoryRow && chip?.label) {
         categoryRow = await findOrCreateUserCategory(chip.label, kind);
       }
-      const payload = {
+      const built = buildTransactionPayload({
+        amount,
         type: kind,
-        amount: numericAmount,
         categoryId: categoryRow?.id ?? null,
-        description: categoryRow?.name ?? categoryName,
-        merchant:
-          existing?.merchant?.trim() ||
-          categoryRow?.name ||
-          categoryName,
+        categoryName: categoryRow?.name ?? categoryName,
         transactionDate: localDateISO(occurredOn),
-        notes: note.trim() || null,
-      };
-      const saved = existing
-        ? await updateTransaction(existing.id, {
-            ...payload,
-            paymentMethod: existing.paymentMethod,
-            isRecurring: existing.isRecurring,
-          })
-        : await createTransaction({...payload, kind: 'regular'});
+        note,
+        existing,
+        oldCategoryName:
+          dbCategories.find(row => row.id === existing?.categoryId)?.name ??
+          null,
+      });
+      if (!built.ok) {
+        Alert.alert('Check the amount', built.error);
+        return;
+      }
+      const saved =
+        built.mode === 'update' && existing
+          ? await updateTransaction(existing.id, built.patch)
+          : built.mode === 'create'
+            ? await createTransaction(built.payload)
+            : null;
+      if (!saved) {
+        return;
+      }
       onSaved?.(saved);
       onClose();
     } catch (caught) {
