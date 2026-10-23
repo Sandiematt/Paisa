@@ -297,6 +297,25 @@ function healthBreakdown(
   };
 }
 
+export function budgetForDay(monthlyAmount: number, day: Date): number {
+  if (!Number.isFinite(monthlyAmount) || monthlyAmount <= 0) {
+    return 0;
+  }
+  return monthlyAmount / daysInMonth(day.getFullYear(), day.getMonth());
+}
+
+export function budgetForSpan(
+  monthlyAmount: number,
+  start: Date,
+  end: Date,
+): number {
+  let total = 0;
+  for (let day = startOfDay(start); day.getTime() <= end.getTime(); day = addDays(day, 1)) {
+    total += budgetForDay(monthlyAmount, day);
+  }
+  return roundMoney(total);
+}
+
 export function scaleMonthly(
   amount: number,
   range: HomeRange,
@@ -305,11 +324,8 @@ export function scaleMonthly(
   if (!Number.isFinite(amount) || amount <= 0) {
     return 0;
   }
-  if (range === 'week') {
-    const days = daysInMonth(now.getFullYear(), now.getMonth());
-    return roundMoney(amount * (7 / Math.max(days, 1)));
-  }
-  return roundMoney(amount);
+  const period = periodFor(range, now);
+  return budgetForSpan(amount, period.start, period.end);
 }
 
 export function yearlyFromMonthly(amount: number): number {

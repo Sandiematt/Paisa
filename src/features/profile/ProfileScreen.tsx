@@ -40,7 +40,7 @@ import {colors, duration, easing, fonts, radii, shadows} from '../../theme';
 import {
   currencyByCode,
 } from '../onboarding/constants';
-import {scaleMonthly, yearlyFromMonthly} from '../home/homeReport';
+import {budgetForDay, scaleMonthly, yearlyFromMonthly} from '../home/homeReport';
 import {GoalId, OnboardingDraft} from '../onboarding/types';
 import {useBiometricLock} from '../security/BiometricLockProvider';
 import {AvatarPickerModal} from './AvatarPickerModal';
@@ -365,7 +365,7 @@ export function ProfileScreen({
 
   const activeCurrency = useMemo(() => currencyByCode(currency), [currency]);
   const budgetNumber = Number(monthlyBudget) || 0;
-  const perDay = budgetNumber > 0 ? Math.round(budgetNumber / 30) : 0;
+  const perDay = budgetNumber > 0 ? Math.round(budgetForDay(budgetNumber, new Date())) : 0;
   const savingsNumber = Number(monthlySavingsGoal) || 0;
   const leftover =
     Number(draft.monthlyIncome) > 0 && budgetNumber > 0

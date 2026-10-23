@@ -1,4 +1,8 @@
-import {buildHomeReport} from '../src/features/home/homeReport';
+import {
+  buildHomeReport,
+  budgetForDay,
+  budgetForSpan,
+} from '../src/features/home/homeReport';
 import {CategoryRow} from '../src/lib/categoriesStore';
 import {TransactionRow} from '../src/lib/transactionsStore';
 
@@ -510,5 +514,69 @@ describe('buildHomeReport', () => {
     expect(report.monthlyActualSavings).toBe(28420);
     expect(report.monthlySavingsVsTarget).toBe(27420);
     expect(report.monthlySavingsUsesPlannedIncome).toBe(false);
+  });
+
+  describe('per-day prorated budget', () => {
+    const plan = {
+      monthlyIncome: 0,
+      monthlyBudget: 3000,
+      monthlySavingsGoal: 900,
+    };
+
+    it('prorates a week inside one month at that month rate', () => {
+      const report = buildHomeReport([], [housing], 'week', new Date(2025, 8, 17), plan);
+      expect(report.budget).toBe(700);
+      expect(report.periodSavingsTarget).toBe(210);
+    });
+
+    it('splits a week spanning September and October per day', () => {
+      const spent = tx({
+        id: 's1',
+        type: 'expense',
+        amount: 500,
+        categoryId: 'cat-housing',
+        transactionDate: '2025-10-01',
+      });
+      const report = buildHomeReport([spent], [housing], 'week', new Date(2025, 9, 2), plan);
+      // Mon 29 Sep - Tue 30 Sep at 3000/30, Wed 1 Oct - Sun 5 Oct at 3000/31
+      expect(report.budget).toBe(683.87);
+      expect(report.periodSavingsTarget).toBe(205.16);
+      expect(report.remainingBudget).toBe(183.87);
+      expect(report.overBudget).toBe(false);
+      expect(report.spendRatio).toBe(73);
+    });
+
+    it('flags over budget against the prorated budget', () => {
+      const spent = tx({
+        id: 's2',
+        type: 'expense',
+        amount: 700,
+        categoryId: 'cat-housing',
+        transactionDate: '2025-10-01',
+      });
+      const report = buildHomeReport([spent], [housing], 'week', new Date(2025, 9, 2), plan);
+      expect(report.overBudget).toBe(true);
+      expect(report.remainingBudget).toBe(-16.13);
+      expect(report.spendRatio).toBe(102);
+    });
+
+    it('gives the full monthly amount for a whole month', () => {
+      const odd = {monthlyIncome: 0, monthlyBudget: 10000, monthlySavingsGoal: 3333};
+      for (const month of [1, 8, 9]) {
+        const report = buildHomeReport([], [housing], 'month', new Date(2025, month, 10), odd);
+        expect(report.budget).toBe(10000);
+        expect(report.periodSavingsTarget).toBe(3333);
+      }
+    });
+
+    it('exposes the budget for a single day', () => {
+      expect(budgetForDay(3000, new Date(2025, 8, 29))).toBe(100);
+      expect(budgetForDay(3100, new Date(2025, 9, 1))).toBe(100);
+      expect(budgetForDay(0, new Date(2025, 9, 1))).toBe(0);
+    });
+
+    it('sums a date span across months', () => {
+      expect(budgetForSpan(3000, new Date(2025, 8, 29), new Date(2025, 9, 5))).toBe(683.87);
+    });
   });
 });
