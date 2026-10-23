@@ -55,13 +55,13 @@ export type HomeReport = {
   monthlySavingsGoal: number;
   monthlyActualSavings: number;
   monthlySavingsVsTarget: number;
-  monthlySavingsUsesPlannedIncome: boolean;
+  monthlySavingsState: SavingsState;
   periodSavingsTarget: number;
   plannedSavings: number;
   periodPlannedSavings: number;
   actualSavings: number;
   savingsVsTarget: number;
-  savingsUsesPlannedIncome: boolean;
+  savingsState: SavingsState;
   planFeasible: boolean;
   overBudget: boolean;
   series: number[];
@@ -355,6 +355,19 @@ export function rangePlanTitle(
   return kind === 'budget' ? `${prefix} budget` : `${prefix} savings goal`;
 }
 
+export type SavingsState =
+  | { kind: 'no-income' }
+  | { kind: 'positive'; amount: number }
+  | { kind: 'negative'; overspend: number };
+
+function savingsStateFor(income: number, spent: number): SavingsState {
+  if (income <= 0) return { kind: 'no-income' };
+  const net = roundMoney(income - spent);
+  return net >= 0
+    ? { kind: 'positive', amount: net }
+    : { kind: 'negative', overspend: roundMoney(-net) };
+}
+
 type PlanInsight = {
   remainingBudget: number;
   budget: number;
@@ -366,7 +379,7 @@ type PlanInsight = {
   periodPlannedSavings: number;
   actualSavings: number;
   savingsVsTarget: number;
-  savingsUsesPlannedIncome: boolean;
+  savingsState: SavingsState;
   planFeasible: boolean;
   overBudget: boolean;
   health: number;
@@ -402,12 +415,13 @@ function planInsight(
   const periodPlannedSavings = roundMoney(periodPlannedIncome - periodBudget);
   const planFeasible =
     monthlySavingsGoal <= 0 || plannedSavings + 0.004 >= monthlySavingsGoal;
-  const savingsUsesPlannedIncome =
-    actualIncome <= 0 && periodPlannedIncome > 0;
-  const incomeForSavings = savingsUsesPlannedIncome
-    ? periodPlannedIncome
-    : actualIncome;
-  const actualSavings = roundMoney(incomeForSavings - spent);
+  const savingsState = savingsStateFor(actualIncome, spent);
+  const actualSavings =
+    savingsState.kind === 'positive'
+      ? savingsState.amount
+      : savingsState.kind === 'negative'
+        ? -savingsState.overspend
+        : 0;
   const savingsVsTarget = roundMoney(actualSavings - periodSavingsTarget);
   const spendRatio =
     periodBudget > 0 ? Math.round((spent / periodBudget) * 100) : 0;
@@ -436,7 +450,7 @@ function planInsight(
       periodPlannedSavings,
       actualSavings,
       savingsVsTarget,
-      savingsUsesPlannedIncome,
+      savingsState,
       planFeasible,
       overBudget: false,
       health: 0,
@@ -464,7 +478,7 @@ function planInsight(
       periodPlannedSavings,
       actualSavings,
       savingsVsTarget,
-      savingsUsesPlannedIncome,
+      savingsState,
       planFeasible,
       overBudget,
       health: 0,
@@ -492,7 +506,7 @@ function planInsight(
       periodPlannedSavings,
       actualSavings,
       savingsVsTarget,
-      savingsUsesPlannedIncome,
+      savingsState,
       planFeasible,
       overBudget,
       health: Math.max(0, Math.min(100, 100 - spendRatio)),
@@ -519,7 +533,7 @@ function planInsight(
     periodPlannedSavings,
     actualSavings,
     savingsVsTarget,
-    savingsUsesPlannedIncome,
+    savingsState,
     planFeasible,
     overBudget,
     health: planTone === 'poor' ? 35 : 100,
@@ -784,13 +798,13 @@ export function buildHomeReport(
     monthlySavingsGoal: insight.monthlySavingsGoal,
     monthlyActualSavings: monthInsight.actualSavings,
     monthlySavingsVsTarget: monthInsight.savingsVsTarget,
-    monthlySavingsUsesPlannedIncome: monthInsight.savingsUsesPlannedIncome,
+    monthlySavingsState: monthInsight.savingsState,
     periodSavingsTarget: insight.periodSavingsTarget,
     plannedSavings: insight.plannedSavings,
     periodPlannedSavings: insight.periodPlannedSavings,
     actualSavings: insight.actualSavings,
     savingsVsTarget: insight.savingsVsTarget,
-    savingsUsesPlannedIncome: insight.savingsUsesPlannedIncome,
+    savingsState: insight.savingsState,
     planFeasible: insight.planFeasible,
     overBudget: insight.overBudget,
     series,

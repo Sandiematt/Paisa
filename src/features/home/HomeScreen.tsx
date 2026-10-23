@@ -11,6 +11,8 @@ import {
   View,
 } from 'react-native';
 
+import {Warning} from 'phosphor-react-native';
+
 import {
   ArrowDownRightIcon,
   ChevronRightIcon,
@@ -30,7 +32,14 @@ import {colors, fonts, layout, radii, shadows} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {DonutChart} from './charts';
 import {HomeAmbient} from './HomeAmbient';
-import {HomeRange, HomeReport, SpendSlice, rangeScopeLabel} from './homeReport';
+import {
+  HomeRange,
+  HomeReport,
+  SavingsState,
+  SpendSlice,
+  rangeNoun,
+  rangeScopeLabel,
+} from './homeReport';
 
 type DashboardStatus = 'loading' | 'ready' | 'error';
 
@@ -388,12 +397,16 @@ type MetricCardProps = {
   title: string;
   amount: number;
   amountColor: string;
+  amountText?: string;
   currencySymbol: string;
   progress: number;
   progressColor: string;
   progressGradient?: [string, string];
-  footerLeft: string;
+  footerLeft?: string;
   footerTone: string;
+  hideProgress?: boolean;
+  warningLine?: string;
+  amountIcon?: React.ReactNode;
   accessibilityLabel: string;
   icon: React.ReactNode;
   iconBackground: string;
@@ -405,12 +418,16 @@ function MetricCard({
   title,
   amount,
   amountColor,
+  amountText,
   currencySymbol,
   progress,
   progressColor,
   progressGradient,
   footerLeft,
   footerTone,
+  hideProgress,
+  warningLine,
+  amountIcon,
   accessibilityLabel,
   icon,
   iconBackground,
@@ -437,22 +454,34 @@ function MetricCard({
         </View>
         <ChevronRightIcon color={colors.inkMuted} size={16} />
       </View>
-      <Text
-        fontFamily={fonts.outfitBold}
-        fontSize={22}
-        lineHeight={26}
-        fontWeight="700"
-        color={amountColor}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-        style={tabular}>
-        {formatMoney(amount, currencySymbol, {decimals: 0})}
-      </Text>
-      <ProgressBar progress={progress} color={progressColor} gradient={progressGradient} />
-      <Text fontFamily={fonts.interMedium} fontSize={11} lineHeight={15} fontWeight="500" color={footerTone}>
-        {footerLeft}
-      </Text>
+      <View style={styles.metricAmountRow}>
+        {amountIcon}
+        <Text
+          fontFamily={fonts.outfitBold}
+          fontSize={amountText ? 18 : 22}
+          lineHeight={26}
+          fontWeight="700"
+          color={amountColor}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.7}
+          style={[tabular, styles.metricAmountText]}>
+          {amountText ?? formatMoney(amount, currencySymbol, {decimals: 0})}
+        </Text>
+      </View>
+      {hideProgress ? null : (
+        <ProgressBar progress={progress} color={progressColor} gradient={progressGradient} />
+      )}
+      {warningLine ? (
+        <Text fontFamily={fonts.interMedium} fontSize={11} lineHeight={15} fontWeight="500" color={colors.danger}>
+          {warningLine}
+        </Text>
+      ) : null}
+      {footerLeft ? (
+        <Text fontFamily={fonts.interMedium} fontSize={11} lineHeight={15} fontWeight="500" color={footerTone}>
+          {footerLeft}
+        </Text>
+      ) : null}
       </GlassPanel>
     </PressableScale>
   );
@@ -503,7 +532,7 @@ function SavingsGoalCard({
   actualSavings,
   periodSavingsTarget,
   savingsVsTarget,
-  savingsUsesPlannedIncome: _savingsUsesPlannedIncome,
+  savingsState,
   currencySymbol,
   range,
   onPress,
@@ -511,12 +540,60 @@ function SavingsGoalCard({
   actualSavings: number;
   periodSavingsTarget: number;
   savingsVsTarget: number;
-  savingsUsesPlannedIncome: boolean;
+  savingsState: SavingsState;
   currencySymbol: string;
   range: HomeRange;
   onPress?: () => void;
 }) {
   const scope = rangeScopeLabel(range);
+
+  if (savingsState.kind === 'no-income') {
+    return (
+      <MetricCard
+        title="Savings"
+        amount={0}
+        amountText="No income recorded"
+        amountColor={colors.inkMuted}
+        currencySymbol={currencySymbol}
+        progress={0}
+        progressColor={colors.inkMuted}
+        hideProgress
+        footerTone={colors.inkMuted}
+        icon={<TrendingUpIcon color={colors.inkMuted} size={14} />}
+        iconBackground={TINTS.income}
+        iconBorder="#3F7A4E33"
+        accessibilityLabel={`Savings goal, no income recorded ${scope}`}
+        onPress={onPress}
+      />
+    );
+  }
+
+  if (savingsState.kind === 'negative') {
+    const overspend = formatMoney(savingsState.overspend, currencySymbol, {
+      decimals: 0,
+    });
+    const line = `You spent ${overspend} more than you earned this ${rangeNoun(range)}`;
+    return (
+      <MetricCard
+        title="Savings"
+        amount={-savingsState.overspend}
+        amountColor={colors.danger}
+        amountIcon={<Warning size={18} weight="fill" color={colors.danger} />}
+        currencySymbol={currencySymbol}
+        progress={0}
+        progressColor={colors.danger}
+        hideProgress
+        warningLine={line}
+        footerTone={colors.danger}
+        icon={<TrendingUpIcon color={colors.danger} size={14} />}
+        iconBackground={TINTS.expense}
+        iconBorder="#C0523A33"
+        accessibilityLabel={`Savings goal, negative ${overspend}. ${line}`}
+        onPress={onPress}
+      />
+    );
+  }
+
   const saved = Math.max(0, actualSavings);
   const onTrack = savingsVsTarget >= 0;
   const progress =
@@ -812,7 +889,7 @@ export function HomeScreen({
                 actualSavings={data.actualSavings}
                 periodSavingsTarget={data.periodSavingsTarget}
                 savingsVsTarget={data.savingsVsTarget}
-                savingsUsesPlannedIncome={data.savingsUsesPlannedIncome}
+                savingsState={data.savingsState}
                 currencySymbol={currencySymbol}
                 range={range}
                 onPress={onSavingsPress}
@@ -987,6 +1064,14 @@ const styles = StyleSheet.create({
   metricCard: {
     padding: 16,
     gap: 12,
+  },
+  metricAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  metricAmountText: {
+    flexShrink: 1,
   },
   metricTitle: {
     flexDirection: 'row',

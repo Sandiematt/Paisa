@@ -218,9 +218,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           periodSavingsTarget={report.periodSavingsTarget ?? 0}
           actualSavings={report.actualSavings ?? 0}
           savingsVsTarget={report.savingsVsTarget ?? 0}
-          savingsUsesPlannedIncome={
-            report.savingsUsesPlannedIncome ?? false
-          }
+          savingsState={report.savingsState ?? {kind: 'no-income'}}
           range={report.range ?? 'month'}
         />
 

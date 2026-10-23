@@ -6,12 +6,19 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import {Warning} from 'phosphor-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {AppText, BackButton, ProgressBar} from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
 import {colors, layout, radii, spacing} from '../../theme';
-import {HomeRange, scaleMonthly, yearlyFromMonthly} from './homeReport';
+import {
+  HomeRange,
+  SavingsState,
+  rangeNoun,
+  scaleMonthly,
+  yearlyFromMonthly,
+} from './homeReport';
 
 type SavingsDetailsScreenProps = {
   visible: boolean;
@@ -21,7 +28,7 @@ type SavingsDetailsScreenProps = {
   periodSavingsTarget: number;
   actualSavings: number;
   savingsVsTarget: number;
-  savingsUsesPlannedIncome: boolean;
+  savingsState: SavingsState;
   range: HomeRange;
 };
 
@@ -40,7 +47,7 @@ export function SavingsDetailsScreen({
   periodSavingsTarget,
   actualSavings,
   savingsVsTarget,
-  savingsUsesPlannedIncome,
+  savingsState,
   range,
 }: SavingsDetailsScreenProps) {
   const insets = useSafeAreaInsets();
@@ -52,6 +59,11 @@ export function SavingsDetailsScreen({
   const weeklyPace = scaleMonthly(monthlySavingsGoal, 'week', new Date());
   const yearlyPotential = yearlyFromMonthly(monthlySavingsGoal);
   const periodLabel = rangeWord(range);
+  const noIncome = savingsState.kind === 'no-income';
+  const overspend =
+    savingsState.kind === 'negative'
+      ? formatMoney(savingsState.overspend, currencySymbol, {decimals: 0})
+      : null;
 
   return (
     <Modal
@@ -77,6 +89,15 @@ export function SavingsDetailsScreen({
             {paddingBottom: Math.max(insets.bottom, spacing.section)},
           ]}
           showsVerticalScrollIndicator={false}>
+          {overspend ? (
+            <View style={styles.warningRow} accessibilityRole="alert">
+              <Warning size={18} weight="fill" color={colors.danger} />
+              <AppText variant="bodyStrong" color={colors.danger} style={styles.warningText}>
+                You spent {overspend} more than you earned this {rangeNoun(range)}
+              </AppText>
+            </View>
+          ) : null}
+
           <View style={styles.card}>
             <AppText variant="caption" color={colors.inkMuted} style={styles.cardLabel}>
               {range === 'month'
@@ -101,11 +122,13 @@ export function SavingsDetailsScreen({
                 <AppText variant="caption" color={colors.inkMuted}>
                   {Math.round(progress * 100)}% of {periodLabel}'s goal
                 </AppText>
-                <AppText
-                  variant="caption"
-                  color={onTrack ? colors.positive : colors.danger}>
-                  {onTrack ? 'On track' : 'Off track'}
-                </AppText>
+                {noIncome ? null : (
+                  <AppText
+                    variant="caption"
+                    color={onTrack ? colors.positive : colors.danger}>
+                    {onTrack ? 'On track' : 'Off track'}
+                  </AppText>
+                )}
               </View>
             </View>
             {range !== 'month' && periodSavingsTarget > 0 ? (
@@ -113,11 +136,6 @@ export function SavingsDetailsScreen({
                 Target {periodLabel} is{' '}
                 {formatMoney(periodSavingsTarget, currencySymbol, {decimals: 0})}{' '}
                 from the monthly goal.
-              </AppText>
-            ) : null}
-            {savingsUsesPlannedIncome ? (
-              <AppText variant="caption" color={colors.inkMuted} style={styles.derivedNote}>
-                Progress uses planned income minus spend until income is logged.
               </AppText>
             ) : null}
           </View>
@@ -130,14 +148,20 @@ export function SavingsDetailsScreen({
               </AppText>
               <AppText
                 variant="heading"
-                color={colors.ink}
+                color={
+                  savingsState.kind === 'negative'
+                    ? colors.danger
+                    : noIncome
+                      ? colors.inkMuted
+                      : colors.ink
+                }
                 numberOfLines={1}
                 adjustsFontSizeToFit
                 minimumFontScale={0.7}
                 style={styles.statAmount}>
-                {formatMoney(Math.max(0, actualSavings), currencySymbol, {
-                  decimals: 0,
-                })}
+                {noIncome
+                  ? 'No income recorded'
+                  : formatMoney(actualSavings, currencySymbol, {decimals: 0})}
               </AppText>
             </View>
 
@@ -259,6 +283,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  warningRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  warningText: {
+    flex: 1,
   },
   derivedNote: {
     marginTop: spacing.md,

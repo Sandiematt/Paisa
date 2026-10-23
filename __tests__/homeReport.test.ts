@@ -281,7 +281,7 @@ describe('buildHomeReport', () => {
     expect(report.overBudget).toBe(true);
     expect(report.planFeasible).toBe(true);
     expect(report.planLabel).toBe('On track');
-    expect(report.actualSavings).toBe(1000);
+    expect(report.savingsState).toEqual({ kind: 'positive', amount: 1000 });
     expect(report.insightKicker).toBe('Spending');
     expect(report.healthLabel).toBe('Off track');
     expect(report.spendRatio).toBe(150);
@@ -307,8 +307,7 @@ describe('buildHomeReport', () => {
     expect(report.overBudget).toBe(false);
     expect(report.planFeasible).toBe(false);
     expect(report.plannedSavings).toBe(1000);
-    expect(report.actualSavings).toBe(9900);
-    expect(report.savingsUsesPlannedIncome).toBe(true);
+    expect(report.savingsState).toEqual({ kind: 'no-income' });
     expect(report.healthLabel).toBe('On track');
     expect(report.planLabel).toBe('Off track');
     expect(report.planHint.toLowerCase()).toContain('month');
@@ -339,7 +338,7 @@ describe('buildHomeReport', () => {
     });
 
     expect(report.actualSavings).toBe(1500);
-    expect(report.savingsUsesPlannedIncome).toBe(false);
+    expect(report.savingsState).toEqual({ kind: 'positive', amount: 1500 });
     expect(report.plannedSavings).toBe(10000);
     expect(report.monthlySavingsGoal).toBe(5000);
     expect(report.overBudget).toBe(false);
@@ -349,7 +348,7 @@ describe('buildHomeReport', () => {
     expect(report.insightKicker).toBe('Spending');
   });
 
-  it('uses planned income minus expenses when no income is logged', () => {
+  it('reports no income and ignores planned income for savings', () => {
     const rows = [
       tx({
         id: 'coffee',
@@ -366,10 +365,56 @@ describe('buildHomeReport', () => {
       monthlySavingsGoal: 5000,
     });
 
-    expect(report.actualSavings).toBe(28000);
-    expect(report.savingsUsesPlannedIncome).toBe(true);
+    expect(report.savingsState).toEqual({ kind: 'no-income' });
     expect(report.planFeasible).toBe(true);
+    expect(report.plannedSavings).toBe(10000);
     expect(report.overBudget).toBe(false);
+  });
+
+  it('reports negative savings with the overspend amount', () => {
+    const rows = [
+      tx({
+        id: 'pay',
+        type: 'income',
+        amount: 1000,
+        categoryId: null,
+        transactionDate: '2026-09-02',
+      }),
+      tx({
+        id: 'rent',
+        type: 'expense',
+        amount: 1750.5,
+        categoryId: 'cat-housing',
+        transactionDate: '2026-09-03',
+      }),
+    ];
+
+    const report = buildHomeReport(rows, [housing], 'month', now);
+
+    expect(report.savingsState).toEqual({ kind: 'negative', overspend: 750.5 });
+  });
+
+  it('treats exactly zero savings as positive when income was recorded', () => {
+    const rows = [
+      tx({
+        id: 'pay',
+        type: 'income',
+        amount: 1000,
+        categoryId: null,
+        transactionDate: '2026-09-02',
+      }),
+      tx({
+        id: 'rent',
+        type: 'expense',
+        amount: 1000,
+        categoryId: 'cat-housing',
+        transactionDate: '2026-09-03',
+      }),
+    ];
+
+    const report = buildHomeReport(rows, [housing], 'month', now);
+
+    expect(report.savingsState).toEqual({ kind: 'positive', amount: 0 });
   });
 
   it('keeps week income and spend on this Monday–Sunday only', () => {
@@ -494,6 +539,7 @@ describe('buildHomeReport', () => {
       monthlySavingsGoal: 1000,
     });
 
+    expect(report.savingsState).toEqual({ kind: 'positive', amount: 28420 });
     expect(report.actualSavings).toBe(28420);
     expect(report.monthlySavingsGoal).toBe(1000);
     expect(report.periodSavingsTarget).toBe(233.33);
@@ -513,7 +559,10 @@ describe('buildHomeReport', () => {
     expect(report.monthlySpendRatio).toBe(108);
     expect(report.monthlyActualSavings).toBe(28420);
     expect(report.monthlySavingsVsTarget).toBe(27420);
-    expect(report.monthlySavingsUsesPlannedIncome).toBe(false);
+    expect(report.monthlySavingsState).toEqual({
+      kind: 'positive',
+      amount: 28420,
+    });
   });
 
   describe('per-day prorated budget', () => {
