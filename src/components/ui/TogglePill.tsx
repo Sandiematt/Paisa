@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
     borderRadius: radii.pill,
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   label: {
     ...typography.bodyStrong,

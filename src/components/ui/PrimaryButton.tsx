@@ -15,10 +15,7 @@ type PrimaryButtonProps = {
   accessibilityHint?: string;
 };
 
-/**
- * Ink fill with cream text. Marigold is reserved for progress and selection
- * because white-on-marigold would not clear AA.
- */
+/** Violet fill, white bold label, fully round. The one primary action. */
 export function PrimaryButton({
   label,
   onPress,
@@ -27,6 +24,7 @@ export function PrimaryButton({
   style,
   accessibilityHint,
 }: PrimaryButtonProps) {
+  const labelColor = disabled ? colors.muted : colors.text;
   return (
     <PressableScale
       onPress={onPress}
@@ -39,16 +37,13 @@ export function PrimaryButton({
       style={[styles.surface, disabled && styles.surfaceDisabled]}>
       <View style={styles.row}>
         <AppText
-          variant="bodyStrong"
-          color={disabled ? colors.inkMuted : colors.onInk}
+          variant="heading"
+          color={labelColor}
           numberOfLines={1}>
           {label}
         </AppText>
         {trailing ? (
-          <AppText
-            variant="bodyStrong"
-            color={disabled ? colors.inkMuted : colors.onInk}
-            style={styles.trailing}>
+          <AppText variant="heading" color={labelColor} style={styles.trailing}>
             {trailing}
           </AppText>
         ) : null}
@@ -61,7 +56,7 @@ const styles = StyleSheet.create({
   surface: {
     height: layout.controlHeight,
     borderRadius: radii.pill,
-    backgroundColor: colors.ink,
+    backgroundColor: colors.violet,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xxl,

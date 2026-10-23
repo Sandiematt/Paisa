@@ -1,10 +1,10 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
 
-import {BellGlyph} from '../../components/icons/Glyphs';
+import {Bell} from 'phosphor-react-native';
 import {AppText, PressableScale} from '../../components/ui';
 import {NotificationItem} from '../../lib/notifications/types';
-import {colors, radii, spacing} from '../../theme';
+import {colors, fonts, radii, spacing} from '../../theme';
 import {SheetFrame} from '../profile/ProfileSheets';
 import {useNotifications} from './NotificationsProvider';
 
@@ -66,11 +66,11 @@ function Row({
             style={styles.title}>
             {item.title}
           </AppText>
-          <AppText variant="caption" color={colors.inkMuted}>
+          <AppText variant="caption" color={colors.muted}>
             {relativeTime(item.createdAt)}
           </AppText>
         </View>
-        <AppText variant="caption" color={colors.inkSecondary}>
+        <AppText variant="caption" color={colors.muted}>
           {item.body}
         </AppText>
       </View>
@@ -96,7 +96,8 @@ export function NotificationHistorySheet({
       style={styles.markAll}>
       <AppText
         variant="label"
-        color={unreadCount === 0 ? colors.inkMuted : colors.gold}>
+        color={unreadCount === 0 ? colors.muted : colors.lavender}
+        style={styles.markAllLabel}>
         Mark all read
       </AppText>
     </PressableScale>
@@ -111,12 +112,12 @@ export function NotificationHistorySheet({
       {items.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyBadge}>
-            <BellGlyph color={colors.inkMuted} size={22} />
+            <Bell color={colors.muted} size={24} />
           </View>
           <AppText variant="bodyStrong">Nothing yet</AppText>
           <AppText
             variant="caption"
-            color={colors.inkMuted}
+            color={colors.muted}
             align="center"
             style={styles.emptyText}>
             Budget alerts and expense reminders will show up here.
@@ -148,13 +149,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     padding: spacing.md,
-    borderRadius: radii.card,
+    borderRadius: radii.tile,
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.hairline,
+    borderColor: colors.line,
   },
   rowUnread: {
-    borderColor: colors.accent,
+    borderColor: colors.lavender,
   },
   dotSlot: {
     width: 10,
@@ -164,7 +165,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.accent,
+    backgroundColor: colors.lavender,
   },
   copy: {
     flex: 1,
@@ -178,6 +179,9 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
+  },
+  markAllLabel: {
+    fontFamily: fonts.jakartaSemiBold,
   },
   markAll: {
     minWidth: 44,
@@ -194,7 +198,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.canvasSunk,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xs,

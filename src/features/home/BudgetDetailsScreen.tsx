@@ -1,17 +1,16 @@
-import React from 'react';
-import {
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  View,
-} from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import React, {useMemo} from 'react';
+import {View} from 'react-native';
+import {Wallet} from 'phosphor-react-native';
 
-import {AppText, BackButton, ProgressBar} from '../../components/ui';
+import {AppText, Card, ProgressBar} from '../../components/ui';
+import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
-import {colors, layout, radii, spacing} from '../../theme';
-import {HomeRange, SpendSlice, rangePlanTitle} from '../home/homeReport';
+import {TransactionRow} from '../../lib/transactionsStore';
+import {colors} from '../../theme';
+import {DetailsFrame, HeroCard, StatCard, StatRow, detailsStyles} from './DetailsParts';
+import {relatedTransactions} from './homeInsights';
+import {HomeRange, SpendSlice, rangePlanTitle, rangeScopeLabel} from './homeReport';
+import {RelatedTransactions} from './RelatedTransactions';
 
 type BudgetDetailsScreenProps = {
   visible: boolean;
@@ -24,7 +23,12 @@ type BudgetDetailsScreenProps = {
   overBudget: boolean;
   slices: SpendSlice[];
   range?: HomeRange;
+  transactions?: TransactionRow[];
+  categories?: CategoryRow[];
 };
+
+const EMPTY_ROWS: TransactionRow[] = [];
+const EMPTY_CATEGORIES: CategoryRow[] = [];
 
 export function BudgetDetailsScreen({
   visible,
@@ -37,341 +41,103 @@ export function BudgetDetailsScreen({
   overBudget,
   slices,
   range = 'month',
+  transactions = EMPTY_ROWS,
+  categories = EMPTY_CATEGORIES,
 }: BudgetDetailsScreenProps) {
-  const insets = useSafeAreaInsets();
-
-  const progress =
-    budget > 0 ? Math.max(0, Math.min(1, spent / budget)) : 0;
-
-  const progressColor = overBudget ? colors.danger : colors.accent;
+  const progress = budget > 0 ? Math.max(0, Math.min(1, spent / budget)) : 0;
+  const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
+  const related = useMemo(
+    () => (visible ? relatedTransactions(transactions, range, 'expenses', 8) : EMPTY_ROWS),
+    [range, transactions, visible],
+  );
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}>
-      <View style={[styles.root, {paddingTop: insets.top}]}>
-        <StatusBar barStyle="dark-content" />
-
-        {/* Top bar */}
-        <View style={styles.topBar}>
-          <BackButton onPress={onClose} />
-          <AppText variant="heading" style={styles.screenTitle}>
-            Budget
-          </AppText>
-          {/* spacer to visually centre the title */}
-          <View style={styles.topBarSpacer} />
+    <DetailsFrame visible={visible} title="Budget" onClose={onClose}>
+      <HeroCard label={rangePlanTitle(range, 'budget')} amount={money(budget)}>
+        <View style={detailsStyles.meter}>
+          <ProgressBar
+            progress={progress}
+            gradient={overBudget ? 'rose' : 'primary'}
+            height={10}
+          />
+          <View style={detailsStyles.meterFooter}>
+            <AppText variant="caption" color={colors.muted}>
+              {overBudget ? `${spendRatio}% used` : `${Math.min(100, spendRatio)}% used`}
+            </AppText>
+            <AppText variant="caption" color={overBudget ? colors.roseLight : colors.muted}>
+              {overBudget ? 'Over budget' : 'Within budget'}
+            </AppText>
+          </View>
         </View>
+      </HeroCard>
 
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.content,
-            {paddingBottom: Math.max(insets.bottom, spacing.section)},
-          ]}
-          showsVerticalScrollIndicator={false}>
+      <StatRow>
+        <StatCard label="Spent" value={money(spent)} dotColor={colors.roseLight} />
+        <StatCard
+          label={overBudget ? 'Over by' : 'Remaining'}
+          value={money(Math.abs(remainingBudget))}
+          dotColor={overBudget ? colors.roseLight : colors.mint}
+          valueColor={overBudget ? colors.roseLight : colors.mint}
+        />
+      </StatRow>
 
-          {/* ── Total budget hero card ── */}
-          <View style={styles.card}>
-            <AppText variant="caption" color={colors.inkMuted} style={styles.cardLabel}>
-              {rangePlanTitle(range, 'budget')}
-            </AppText>
-            <AppText
-              variant="numericHero"
-              style={styles.heroAmount}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}>
-              {formatMoney(budget, currencySymbol, {decimals: 0})}
-            </AppText>
-
-            <View style={styles.meterWrap}>
-              <ProgressBar progress={progress} color={progressColor} />
-              <View style={styles.meterFooter}>
-                <AppText variant="caption" color={colors.inkMuted}>
-                  {overBudget ? 'Over budget' : `${Math.min(100, spendRatio)}% used`}
-                </AppText>
-                <AppText
-                  variant="caption"
-                  color={overBudget ? colors.danger : colors.inkMuted}>
-                  {overBudget ? 'Over budget' : 'Within budget'}
-                </AppText>
-              </View>
-            </View>
-          </View>
-
-          {/* ── Spent / Remaining stats row ── */}
-          <View style={styles.statsRow}>
-            {/* Spent */}
-            <View style={styles.statCard}>
-              <View style={[styles.statDot, {backgroundColor: colors.danger}]} />
-              <AppText variant="caption" color={colors.inkMuted} style={styles.statLabel}>
-                Spent
-              </AppText>
-              <AppText
-                variant="heading"
-                color={colors.ink}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
-                style={styles.statAmount}>
-                {formatMoney(spent, currencySymbol, {decimals: 0})}
-              </AppText>
-            </View>
-
-            <View style={styles.statDivider} />
-
-            {/* Remaining */}
-            <View style={styles.statCard}>
+      {slices.length > 0 ? (
+        <Card style={detailsStyles.gap}>
+          <AppText variant="heading" accessibilityRole="header" style={detailsStyles.cardTitle}>
+            By category
+          </AppText>
+          {slices.map((slice, index) => {
+            // Derive amount from the percentage share of total spent.
+            const sliceAmount = (slice.percent / 100) * spent;
+            return (
               <View
-                style={[
-                  styles.statDot,
-                  {backgroundColor: overBudget ? colors.danger : colors.positive},
-                ]}
-              />
-              <AppText variant="caption" color={colors.inkMuted} style={styles.statLabel}>
-                {overBudget ? 'Over by' : 'Remaining'}
-              </AppText>
-              <AppText
-                variant="heading"
-                color={overBudget ? colors.danger : colors.positive}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
-                style={styles.statAmount}>
-                {formatMoney(Math.abs(remainingBudget), currencySymbol, {decimals: 0})}
-              </AppText>
-            </View>
-          </View>
-
-          {/* ── Category breakdown ── */}
-          {slices.length > 0 ? (
-            <View style={styles.card}>
-              <AppText variant="heading" style={styles.sectionTitle}>
-                By Category
-              </AppText>
-
-              {slices.map((slice, idx) => {
-                // Derive amount from the percentage share of total spent
-                const sliceAmount = (slice.percent / 100) * spent;
-
-                return (
-                  <View
-                    key={slice.id}
-                    style={[
-                      styles.categoryRow,
-                      idx < slices.length - 1 && styles.categoryRowBorder,
-                    ]}>
-                    <View style={styles.categoryLeft}>
-                      <View
-                        style={[styles.categoryDot, {backgroundColor: slice.color}]}
-                      />
-                      <AppText
-                        variant="body"
-                        color={colors.ink}
-                        numberOfLines={1}
-                        style={styles.categoryName}>
-                        {slice.label}
-                      </AppText>
-                    </View>
-
-                    <View style={styles.categoryRight}>
-                      <AppText
-                        variant="bodyStrong"
-                        color={colors.ink}
-                        style={styles.categoryAmount}>
-                        {formatMoney(sliceAmount, currencySymbol, {decimals: 0})}
-                      </AppText>
-                      <View style={styles.pctBadge}>
-                        <AppText variant="caption" color={colors.inkMuted}>
-                          {slice.percent}%
-                        </AppText>
-                      </View>
-                    </View>
+                key={slice.id}
+                style={[detailsStyles.listRow, index > 0 && detailsStyles.divider]}>
+                <View style={detailsStyles.meterFooter}>
+                  <View style={detailsStyles.listRowLabel}>
+                    <View style={[detailsStyles.dot, {backgroundColor: slice.color}]} />
+                    <AppText
+                      variant="bodyStrong"
+                      numberOfLines={1}
+                      style={detailsStyles.listRowFlex}>
+                      {slice.label}
+                    </AppText>
                   </View>
-                );
-              })}
-            </View>
-          ) : (
-            /* ── Empty state ── */
-            <View style={styles.emptyCard}>
-              <AppText style={styles.emptyEmoji}>💰</AppText>
-              <AppText variant="heading" align="center" style={styles.emptyTitle}>
-                No spending yet
-              </AppText>
-              <AppText variant="body" color={colors.inkMuted} align="center">
-                Add transactions and they'll appear here, broken down by category.
-              </AppText>
-            </View>
-          )}
-        </ScrollView>
+                  <AppText variant="bodyStrong" style={detailsStyles.tabular}>
+                    {money(sliceAmount)}
+                  </AppText>
+                  <AppText variant="caption" color={colors.muted} style={detailsStyles.pct}>
+                    {slice.percent}%
+                  </AppText>
+                </View>
+                <View style={detailsStyles.sliceBar}>
+                  <ProgressBar progress={slice.percent / 100} color={slice.color} height={4} />
+                </View>
+              </View>
+            );
+          })}
+        </Card>
+      ) : (
+        <Card style={[detailsStyles.gap, detailsStyles.emptyCard]}>
+          <Wallet size={32} weight="fill" color={colors.lavender} />
+          <AppText variant="heading" align="center">
+            No spending yet
+          </AppText>
+          <AppText variant="body" color={colors.muted} align="center">
+            Add transactions and they'll appear here, broken down by category.
+          </AppText>
+        </Card>
+      )}
+
+      <View style={detailsStyles.gap}>
+        <RelatedTransactions
+          title={`Spending ${rangeScopeLabel(range)}`}
+          rows={related}
+          categories={categories}
+          currencySymbol={currencySymbol}
+          emptyText="Nothing spent yet. Your latest expenses will show up here."
+        />
       </View>
-    </Modal>
+    </DetailsFrame>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.canvas,
-  },
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.md,
-  },
-  screenTitle: {
-    flex: 1,
-    textAlign: 'center',
-  },
-  topBarSpacer: {
-    width: 40,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.xl,
-  },
-
-  // Hero budget card
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    padding: spacing.xl,
-    marginBottom: spacing.lg,
-  },
-  cardLabel: {
-    marginBottom: spacing.xs,
-    includeFontPadding: false,
-  },
-  heroAmount: {
-    fontSize: 44,
-    lineHeight: 52,
-    fontWeight: '700',
-    letterSpacing: -1.2,
-    fontVariant: ['tabular-nums'],
-    includeFontPadding: false,
-    marginBottom: spacing.lg,
-  },
-  meterWrap: {
-    gap: spacing.sm,
-  },
-  meterFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-
-  // Stats row
-  statsRow: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
-  },
-  statCard: {
-    flex: 1,
-    padding: spacing.xl,
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: colors.hairline,
-    alignSelf: 'stretch',
-  },
-  statDot: {
-    width: 8,
-    height: 8,
-    borderRadius: radii.pill,
-    marginBottom: spacing.sm,
-  },
-  statLabel: {
-    marginBottom: spacing.xs,
-    includeFontPadding: false,
-  },
-  statAmount: {
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    fontVariant: ['tabular-nums'],
-    includeFontPadding: false,
-  },
-
-  // Category breakdown
-  sectionTitle: {
-    marginBottom: spacing.lg,
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    gap: spacing.md,
-  },
-  categoryRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.hairline,
-  },
-  categoryLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minWidth: 0,
-  },
-  categoryDot: {
-    width: 10,
-    height: 10,
-    borderRadius: radii.pill,
-    flexShrink: 0,
-  },
-  categoryName: {
-    flex: 1,
-    includeFontPadding: false,
-  },
-  categoryRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    flexShrink: 0,
-  },
-  categoryAmount: {
-    fontVariant: ['tabular-nums'],
-    includeFontPadding: false,
-  },
-  pctBadge: {
-    backgroundColor: colors.canvasSunk,
-    borderRadius: radii.chip,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    minWidth: 40,
-    alignItems: 'center',
-  },
-
-  // Empty state
-  emptyCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    padding: spacing.xxxl,
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  emptyEmoji: {
-    fontSize: 36,
-    lineHeight: 44,
-  },
-  emptyTitle: {
-    marginBottom: spacing.xs,
-  },
-});

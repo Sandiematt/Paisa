@@ -1,12 +1,16 @@
 import {Platform, ViewStyle} from 'react-native';
 
-import {colors} from './colors';
+const black = '#000000';
+const violetGlow = '#6D4AFF';
 
-const warm = '#78643C';
-
-function iosShadow(opacity: number, radius: number, offsetY: number): ViewStyle {
+function iosShadow(
+  opacity: number,
+  radius: number,
+  offsetY: number,
+  color: string = black,
+): ViewStyle {
   return {
-    shadowColor: warm,
+    shadowColor: color,
     shadowOpacity: opacity,
     shadowRadius: radius,
     shadowOffset: {width: 0, height: offsetY},
@@ -14,33 +18,36 @@ function iosShadow(opacity: number, radius: number, offsetY: number): ViewStyle 
 }
 
 /**
- * Wonder elevation: warm brown shadows, not cool navy.
+ * DX elevation: dark, soft shadows. Coloured glow is reserved for the violet
+ * add button (`add`) and gradient icon squares (`iconGlow`).
  * Android elevation cannot tint the shadow; keep it low so cards stay soft.
  */
 export const shadows = {
   avatar: Platform.select<ViewStyle>({
-    ios: iosShadow(0.15, 5, 2),
-    default: {elevation: 2, shadowColor: warm},
+    ios: iosShadow(0.4, 5, 2),
+    default: {elevation: 2, shadowColor: black},
   })!,
   card: Platform.select<ViewStyle>({
-    ios: iosShadow(0.12, 14, 8),
-    default: {elevation: 3, shadowColor: warm},
+    ios: iosShadow(0.45, 14, 8),
+    default: {elevation: 3, shadowColor: black},
   })!,
   cardSoft: Platform.select<ViewStyle>({
-    ios: iosShadow(0.1, 10, 6),
-    default: {elevation: 2, shadowColor: warm},
+    ios: iosShadow(0.35, 10, 6),
+    default: {elevation: 2, shadowColor: black},
   })!,
+  /** Floating nav pill: rgba(0,0,0,0.5) 0 12 30. */
   nav: Platform.select<ViewStyle>({
-    ios: iosShadow(0.18, 15, 10),
-    default: {elevation: 8, shadowColor: warm},
+    ios: iosShadow(0.5, 15, 12),
+    default: {elevation: 8, shadowColor: black},
   })!,
+  /** Violet FAB glow: rgba(109,74,255,0.55) 0 10 26. */
   add: Platform.select<ViewStyle>({
-    ios: {
-      shadowColor: colors.accent,
-      shadowOpacity: 0.5,
-      shadowRadius: 7,
-      shadowOffset: {width: 0, height: 4},
-    },
-    default: {elevation: 6, shadowColor: colors.accent},
+    ios: iosShadow(0.55, 13, 10, violetGlow),
+    default: {elevation: 8, shadowColor: violetGlow},
+  })!,
+  /** Gradient icon square glow: rgba(109,74,255,0.45) 0 6 16. */
+  iconGlow: Platform.select<ViewStyle>({
+    ios: iosShadow(0.45, 8, 6, violetGlow),
+    default: {elevation: 4, shadowColor: violetGlow},
   })!,
 } as const;

@@ -32,12 +32,16 @@ export function OnboardingHeader({
             the button appears on step two. */}
         {canGoBack ? <BackButton onPress={onBack} /> : <View style={styles.slot} />}
 
-        <AppText variant="caption" color={colors.inkMuted}>
-          Step {stepIndex + 1} of {stepCount}
+        <AppText variant="label" color={colors.muted}>
+          Step{' '}
+          <AppText variant="bodyStrong" color={colors.text}>
+            {stepIndex + 1}
+          </AppText>{' '}
+          of {stepCount}
         </AppText>
       </View>
 
-      <ProgressBar progress={progress} />
+      <ProgressBar progress={progress} gradient="primary" height={6} />
     </View>
   );
 }

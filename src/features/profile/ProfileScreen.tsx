@@ -1,53 +1,83 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Image,
-  KeyboardAvoidingView,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
-  Switch,
-  TextInput,
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {
+  ArrowRight,
+  CaretRight,
+  Coins,
+  CurrencyInr,
+  DownloadSimple,
+  FileCsv,
+  Fingerprint,
+  Flag,
+  PencilSimple,
+  PiggyBank,
+  SealCheck,
+  SignOut,
+  SquaresFour,
+  Target,
+  Trash,
+  Wallet,
+} from 'phosphor-react-native';
 
+import {CameraGlyph, CheckGlyph} from '../../components/icons/Glyphs';
 import {
-  ChevronLeftIcon,
-  DollarSignIcon,
-  DownloadIcon,
-  LockIcon,
-  LogOutIcon,
-} from '../../components/icons/FeatherIcons';
-import {
-  CameraGlyph,
-  CheckGlyph,
-  PencilGlyph,
-  TrashGlyph,
-} from '../../components/icons/Glyphs';
-import {GlassPanel, PressableScale, Screen, Text} from '../../components/ui';
+  AppText,
+  BackButton,
+  Card,
+  GradientView,
+  PressableScale,
+  ProgressRing,
+  Screen,
+  SectionTitle,
+  SettingsGroup,
+  SettingsRow,
+  ToggleSwitch,
+} from '../../components/ui';
+import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {exportTransactionsCsv} from '../../lib/exportCsv';
+import {transactionsInMonth} from '../../lib/exportMonth';
 import {SaveProfileOptions} from '../../lib/profileStore';
 import {deleteAccount} from '../../lib/supabase/account';
 import {
   loadTransactions,
   walletBalanceFrom,
 } from '../../lib/transactionsStore';
-import {colors, duration, easing, fonts, radii, shadows} from '../../theme';
+import {
+  colors,
+  duration,
+  easing,
+  fonts,
+  radii,
+  shadows,
+  spacing,
+} from '../../theme';
+import {budgetForDay, scaleMonthly, yearlyFromMonthly} from '../home/homeReport';
 import {
   currencyByCode,
+  MIN_CATEGORIES,
 } from '../onboarding/constants';
-import {budgetForDay, scaleMonthly, yearlyFromMonthly} from '../home/homeReport';
 import {GoalId, OnboardingDraft} from '../onboarding/types';
 import {useBiometricLock} from '../security/BiometricLockProvider';
 import {AvatarPickerModal} from './AvatarPickerModal';
-import {ProfileAmbient} from './ProfileAmbient';
-import {NotificationsSettingsSection} from './NotificationsSettingsSection';
+import {useNotificationSettings} from './NotificationsSettingsSection';
+import {ProfileGoalKey, profileCompleteness} from './profileCompleteness';
 import {balanceFieldText, planProfileSave} from './profileSavePlan';
-import {SettingsRow} from './SettingsRow';
-import {SettingsSection} from './SettingsSection';
+import {
+  CategoriesSheet,
+  GoalSheet,
+  MoneySheet,
+  NameSheet,
+} from './ProfileSheets';
 
 type ProfileScreenProps = {
   visible: boolean;
@@ -60,19 +90,44 @@ type ProfileScreenProps = {
   onClose: () => void;
 };
 
+type SheetKey =
+  | 'name'
+  | 'balance'
+  | 'income'
+  | 'budget'
+  | 'savings'
+  | 'categories'
+  | 'goal';
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const TOAST_DURATION_MS = 2200;
+const APP_VERSION = 'v0.0.1 (Beta)';
+const ICON_SIZE = 24;
 
-const INK = '#22201B';
-const MUTED = '#6F634E';
-const ICON = '#6F6553';
-const SAVE = '#C99A3F';
-const CHIP = '#00000008';
-const HAIR = '#00000012';
-const DIVIDER = '#00000010';
-const PREFIX = '#8A7D63';
-const VERIFIED = '#4A7A4A';
-const DANGER = '#B8484A';
+const SHORT_GOAL: Record<GoalId, string> = {
+  track: 'Track spending',
+  save: 'Save more',
+  split: 'Split bills',
+};
+
+const NUDGE: Record<ProfileGoalKey, {text: string; sheet: SheetKey}> = {
+  income: {
+    text: 'Add your monthly income so Paisa can plan what is left after your budget.',
+    sheet: 'income',
+  },
+  budget: {
+    text: 'Set a monthly budget so Paisa can pace your spending day by day.',
+    sheet: 'budget',
+  },
+  savings: {
+    text: 'Set a savings goal so Paisa can cheer you on every month.',
+    sheet: 'savings',
+  },
+  categories: {
+    text: `Pick at least ${MIN_CATEGORIES} categories to track your spending.`,
+    sheet: 'categories',
+  },
+};
 
 function initialsFrom(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -85,13 +140,6 @@ function initialsFrom(name: string): string {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
-function groupDigits(raw: string): string {
-  if (!raw) {
-    return '';
-  }
-  return raw.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
 function formatDerived(amount: number, symbol: string): string {
   const rounded = Math.round(amount * 100) / 100;
   const hasCents = Math.abs(rounded % 1) > 0.001;
@@ -102,55 +150,35 @@ function formatDerived(amount: number, symbol: string): string {
 }
 
 function SaveToast({visible}: {visible: boolean}) {
+  const reducedMotion = useReducedMotion();
   const translateY = useRef(new Animated.Value(-64)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (visible) {
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: 0,
-          duration: duration.enter,
-          easing: easing.out,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: duration.control,
-          easing: easing.out,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      Animated.parallel([
-        Animated.timing(translateY, {
-          toValue: -64,
-          duration: duration.exit,
-          easing: easing.standard,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: duration.exit,
-          easing: easing.standard,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [visible, translateY, opacity]);
+    const move = reducedMotion ? 0 : visible ? 0 : -64;
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: move,
+        duration: visible ? duration.enter : duration.exit,
+        easing: visible ? easing.out : easing.standard,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: visible ? 1 : 0,
+        duration: visible ? duration.control : duration.exit,
+        easing: visible ? easing.out : easing.standard,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [visible, reducedMotion, translateY, opacity]);
 
   return (
     <Animated.View
       pointerEvents="none"
+      accessibilityLiveRegion="polite"
       style={[toastStyles.container, {transform: [{translateY}], opacity}]}>
-      <Text
-        fontFamily={fonts.interSemi}
-        fontSize={15}
-        lineHeight={20}
-        fontWeight="600"
-        color={colors.onInk}>
-        Changes saved ✓
-      </Text>
+      <CheckGlyph color={colors.mint} size={14} />
+      <AppText variant="bodyStrong">Changes saved</AppText>
     </Animated.View>
   );
 }
@@ -159,103 +187,22 @@ const toastStyles = StyleSheet.create({
   container: {
     position: 'absolute',
     top: 62,
-    left: 20,
-    right: 20,
-    backgroundColor: colors.ink,
+    left: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.line,
     borderRadius: radii.card,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    alignItems: 'center',
     zIndex: 100,
     ...shadows.card,
   },
 });
-
-function GlassBack({onPress}: {onPress: () => void}) {
-  return (
-    <PressableScale
-      onPress={onPress}
-      scaleTo={0.92}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel="Go back"
-      style={styles.backFace}>
-      <GlassPanel
-        radius={20}
-        intensity="md"
-        overlayColor="rgba(255,255,255,0.8)"
-        style={styles.backGlass}
-        contentStyle={styles.backInner}>
-        <ChevronLeftIcon color={INK} size={20} />
-      </GlassPanel>
-    </PressableScale>
-  );
-}
-
-function FieldLabel({children}: {children: string}) {
-  return (
-    <Text
-      fontFamily={fonts.interMedium}
-      fontSize={12}
-      lineHeight={16}
-      fontWeight="500"
-      color={MUTED}>
-      {children}
-    </Text>
-  );
-}
-
-function HelperText({children}: {children: string}) {
-  return (
-    <Text
-      fontFamily={fonts.interMedium}
-      fontSize={11}
-      lineHeight={15}
-      fontWeight="500"
-      color={MUTED}>
-      {children}
-    </Text>
-  );
-}
-
-function MoneyField({
-  label,
-  symbol,
-  value,
-  onChangeText,
-  helper,
-}: {
-  label: string;
-  symbol: string;
-  value: string;
-  onChangeText: (next: string) => void;
-  helper?: string;
-}) {
-  return (
-    <View style={styles.fieldStack}>
-      <FieldLabel>{label}</FieldLabel>
-      <View style={styles.inputShell}>
-        <Text
-          fontFamily={fonts.interMedium}
-          fontSize={15}
-          lineHeight={20}
-          color={PREFIX}
-          style={styles.prefix}>
-          {symbol}
-        </Text>
-        <TextInput
-          value={groupDigits(value)}
-          onChangeText={text => onChangeText(text.replace(/[^0-9]/g, ''))}
-          keyboardType="number-pad"
-          placeholder="0"
-          placeholderTextColor={MUTED}
-          style={styles.moneyInput}
-        />
-      </View>
-      {helper ? <HelperText>{helper}</HelperText> : null}
-    </View>
-  );
-}
 
 export function ProfileScreen({
   visible,
@@ -268,6 +215,7 @@ export function ProfileScreen({
 
   const [name, setName] = useState(draft.name);
   const [email, setEmail] = useState(draft.email);
+  const [monthlyIncome, setMonthlyIncome] = useState(draft.monthlyIncome);
   const [monthlyBudget, setMonthlyBudget] = useState(draft.monthlyBudget);
   const [monthlySavingsGoal, setMonthlySavingsGoal] = useState(
     draft.monthlySavingsGoal,
@@ -278,13 +226,15 @@ export function ProfileScreen({
   const [goal, setGoal] = useState<GoalId | null>(draft.goal);
   const [categoryIds, setCategoryIds] = useState<string[]>(draft.categoryIds);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(draft.avatarUrl);
-  const [nameError, setNameError] = useState<string | undefined>();
-  const [nameEditing, setNameEditing] = useState(false);
+  /** Real transactions this month, or null until the ledger has loaded. */
+  const [monthCount, setMonthCount] = useState<number | null>(null);
 
+  const [sheet, setSheet] = useState<SheetKey | null>(null);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const biometricLock = useBiometricLock();
+  const notificationSettings = useNotificationSettings();
   const [biometricBusy, setBiometricBusy] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<'month' | 'all' | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -316,14 +266,14 @@ export function ProfileScreen({
     }
     setName(draft.name);
     setEmail(draft.email);
+    setMonthlyIncome(draft.monthlyIncome);
     setMonthlyBudget(draft.monthlyBudget);
     setMonthlySavingsGoal(draft.monthlySavingsGoal);
     setCurrentBalanceDirty(false);
     setGoal(draft.goal);
     setCategoryIds(draft.categoryIds);
     setAvatarUrl(draft.avatarUrl);
-    setNameError(undefined);
-    setNameEditing(false);
+    setSheet(null);
   }, [draft, visible]);
 
   useEffect(() => {
@@ -339,11 +289,13 @@ export function ProfileScreen({
         const balance = walletBalanceFrom(rows);
         computedBalance.current = balance;
         setCurrentBalance(balanceFieldText(balance));
+        setMonthCount(transactionsInMonth(rows, new Date()).length);
       })
       .catch(() => {
         if (!cancelled) {
           computedBalance.current = 0;
           setCurrentBalance('');
+          setMonthCount(null);
         }
       });
     return () => {
@@ -352,21 +304,30 @@ export function ProfileScreen({
   }, [visible]);
 
   const activeCurrency = useMemo(() => currencyByCode(draft.currency), [draft.currency]);
-  const budgetNumber = Number(monthlyBudget) || 0;
-  const perDay = budgetNumber > 0 ? Math.round(budgetForDay(budgetNumber, new Date())) : 0;
-  const savingsNumber = Number(monthlySavingsGoal) || 0;
-  const leftover =
-    Number(draft.monthlyIncome) > 0 && budgetNumber > 0
-      ? Number(draft.monthlyIncome) - budgetNumber
-      : 0;
-  const weeklyPace = scaleMonthly(savingsNumber, 'week', new Date());
-  const yearlyPotential = yearlyFromMonthly(savingsNumber);
+  const symbol = activeCurrency.symbol;
   const emailVerified = EMAIL_PATTERN.test(email.trim());
+
+  const completeness = profileCompleteness(
+    {monthlyIncome, monthlyBudget, monthlySavingsGoal, categoryIds},
+    MIN_CATEGORIES,
+  );
+  const nudge = completeness.next ? NUDGE[completeness.next] : null;
+
+  const dirty =
+    name !== draft.name ||
+    monthlyIncome !== draft.monthlyIncome ||
+    monthlyBudget !== draft.monthlyBudget ||
+    monthlySavingsGoal !== draft.monthlySavingsGoal ||
+    goal !== draft.goal ||
+    avatarUrl !== draft.avatarUrl ||
+    currentBalanceDirty ||
+    categoryIds.length !== draft.categoryIds.length ||
+    categoryIds.some(id => !draft.categoryIds.includes(id));
 
   const handleSave = () => {
     if (!name.trim()) {
-      setNameError('Please enter your name.');
       Alert.alert('Name needed', 'Add your name before saving.');
+      setSheet('name');
       return;
     }
 
@@ -376,7 +337,7 @@ export function ProfileScreen({
         email: email.trim(),
         currency: draft.currency,
         startingBalance: draft.startingBalance,
-        monthlyIncome: draft.monthlyIncome,
+        monthlyIncome,
         monthlyBudget,
         monthlySavingsGoal,
         goal,
@@ -434,17 +395,22 @@ export function ProfileScreen({
     }
   };
 
-  const exportData = async () => {
+  const runExport = async (scope: 'month' | 'all') => {
     if (exporting) {
       return;
     }
-    setExporting(true);
+    setExporting(scope);
     try {
-      const result = await exportTransactionsCsv(draft.currency);
+      const result = await exportTransactionsCsv(
+        draft.currency,
+        scope === 'month' ? {month: new Date()} : {},
+      );
       if (result.rows === 0) {
         Alert.alert(
           'Nothing to export yet',
-          'Add a transaction first, then export your CSV.',
+          scope === 'month'
+            ? 'Add a transaction this month first, or export all transactions from App settings.'
+            : 'Add a transaction first, then export your CSV.',
         );
       }
     } catch (caught) {
@@ -453,7 +419,7 @@ export function ProfileScreen({
         caught instanceof Error ? caught.message : 'Try again in a moment.',
       );
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   };
 
@@ -501,15 +467,50 @@ export function ProfileScreen({
     );
   };
 
+  const closeSheet = () => setSheet(null);
+
+  const dailyHintFor = (budgetText: string): string | undefined => {
+    const budgetNumber = Number(budgetText) || 0;
+    const perDay =
+      budgetNumber > 0 ? Math.round(budgetForDay(budgetNumber, new Date())) : 0;
+    if (perDay <= 0) {
+      return undefined;
+    }
+    const income = Number(monthlyIncome) || 0;
+    const leftover = income > 0 && budgetNumber > 0 ? income - budgetNumber : 0;
+    const savingsNumber = Number(monthlySavingsGoal) || 0;
+    const perDayText = `${symbol}${perDay.toLocaleString('en-IN')}`;
+    if (leftover === 0) {
+      return `About ${perDayText} / day.`;
+    }
+    return leftover >= savingsNumber
+      ? `About ${perDayText} / day · ${symbol}${leftover.toLocaleString('en-IN')} planned leftover.`
+      : `About ${perDayText} / day · leftover is below the savings goal.`;
+  };
+
   const initials = initialsFrom(name);
-  const dailyHint =
-    perDay > 0
-      ? leftover !== 0
-        ? leftover >= savingsNumber
-          ? `About ${activeCurrency.symbol}${perDay.toLocaleString('en-IN')} / day · ${activeCurrency.symbol}${leftover.toLocaleString('en-IN')} planned leftover.`
-          : `About ${activeCurrency.symbol}${perDay.toLocaleString('en-IN')} / day · leftover is below the savings goal.`
-        : `About ${activeCurrency.symbol}${perDay.toLocaleString('en-IN')} / day.`
+  const monthName = new Date().toLocaleDateString('en-IN', {month: 'long'});
+  const exportingMonth = exporting === 'month';
+  const exportSubtitle = exportingMonth
+    ? 'Preparing your file…'
+    : monthCount === null
+      ? 'Ready to share'
+      : `${monthCount} ${monthCount === 1 ? 'transaction' : 'transactions'}, ready to share`;
+
+  const balanceNumber = Number(currentBalance);
+  const balanceValue =
+    currentBalance !== '' && Number.isFinite(balanceNumber)
+      ? formatDerived(balanceNumber, symbol)
       : undefined;
+  const perMonth = (text: string) =>
+    Number(text) > 0 ? `${formatDerived(Number(text), symbol)} a month` : 'Not set';
+
+  const currencyIcon =
+    activeCurrency.code === 'INR' ? (
+      <CurrencyInr size={ICON_SIZE} color={colors.text} />
+    ) : (
+      <Coins size={ICON_SIZE} color={colors.text} />
+    );
 
   return (
     <Modal
@@ -517,382 +518,392 @@ export function ProfileScreen({
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={onClose}>
-      <Screen edges={['top']} backdrop={<ProfileAmbient />} style={styles.screen}>
+      <Screen edges={['top']} style={styles.screen}>
         <View style={styles.header}>
-          <GlassBack onPress={onClose} />
-          <Text
-            fontFamily={fonts.outfitBold}
-            fontSize={18}
-            lineHeight={24}
-            fontWeight="700"
-            letterSpacing={-0.45}
-            color={INK}
-            style={styles.headerTitle}>
-            Profile & Settings
-          </Text>
+          <BackButton onPress={onClose} />
+          <AppText variant="title" style={styles.headerTitle}>
+            Profile
+          </AppText>
           <PressableScale
             onPress={handleSave}
             scaleTo={0.92}
             accessibilityRole="button"
             accessibilityLabel="Save profile"
+            accessibilityHint={dirty ? 'You have unsaved changes' : undefined}
             style={styles.saveHit}>
-            <Text
-              fontFamily={fonts.interSemi}
-              fontSize={15}
-              lineHeight={20}
-              fontWeight="600"
-              color={SAVE}
-              textAlign="right">
+            <AppText
+              variant="bodyStrong"
+              color={dirty ? colors.lavender : colors.muted}
+              align="right">
               Save
-            </Text>
+            </AppText>
           </PressableScale>
         </View>
 
         <SaveToast visible={toastVisible} />
 
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={styles.flex}>
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={[
-              styles.scrollContent,
-              {paddingBottom: Math.max(insets.bottom, 32) + 24},
-            ]}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}>
-            <GlassPanel
-              radius={radii.cardHero}
-              intensity="xl"
-              overlayColor={colors.glass}
-              style={shadows.card}
-              contentStyle={styles.identityInner}>
-              <PressableScale
-                onPress={() => setAvatarOpen(true)}
-                scaleTo={0.94}
-                accessibilityRole="button"
-                accessibilityLabel="Change profile photo"
-                style={styles.avatarPressable}>
-                {avatarUrl ? (
-                  <Image
-                    source={{uri: avatarUrl}}
-                    style={styles.avatarImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.avatarInitials}>
-                    <Text
-                      fontFamily={fonts.outfitBold}
-                      fontSize={26}
-                      lineHeight={32}
-                      fontWeight="700"
-                      letterSpacing={-0.65}
-                      color="#B58A3C">
-                      {initials}
-                    </Text>
-                  </View>
-                )}
-                <View style={styles.cameraBadge}>
-                  <CameraGlyph color="#FFFFFF" size={12} />
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {paddingBottom: Math.max(insets.bottom, spacing.xxl) + spacing.xl},
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          {/* Profile card */}
+          <GradientView
+            gradient={[colors.glow, colors.surface]}
+            angle={160}
+            positions={[0, 0.7]}
+            style={styles.profileCard}>
+            <View style={styles.profileMain}>
+              <View style={styles.ringWrap}>
+                <ProgressRing
+                  size={84}
+                  stroke={4}
+                  progress={completeness.ratio}
+                  gradient="primary"
+                  accessibilityLabel={`Profile setup, ${completeness.done} of ${completeness.total} goals set`}
+                />
+                <PressableScale
+                  onPress={() => setAvatarOpen(true)}
+                  scaleTo={0.94}
+                  accessibilityRole="button"
+                  accessibilityLabel="Change profile photo"
+                  containerStyle={styles.avatarSlot}
+                  style={styles.avatarPressable}>
+                  {avatarUrl ? (
+                    <Image
+                      source={{uri: avatarUrl}}
+                      style={styles.avatarImage}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <View style={styles.avatarInitials}>
+                      <AppText
+                        variant="title"
+                        color={colors.lavender}
+                        style={styles.initialsText}>
+                        {initials}
+                      </AppText>
+                    </View>
+                  )}
+                </PressableScale>
+                <View pointerEvents="none" style={styles.cameraBadge}>
+                  <CameraGlyph color={colors.text} size={12} />
                 </View>
-              </PressableScale>
-              <Text
-                fontFamily={fonts.outfitBold}
-                fontSize={19}
-                lineHeight={24}
-                fontWeight="700"
-                letterSpacing={-0.475}
-                color={INK}
-                numberOfLines={1}
-                style={styles.heroName}>
-                {name.trim() || 'Your Name'}
-              </Text>
-              <Text
-                fontFamily={fonts.interMedium}
-                fontSize={13}
-                lineHeight={18}
-                fontWeight="500"
-                color={MUTED}
-                numberOfLines={1}>
-                {email.trim() || 'No email on this account'}
-              </Text>
-            </GlassPanel>
+              </View>
 
-            <SettingsSection title="Personal Details" padded>
-              <View style={styles.fieldStack}>
-                <FieldLabel>Name</FieldLabel>
-                <View style={styles.inputShell}>
-                  <TextInput
-                    value={name}
-                    onChangeText={val => {
-                      setName(val);
-                      if (nameError) {
-                        setNameError(undefined);
-                      }
-                    }}
-                    editable={nameEditing}
-                    autoCapitalize="words"
-                    autoComplete="name"
-                    textContentType="name"
-                    placeholder="e.g. Ananya Raghunathan"
-                    placeholderTextColor={MUTED}
-                    style={styles.nameInput}
-                  />
+              <View style={styles.profileText}>
+                <View style={styles.nameRow}>
+                  <AppText
+                    variant="heading"
+                    numberOfLines={1}
+                    style={styles.nameText}>
+                    {name.trim() || 'Your name'}
+                  </AppText>
                   <PressableScale
-                    onPress={() => {
-                      if (nameEditing) {
-                        if (!name.trim()) {
-                          setNameError('Please enter your name.');
-                          return;
-                        }
-                        setNameEditing(false);
-                        return;
-                      }
-                      setNameEditing(true);
-                    }}
+                    onPress={() => setSheet('name')}
                     scaleTo={0.9}
-                    hitSlop={8}
+                    hitSlop={10}
                     accessibilityRole="button"
-                    accessibilityLabel={
-                      nameEditing ? 'Done editing name' : 'Edit name'
-                    }
+                    accessibilityLabel="Edit name"
                     style={styles.editNameBtn}>
-                    {nameEditing ? (
-                      <CheckGlyph color={colors.positive} size={14} />
-                    ) : (
-                      <PencilGlyph color={ICON} size={14} />
-                    )}
+                    <PencilSimple size={14} color={colors.text} weight="bold" />
                   </PressableScale>
                 </View>
-                {nameError ? (
-                  <Text
-                    fontFamily={fonts.interMedium}
-                    fontSize={11}
-                    color={DANGER}>
-                    {nameError}
-                  </Text>
-                ) : null}
-              </View>
-
-              <View style={styles.hairline} />
-
-              <View style={styles.emailBlock}>
-                <View style={styles.emailLabelRow}>
-                  <Text
-                    fontFamily={fonts.interMedium}
-                    fontSize={12}
-                    lineHeight={16}
-                    fontWeight="500"
-                    letterSpacing={1.2}
-                    color={MUTED}
-                    textTransform="uppercase">
-                    Email
-                  </Text>
+                <View style={styles.emailRow}>
+                  <AppText
+                    variant="label"
+                    color={colors.muted}
+                    numberOfLines={1}
+                    style={styles.emailText}>
+                    {email.trim() || 'No email on this account'}
+                  </AppText>
                   {emailVerified ? (
-                    <View style={styles.verified}>
-                      <CheckGlyph color={VERIFIED} size={12} />
-                      <Text
-                        fontFamily={fonts.interSemi}
-                        fontSize={11}
-                        lineHeight={14}
-                        fontWeight="600"
-                        color={VERIFIED}>
-                        Verified
-                      </Text>
+                    <View
+                      accessible
+                      accessibilityLabel="Email verified"
+                      style={styles.verified}>
+                      <SealCheck size={16} color={colors.mint} weight="fill" />
                     </View>
-                  ) : (
-                    <Text
-                      fontFamily={fonts.interMedium}
-                      fontSize={11}
-                      color={MUTED}>
-                      Read-only
-                    </Text>
-                  )}
+                  ) : null}
                 </View>
-                <Text
-                  fontFamily={fonts.interMedium}
-                  fontSize={15}
-                  lineHeight={20}
-                  fontWeight="500"
-                  color={INK}
-                  numberOfLines={1}>
-                  {email.trim() || 'Not available'}
-                </Text>
+                <AppText
+                  variant="label"
+                  color={colors.lavender}
+                  style={styles.goalsText}>
+                  {completeness.done} / {completeness.total} goals set
+                </AppText>
               </View>
-            </SettingsSection>
-
-            <SettingsSection title="Preferences">
-              <SettingsRow
-                icon={<DollarSignIcon color={ICON} size={16} />}
-                label="Primary Currency"
-                subtitle={activeCurrency.label}
-                value={`${activeCurrency.symbol} ${activeCurrency.code}`}
-                kind="info"
-                last
-              />
-            </SettingsSection>
-
-            <NotificationsSettingsSection />
-
-            <SettingsSection title="Financial Profile" padded>
-              <MoneyField
-                label="Current balance"
-                symbol={activeCurrency.symbol}
-                value={currentBalance}
-                onChangeText={val => {
-                  setCurrentBalanceDirty(true);
-                  setCurrentBalance(val);
-                }}
-                helper="From your transactions. Edits are saved as an adjustment, not a rewrite."
-              />
-              <View style={styles.hairline} />
-              <MoneyField
-                label="Monthly spending budget"
-                symbol={activeCurrency.symbol}
-                value={monthlyBudget}
-                onChangeText={setMonthlyBudget}
-              />
-              <MoneyField
-                label="Monthly savings goal"
-                symbol={activeCurrency.symbol}
-                value={monthlySavingsGoal}
-                onChangeText={setMonthlySavingsGoal}
-                helper="Only this monthly target is saved. Week and year follow from it."
-              />
-              {savingsNumber > 0 ? (
-                <>
-                  <View style={styles.hairline} />
-                  <View style={styles.derivedRow}>
-                    <Text
-                      fontFamily={fonts.interSemi}
-                      fontSize={15}
-                      lineHeight={20}
-                      fontWeight="600"
-                      color={INK}>
-                      Weekly pace
-                    </Text>
-                    <Text
-                      fontFamily={fonts.outfitBold}
-                      fontSize={15}
-                      lineHeight={20}
-                      fontWeight="700"
-                      color={INK}>
-                      {formatDerived(weeklyPace, activeCurrency.symbol)}
-                    </Text>
-                  </View>
-                  <View style={styles.derivedRow}>
-                    <Text
-                      fontFamily={fonts.interSemi}
-                      fontSize={15}
-                      lineHeight={20}
-                      fontWeight="600"
-                      color={INK}>
-                      Yearly potential
-                    </Text>
-                    <Text
-                      fontFamily={fonts.outfitBold}
-                      fontSize={15}
-                      lineHeight={20}
-                      fontWeight="700"
-                      color={INK}>
-                      {formatDerived(yearlyPotential, activeCurrency.symbol)}
-                    </Text>
-                  </View>
-                </>
-              ) : null}
-              {dailyHint ? <HelperText>{dailyHint}</HelperText> : null}
-            </SettingsSection>
-
-            <SettingsSection title="Security & Data">
-              <SettingsRow
-                icon={<DownloadIcon color={ICON} size={16} />}
-                label="Export Data"
-                subtitle="CSV of all transactions"
-                value={exporting ? 'Preparing…' : undefined}
-                kind="nav"
-                onPress={exportData}
-              />
-              <SettingsRow
-                icon={<LockIcon color={ICON} size={16} />}
-                label="Biometric Lock"
-                subtitle="Ask to unlock when Paisa opens"
-                last
-                kind="toggle"
-                accessory={
-                  <Switch
-                    value={biometricLock.enabled}
-                    onValueChange={toggleBiometric}
-                    disabled={biometricBusy}
-                    trackColor={{false: 'rgba(0,0,0,0.08)', true: colors.accent}}
-                    thumbColor="#FFFFFF"
-                    ios_backgroundColor="rgba(0,0,0,0.08)"
-                    accessibilityLabel={`Biometric Lock, ${biometricLock.enabled ? 'on' : 'off'}`}
-                  />
-                }
-              />
-            </SettingsSection>
-
-            <View style={styles.group}>
-              <SettingsSection title="About">
-                <SettingsRow
-                  label="App Version"
-                  value="v0.0.1 (Beta)"
-                  kind="info"
-                  last
-                />
-              </SettingsSection>
-              {onSignOut ? (
-                <PressableScale
-                  onPress={confirmSignOut}
-                  disabled={signingOut}
-                  scaleTo={0.98}
-                  accessibilityRole="button"
-                  accessibilityLabel="Sign out"
-                  accessibilityState={{disabled: signingOut}}
-                  containerStyle={styles.signOutWrap}
-                  style={styles.signOutShadow}>
-                  <GlassPanel
-                    radius={radii.pill}
-                    intensity="md"
-                    overlayColor="rgba(255,255,255,0.8)"
-                    style={styles.signOutGlass}
-                    contentStyle={styles.signOutInner}>
-                    <LogOutIcon color={INK} size={16} />
-                    <Text
-                      fontFamily={fonts.outfitBold}
-                      fontSize={15}
-                      lineHeight={20}
-                      fontWeight="700"
-                      color={INK}>
-                      {signingOut ? 'Signing out…' : 'Sign out'}
-                    </Text>
-                  </GlassPanel>
-                </PressableScale>
-              ) : null}
             </View>
 
-            <SettingsSection
-              title="Danger Zone"
-              danger
-              footer="Deletes this account, its profile, and every transaction. This cannot be undone.">
+            {nudge ? (
+              <>
+                <View style={styles.cardDivider} />
+                <PressableScale
+                  onPress={() => setSheet(nudge.sheet)}
+                  scaleTo={0.99}
+                  accessibilityRole="button"
+                  accessibilityLabel={nudge.text}
+                  accessibilityHint="Opens the setting"
+                  style={styles.nudge}>
+                  <AppText variant="label" style={styles.nudgeText}>
+                    {nudge.text}
+                  </AppText>
+                  <View style={styles.nudgeArrow}>
+                    <ArrowRight size={16} color={colors.lavender} />
+                  </View>
+                </PressableScale>
+              </>
+            ) : null}
+          </GradientView>
+
+          {/* Export banner */}
+          <PressableScale
+            onPress={() => runExport('month')}
+            disabled={exporting !== null}
+            scaleTo={0.985}
+            accessibilityRole="button"
+            accessibilityLabel={`Export ${monthName} as CSV. ${exportSubtitle}`}
+            accessibilityState={{disabled: exporting !== null, busy: exportingMonth}}
+            containerStyle={styles.bannerWrap}>
+            <GradientView
+              gradient={[colors.indigo, colors.violet, colors.lavender]}
+              angle={100}
+              positions={[0, 0.6, 1]}
+              style={styles.banner}>
+              <View style={styles.csvSquare}>
+                <FileCsv size={26} color={colors.text} />
+              </View>
+              <View style={styles.bannerText}>
+                <AppText variant="heading" color={colors.text} numberOfLines={1}>
+                  Export {monthName} as CSV
+                </AppText>
+                <AppText variant="label" color={colors.text} numberOfLines={1}>
+                  {exportSubtitle}
+                </AppText>
+              </View>
+              {exportingMonth ? (
+                <ActivityIndicator color={colors.text} />
+              ) : (
+                <CaretRight size={20} color={colors.text} weight="bold" />
+              )}
+            </GradientView>
+          </PressableScale>
+
+          {/* Your money */}
+          <SectionTitle title="Your money" style={styles.sectionTitle} />
+          <SettingsGroup>
+            <SettingsRow
+              icon={currencyIcon}
+              label="Currency"
+              value={`${activeCurrency.code} ${symbol}`}
+              accessibilityLabel={`Currency, ${activeCurrency.label}, ${activeCurrency.code}. Fixed for this account`}
+            />
+            <SettingsRow
+              icon={<Wallet size={ICON_SIZE} color={colors.text} />}
+              label="Current balance"
+              value={balanceValue}
+              onPress={() => setSheet('balance')}
+              accessibilityLabel={`Current balance, ${balanceValue ?? 'loading'}`}
+            />
+            <SettingsRow
+              icon={<Coins size={ICON_SIZE} color={colors.text} />}
+              label="Monthly income"
+              value={Number(monthlyIncome) > 0 ? perMonth(monthlyIncome) : 'Not set'}
+              onPress={() => setSheet('income')}
+            />
+            <SettingsRow
+              icon={<Target size={ICON_SIZE} color={colors.text} />}
+              label="Budget"
+              value={perMonth(monthlyBudget)}
+              onPress={() => setSheet('budget')}
+            />
+            <SettingsRow
+              icon={<PiggyBank size={ICON_SIZE} color={colors.text} />}
+              label="Savings goal"
+              value={perMonth(monthlySavingsGoal)}
+              onPress={() => setSheet('savings')}
+            />
+            <SettingsRow
+              icon={<SquaresFour size={ICON_SIZE} color={colors.text} />}
+              label="Categories"
+              value={`${categoryIds.length} active`}
+              onPress={() => setSheet('categories')}
+            />
+            <SettingsRow
+              icon={<Flag size={ICON_SIZE} color={colors.text} />}
+              label="Primary goal"
+              value={goal ? SHORT_GOAL[goal] : 'Not set'}
+              onPress={() => setSheet('goal')}
+            />
+          </SettingsGroup>
+
+          {/* App settings */}
+          <SectionTitle title="App settings" style={styles.sectionTitle} />
+          <SettingsGroup>
+            {notificationSettings.rows}
+            <SettingsRow
+              key="appLock"
+              icon={<Fingerprint size={ICON_SIZE} color={colors.text} />}
+              label="App lock"
+              trailing={
+                <ToggleSwitch
+                  value={biometricLock.enabled}
+                  onValueChange={toggleBiometric}
+                  disabled={biometricBusy}
+                  accessibilityLabel="App lock"
+                />
+              }
+            />
+            <SettingsRow
+              key="exportAll"
+              icon={<DownloadSimple size={ICON_SIZE} color={colors.text} />}
+              label="Export all transactions"
+              value={exporting === 'all' ? 'Preparing…' : undefined}
+              onPress={() => runExport('all')}
+              accessibilityLabel="Export all transactions as CSV"
+            />
+            {onSignOut ? (
               <SettingsRow
-                icon={<TrashGlyph color={DANGER} size={16} />}
-                label="Delete Account"
-                value={deleting ? 'Deleting…' : undefined}
-                last
-                destructive
-                kind="nav"
-                onPress={confirmDelete}
+                key="signOut"
+                icon={<SignOut size={ICON_SIZE} color={colors.roseLight} />}
+                label={signingOut ? 'Signing out…' : 'Sign out'}
+                tone="danger"
+                onPress={signingOut ? undefined : confirmSignOut}
+                showCaret={false}
+                accessibilityLabel="Sign out"
               />
-            </SettingsSection>
-          </ScrollView>
-        </KeyboardAvoidingView>
+            ) : null}
+          </SettingsGroup>
+          {notificationSettings.blocked ? (
+            <AppText variant="caption" color={colors.muted} style={styles.footnote}>
+              {notificationSettings.blockedNote}
+            </AppText>
+          ) : null}
+
+          {/* Danger zone */}
+          <SettingsGroup style={styles.dangerGroup}>
+            <SettingsRow
+              icon={<Trash size={ICON_SIZE} color={colors.roseLight} />}
+              label={deleting ? 'Deleting…' : 'Delete account'}
+              tone="danger"
+              onPress={deleting ? undefined : confirmDelete}
+              showCaret={false}
+              accessibilityLabel="Delete account"
+              accessibilityHint="Permanently deletes your account and every transaction"
+            />
+          </SettingsGroup>
+          <AppText variant="caption" color={colors.muted} style={styles.footnote}>
+            Deletes this account, its profile, and every transaction. This cannot
+            be undone.
+          </AppText>
+
+          <AppText variant="label" color={colors.muted} align="center" style={styles.version}>
+            Paisa · {APP_VERSION}
+          </AppText>
+        </ScrollView>
+
+        {notificationSettings.sheets}
 
         <AvatarPickerModal
           visible={avatarOpen}
           currentAvatarUrl={avatarUrl}
           onSelectAvatar={setAvatarUrl}
           onClose={() => setAvatarOpen(false)}
+        />
+
+        <NameSheet
+          visible={sheet === 'name'}
+          value={name}
+          onDone={setName}
+          onClose={closeSheet}
+        />
+        <MoneySheet
+          visible={sheet === 'balance'}
+          title="Current balance"
+          label="Current balance"
+          symbol={symbol}
+          value={currentBalance}
+          allowDecimal
+          helper="From your transactions. Edits are saved as an adjustment, not a rewrite."
+          onDone={next => {
+            setCurrentBalanceDirty(true);
+            setCurrentBalance(next);
+          }}
+          onClose={closeSheet}
+        />
+        <MoneySheet
+          visible={sheet === 'income'}
+          title="Monthly income"
+          label="Monthly income"
+          symbol={symbol}
+          value={monthlyIncome}
+          lead="What you expect to add each month. Used to work out what is left after your budget."
+          onDone={setMonthlyIncome}
+          onClose={closeSheet}
+        />
+        <MoneySheet
+          visible={sheet === 'budget'}
+          title="Monthly budget"
+          label="Monthly spending budget"
+          symbol={symbol}
+          value={monthlyBudget}
+          renderExtra={draftText => {
+            const hint = dailyHintFor(draftText);
+            return hint ? (
+              <AppText variant="caption" color={colors.muted} style={styles.sheetHint}>
+                {hint}
+              </AppText>
+            ) : null;
+          }}
+          onDone={setMonthlyBudget}
+          onClose={closeSheet}
+        />
+        <MoneySheet
+          visible={sheet === 'savings'}
+          title="Savings goal"
+          label="Monthly savings goal"
+          symbol={symbol}
+          value={monthlySavingsGoal}
+          helper="Only this monthly target is saved. Week and year follow from it."
+          renderExtra={draftText => {
+            const target = Number(draftText) || 0;
+            if (target <= 0) {
+              return null;
+            }
+            return (
+              <Card style={styles.derivedCard} padding={0}>
+                <View style={[styles.derivedRow, styles.derivedDivider]}>
+                  <AppText variant="bodyStrong">Weekly pace</AppText>
+                  <AppText variant="numeric">
+                    {formatDerived(scaleMonthly(target, 'week', new Date()), symbol)}
+                  </AppText>
+                </View>
+                <View style={styles.derivedRow}>
+                  <AppText variant="bodyStrong">Yearly potential</AppText>
+                  <AppText variant="numeric">
+                    {formatDerived(yearlyFromMonthly(target), symbol)}
+                  </AppText>
+                </View>
+              </Card>
+            );
+          }}
+          onDone={setMonthlySavingsGoal}
+          onClose={closeSheet}
+        />
+        <CategoriesSheet
+          visible={sheet === 'categories'}
+          selectedIds={categoryIds}
+          onChange={setCategoryIds}
+          onClose={closeSheet}
+        />
+        <GoalSheet
+          visible={sheet === 'goal'}
+          value={goal}
+          onSelect={setGoal}
+          onClose={closeSheet}
         />
       </Screen>
     </Modal>
@@ -902,41 +913,21 @@ export function ProfileScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: 'transparent',
-  },
-  flex: {
-    flex: 1,
   },
   header: {
     height: 56,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    gap: 14,
     zIndex: 10,
   },
   headerTitle: {
     flex: 1,
-    textAlign: 'center',
-  },
-  backFace: {
-    width: 40,
-    height: 40,
-    ...shadows.avatar,
-  },
-  backGlass: {
-    width: 40,
-    height: 40,
-  },
-  backInner: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   saveHit: {
-    minWidth: 40,
-    minHeight: 40,
+    minWidth: 44,
+    minHeight: 44,
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
@@ -944,35 +935,55 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    gap: 22,
+    paddingHorizontal: 16,
+    paddingTop: 10,
   },
-  identityInner: {
+  profileCard: {
+    borderRadius: radii.cardHero,
+    borderWidth: 1,
+    borderColor: colors.line,
+    overflow: 'hidden',
+  },
+  profileMain: {
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 28,
+    padding: 18,
+    gap: 16,
+  },
+  ringWrap: {
+    width: 84,
+    height: 84,
+  },
+  avatarSlot: {
+    position: 'absolute',
+    left: 8,
+    top: 8,
+    width: 68,
+    height: 68,
   },
   avatarPressable: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
+    width: 68,
+    height: 68,
+    borderRadius: radii.pill,
   },
   avatarImage: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: '#F3E3C3',
+    width: 68,
+    height: 68,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceRaised,
   },
   avatarInitials: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: '#F3E3C3',
+    width: 68,
+    height: 68,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#00000010',
+  },
+  initialsText: {
+    fontFamily: fonts.jakartaExtraBold,
+    fontSize: 24,
+    lineHeight: 30,
   },
   cameraBadge: {
     position: 'absolute',
@@ -981,130 +992,130 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: INK,
+    backgroundColor: colors.violet,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#F6F0E4',
+    borderColor: colors.glow,
   },
-  heroName: {
-    marginTop: 12,
+  profileText: {
+    flex: 1,
+    gap: 2,
   },
-  fieldStack: {
-    gap: 8,
-  },
-  inputShell: {
-    height: 46,
+  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    borderWidth: 1,
-    borderColor: HAIR,
-    borderRadius: 14,
-    paddingHorizontal: 16,
+    gap: spacing.sm,
   },
-  prefix: {
-    marginRight: 6,
-  },
-  moneyInput: {
-    flex: 1,
-    padding: 0,
-    fontFamily: fonts.outfitBold,
-    fontSize: 16,
-    fontWeight: '700',
-    color: INK,
-  },
-  nameInput: {
-    flex: 1,
-    padding: 0,
-    fontFamily: fonts.interMedium,
-    fontSize: 15,
-    fontWeight: '500',
-    color: INK,
+  nameText: {
+    flexShrink: 1,
+    fontSize: 19,
+    lineHeight: 25,
   },
   editNameBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: CHIP,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  hairline: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: DIVIDER,
-  },
-  emailBlock: {
+  emailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
   },
-  emailLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  emailText: {
+    flexShrink: 1,
+    fontSize: 14,
   },
   verified: {
+    justifyContent: 'center',
+  },
+  goalsText: {
+    fontFamily: fonts.jakartaSemiBold,
+    fontSize: 14,
+    paddingTop: 2,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: colors.line,
+    marginHorizontal: 18,
+  },
+  nudge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#5A8A5A1F',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 4,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 14,
+  },
+  nudgeText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  nudgeArrow: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1.5,
+    borderColor: colors.lavender,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerWrap: {
+    marginTop: 16,
+  },
+  banner: {
+    height: 92,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    gap: 14,
+    borderRadius: radii.card,
+    overflow: 'hidden',
+  },
+  csvSquare: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bannerText: {
+    flex: 1,
+  },
+  sectionTitle: {
+    paddingTop: 26,
+    paddingBottom: 12,
+  },
+  footnote: {
+    paddingHorizontal: 4,
+    paddingTop: 10,
+  },
+  dangerGroup: {
+    marginTop: 16,
+  },
+  version: {
+    paddingTop: 22,
+  },
+  sheetHint: {
+    marginTop: spacing.md,
+  },
+  derivedCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.surface,
   },
   derivedRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 14,
   },
-  categoryBlock: {
-    paddingVertical: 16,
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: DIVIDER,
-  },
-  categoryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  previewRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  previewChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingRight: 12,
-    paddingLeft: 10,
-    borderRadius: 999,
-    backgroundColor: CHIP,
-    gap: 6,
-  },
-  previewDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  group: {
-    gap: 10,
-  },
-  signOutWrap: {
-    width: '100%',
-  },
-  signOutShadow: {
-    width: '100%',
-    ...shadows.cardSoft,
-  },
-  signOutGlass: {
-    width: '100%',
-  },
-  signOutInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    gap: 8,
+  derivedDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
   },
 });

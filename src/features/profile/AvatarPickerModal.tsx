@@ -1,11 +1,11 @@
 import React, {useEffect, useState} from 'react';
-import {Image, Modal, ScrollView, StyleSheet, View} from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {Image, StyleSheet, View} from 'react-native';
 
 import {CheckGlyph} from '../../components/icons/Glyphs';
-import {AppText, BackButton, PressableScale, SecondaryButton} from '../../components/ui';
-import {colors, layout, radii, spacing} from '../../theme';
+import {AppText, PressableScale, SecondaryButton} from '../../components/ui';
+import {colors, radii, spacing} from '../../theme';
 import {AVATAR_PRESETS, AvatarPreset} from './avatarPresets';
+import {SheetFrame} from './ProfileSheets';
 
 type AvatarPickerModalProps = {
   visible: boolean;
@@ -22,7 +22,6 @@ export function AvatarPickerModal({
   onSelectAvatar,
   onClose,
 }: AvatarPickerModalProps) {
-  const insets = useSafeAreaInsets();
   const [selectedUrl, setSelectedUrl] = useState<string | undefined>(
     currentAvatarUrl,
   );
@@ -46,124 +45,65 @@ export function AvatarPickerModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}>
-      <View style={[styles.root, {paddingTop: insets.top || spacing.lg}]}>
-        <View style={styles.header}>
-          <BackButton onPress={onClose} />
-          <AppText variant="heading" style={styles.title}>
-            Profile Photo
-          </AppText>
-          <View style={styles.headerSpacer} />
-        </View>
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {paddingBottom: Math.max(insets.bottom, spacing.xxl) + spacing.xl},
-          ]}
-          showsVerticalScrollIndicator={false}>
-          <View style={styles.card}>
-            <AppText
-              variant="label"
-              color={colors.inkSecondary}
-              style={styles.sectionLabel}>
-              CHOOSE FROM PRESETS
-            </AppText>
-            <View style={styles.grid}>
-              {AVATAR_PRESETS.map(preset => {
-                const isSelected = selectedUrl === preset.url;
-                return (
-                  <PressableScale
-                    key={preset.id}
-                    onPress={() => handleSelectPreset(preset)}
-                    scaleTo={0.94}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Choose avatar ${preset.name}`}
-                    containerStyle={styles.slot}
-                    style={styles.slotInner}>
-                    <View
-                      style={[
-                        styles.imageRing,
-                        isSelected && styles.imageRingSelected,
-                      ]}>
-                      <Image
-                        source={{uri: preset.url}}
-                        style={styles.presetImage}
-                        resizeMode="cover"
-                      />
-                      {isSelected ? (
-                        <View style={styles.checkBadge}>
-                          <CheckGlyph color={colors.onInk} size={10} />
-                        </View>
-                      ) : null}
-                    </View>
-                    <AppText
-                      variant="caption"
-                      color={isSelected ? colors.ink : colors.inkMuted}
-                      align="center"
-                      numberOfLines={1}
-                      style={styles.presetName}>
-                      {preset.name}
-                    </AppText>
-                  </PressableScale>
-                );
-              })}
-            </View>
-          </View>
-
-          {selectedUrl ? (
-            <SecondaryButton
-              label="Remove photo (Use initials)"
-              onPress={handleRemove}
-              style={styles.removeButton}
-            />
-          ) : null}
-        </ScrollView>
+    <SheetFrame visible={visible} title="Profile photo" onClose={onClose}>
+      <AppText variant="label" color={colors.muted} style={styles.sectionLabel}>
+        Choose from presets
+      </AppText>
+      <View style={styles.grid}>
+        {AVATAR_PRESETS.map(preset => {
+          const isSelected = selectedUrl === preset.url;
+          return (
+            <PressableScale
+              key={preset.id}
+              onPress={() => handleSelectPreset(preset)}
+              scaleTo={0.94}
+              accessibilityRole="button"
+              accessibilityLabel={`Choose avatar ${preset.name}`}
+              accessibilityState={{selected: isSelected}}
+              containerStyle={styles.slot}
+              style={styles.slotInner}>
+              <View
+                style={[
+                  styles.imageRing,
+                  isSelected && styles.imageRingSelected,
+                ]}>
+                <Image
+                  source={{uri: preset.url}}
+                  style={styles.presetImage}
+                  resizeMode="cover"
+                />
+                {isSelected ? (
+                  <View style={styles.checkBadge}>
+                    <CheckGlyph color={colors.text} size={10} />
+                  </View>
+                ) : null}
+              </View>
+              <AppText
+                variant="caption"
+                color={isSelected ? colors.text : colors.muted}
+                align="center"
+                numberOfLines={1}
+                style={styles.presetName}>
+                {preset.name}
+              </AppText>
+            </PressableScale>
+          );
+        })}
       </View>
-    </Modal>
+
+      {selectedUrl ? (
+        <SecondaryButton
+          label="Remove photo (use initials)"
+          onPress={handleRemove}
+          style={styles.removeButton}
+        />
+      ) : null}
+    </SheetFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.canvas,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: layout.screenPadding,
-    paddingVertical: spacing.md,
-  },
-  title: {
-    letterSpacing: -0.3,
-  },
-  headerSpacer: {
-    width: 44,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.md,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    padding: spacing.xl,
-    marginBottom: spacing.md,
-  },
   sectionLabel: {
-    letterSpacing: 0.8,
     marginBottom: spacing.lg,
   },
   grid: {
@@ -186,13 +126,13 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   imageRingSelected: {
-    borderColor: colors.ink,
+    borderColor: colors.lavender,
   },
   presetImage: {
     width: '100%',
     height: '100%',
     borderRadius: radii.pill,
-    backgroundColor: colors.canvasSunk,
+    backgroundColor: colors.surface,
   },
   checkBadge: {
     position: 'absolute',
@@ -201,19 +141,18 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: radii.pill,
-    backgroundColor: colors.accentPress,
+    backgroundColor: colors.violet,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: colors.surface,
+    borderColor: colors.surfaceRaised,
   },
   presetName: {
     marginTop: spacing.sm,
     width: '100%',
     paddingHorizontal: spacing.xs,
-    fontWeight: '600',
   },
   removeButton: {
-    marginBottom: spacing.lg,
+    marginTop: spacing.sm,
   },
 });

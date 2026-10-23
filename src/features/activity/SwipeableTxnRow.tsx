@@ -1,16 +1,18 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Animated, LayoutChangeEvent, PanResponder, StyleSheet, View} from 'react-native';
-
 import {
-  PencilGlyph,
-  RefreshGlyph,
-  TrashGlyph,
-} from '../../components/icons/Glyphs';
+  ArrowsClockwise,
+  Copy,
+  PencilSimple,
+  Trash,
+} from 'phosphor-react-native';
+
 import {PressableScale, Text} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
-import {colors, duration, easing, fonts} from '../../theme';
-import {CategoryDisc} from '../add/categoryIcons';
+import {localDateISO} from '../../lib/transactionsStore';
+import {colors, duration, easing, fonts, typography, withAlpha} from '../../theme';
+import {CategoryIconSquare} from '../add/categoryIcons';
 import {ActivityTransaction} from './types';
 
 const ACTION_W = 62;
@@ -25,6 +27,8 @@ type SwipeableTxnRowProps = {
   item: ActivityTransaction;
   currencySymbol: string;
   open: boolean;
+  /** Hairline above the row; leave off for the first row in a card. */
+  divider?: boolean;
   onOpen: () => void;
   onClose: () => void;
   onEdit: () => void;
@@ -33,10 +37,30 @@ type SwipeableTxnRowProps = {
   onDuplicate: () => void;
 };
 
+/**
+ * "9:41 AM" when the entry was logged on the day it belongs to, otherwise
+ * the payment method. (Transactions only store a calendar date, so a time is
+ * shown only when the creation time is a faithful stand-in.)
+ */
+function detailTail(item: ActivityTransaction): string {
+  const created = item.source?.createdAt;
+  if (created) {
+    const at = new Date(created);
+    if (!Number.isNaN(at.getTime()) && localDateISO(at) === item.date) {
+      return at.toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+    }
+  }
+  return item.account;
+}
+
 export function SwipeableTxnRow({
   item,
   currencySymbol,
   open,
+  divider = true,
   onOpen,
   onClose,
   onEdit,
@@ -135,63 +159,63 @@ export function SwipeableTxnRow({
     }
   };
 
+  const amountLabel = formatMoney(item.amount, currencySymbol, {signed: true});
+
   const rowBody = (
     <>
-      <CategoryDisc id={item.categorySlug ?? 'other'} color={item.categoryColor} />
+      <CategoryIconSquare id={item.categorySlug ?? 'other'} size={40} />
       <View style={styles.detail}>
         <View style={styles.nameRow}>
           <Text
-            fontFamily={fonts.outfitSemi}
+            fontFamily={fonts.jakartaSemiBold}
             fontSize={15}
             lineHeight={20}
-            fontWeight="600"
-            color={colors.ink}
+            color={colors.text}
             numberOfLines={1}
             style={styles.name}>
             {item.merchant}
           </Text>
           {item.recurring ? (
             <View style={styles.repeats}>
-              <RefreshGlyph color={colors.gold} size={9} />
+              <ArrowsClockwise size={10} color={colors.lavender} weight="bold" />
               <Text
-                fontFamily={fonts.interSemi}
+                fontFamily={fonts.jakartaBold}
                 fontSize={9}
                 lineHeight={12}
-                fontWeight="600"
                 letterSpacing={0.3}
-                color={colors.gold}>
+                color={colors.lavender}>
                 REPEATS
               </Text>
             </View>
           ) : null}
         </View>
         <Text
-          fontFamily={fonts.interMedium}
+          fontFamily={fonts.jakartaRegular}
           fontSize={12}
-          lineHeight={16}
-          fontWeight="500"
-          color={colors.inkMuted}
+          lineHeight={17}
+          color={colors.muted}
           numberOfLines={1}>
-          {item.category} · {item.account}
+          {item.category} · {detailTail(item)}
         </Text>
       </View>
       <Text
-        fontFamily={fonts.outfitSemi}
+        fontFamily={fonts.jakartaBold}
         fontSize={15}
         lineHeight={20}
-        fontWeight="600"
-        color={income ? colors.positive : colors.ink}
+        color={income ? colors.mint : colors.roseLight}
         numberOfLines={1}
         style={[tabular, styles.amount]}>
-        {formatMoney(item.amount, currencySymbol, {signed: true})}
+        {amountLabel}
       </Text>
     </>
   );
 
+  const rowStyle = [styles.row, divider ? styles.rowDivider : null];
+
   if (width <= 0) {
     return (
       <View style={styles.clip} onLayout={onLayout}>
-        <View style={styles.row}>{rowBody}</View>
+        <View style={rowStyle}>{rowBody}</View>
       </View>
     );
   }
@@ -205,11 +229,9 @@ export function SwipeableTxnRow({
         ]}
         {...pan.panHandlers}
         accessibilityRole="text"
-        accessibilityLabel={`${item.merchant}, ${item.category}, ${formatMoney(
-          item.amount,
-          currencySymbol,
-          {signed: true},
-        )}. Swipe for actions.`}>
+        accessibilityLabel={`${item.merchant}, ${item.category}, ${amountLabel}${
+          item.recurring ? ', recurring' : ''
+        }. Swipe for actions.`}>
         <View style={styles.cluster}>
           <PressableScale
             scaleTo={0.96}
@@ -220,13 +242,12 @@ export function SwipeableTxnRow({
             }
             containerStyle={styles.actionHit}
             style={[styles.actionFace, styles.repeatFace]}>
-            <RefreshGlyph color={colors.gold} size={17} />
+            <ArrowsClockwise size={18} color={colors.sky} weight="bold" />
             <Text
-              fontFamily={fonts.interSemi}
+              fontFamily={fonts.jakartaBold}
               fontSize={11}
               lineHeight={14}
-              fontWeight="600"
-              color={colors.gold}>
+              color={colors.sky}>
               {item.recurring ? 'Unmark' : 'Repeat'}
             </Text>
           </PressableScale>
@@ -237,26 +258,18 @@ export function SwipeableTxnRow({
             accessibilityLabel="Duplicate transaction"
             containerStyle={styles.actionHit}
             style={[styles.actionFace, styles.dupFace]}>
+            <Copy size={18} color={colors.mint} weight="bold" />
             <Text
-              fontFamily={fonts.outfitSemi}
-              fontSize={15}
-              lineHeight={17}
-              fontWeight="600"
-              color={colors.positive}>
-              +
-            </Text>
-            <Text
-              fontFamily={fonts.interSemi}
+              fontFamily={fonts.jakartaBold}
               fontSize={11}
               lineHeight={14}
-              fontWeight="600"
-              color={colors.positive}>
+              color={colors.mint}>
               Copy
             </Text>
           </PressableScale>
         </View>
 
-        <View style={[styles.row, {width}]}>{rowBody}</View>
+        <View style={[rowStyle, {width}]}>{rowBody}</View>
 
         <View style={styles.cluster}>
           <PressableScale
@@ -266,13 +279,12 @@ export function SwipeableTxnRow({
             accessibilityLabel="Edit transaction"
             containerStyle={styles.actionHit}
             style={[styles.actionFace, styles.editFace]}>
-            <PencilGlyph color={colors.gold} size={17} />
+            <PencilSimple size={18} color={colors.text} weight="bold" />
             <Text
-              fontFamily={fonts.interSemi}
+              fontFamily={fonts.jakartaBold}
               fontSize={11}
               lineHeight={14}
-              fontWeight="600"
-              color={colors.gold}>
+              color={colors.text}>
               Edit
             </Text>
           </PressableScale>
@@ -283,13 +295,12 @@ export function SwipeableTxnRow({
             accessibilityLabel="Delete transaction"
             containerStyle={styles.actionHit}
             style={[styles.actionFace, styles.deleteFace]}>
-            <TrashGlyph color={colors.onInk} size={17} />
+            <Trash size={18} color={colors.text} weight="bold" />
             <Text
-              fontFamily={fonts.interSemi}
+              fontFamily={fonts.jakartaBold}
               fontSize={11}
               lineHeight={14}
-              fontWeight="600"
-              color={colors.onInk}>
+              color={colors.text}>
               Delete
             </Text>
           </PressableScale>
@@ -322,26 +333,28 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   repeatFace: {
-    backgroundColor: '#C88A2E26',
+    backgroundColor: withAlpha(colors.sky, 0.16),
   },
   dupFace: {
-    backgroundColor: '#3F7A4E26',
+    backgroundColor: withAlpha(colors.mint, 0.16),
   },
   editFace: {
-    backgroundColor: '#C88A2E26',
+    backgroundColor: colors.violet,
   },
   deleteFace: {
-    backgroundColor: colors.coral,
+    backgroundColor: colors.rose,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingVertical: 10,
-    paddingRight: 4,
-    backgroundColor: 'transparent',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: colors.surface,
+  },
+  rowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
   },
   detail: {
     flex: 1,
@@ -359,12 +372,13 @@ const styles = StyleSheet.create({
   },
   amount: {
     flexShrink: 0,
+    letterSpacing: typography.numeric.letterSpacing,
   },
   repeats: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.accentSoft,
+    gap: 3,
+    backgroundColor: withAlpha(colors.violet, 0.2),
     borderRadius: 999,
     paddingHorizontal: 6,
     paddingVertical: 2,

@@ -4,11 +4,13 @@ import {StyleSheet, View} from 'react-native';
 import {
   AppText,
   CelebrationBadge,
+  Card,
   PrimaryButton,
   Screen,
   Stagger,
 } from '../../components/ui';
 import {colors, layout, radii, spacing} from '../../theme';
+import {CategoryIconSquare} from '../add/categoryIcons';
 import {categoryById, currencyByCode} from '../onboarding/constants';
 import {OnboardingDraft} from '../onboarding/types';
 
@@ -34,7 +36,7 @@ export function FirstExpenseEmptyState({
   const previewCategories = draft.categoryIds.slice(0, 4);
 
   return (
-    <Screen edges={inTabs ? ['top'] : ['top', 'bottom']}>
+    <Screen glow edges={inTabs ? ['top'] : ['top', 'bottom']}>
       <View style={[styles.root, inTabs && styles.rootInTabs]}>
         <View style={styles.center}>
           <Stagger index={0}>
@@ -45,7 +47,7 @@ export function FirstExpenseEmptyState({
             <AppText variant="display">You are set, {firstName}.</AppText>
             <AppText
               variant="body"
-              color={colors.inkSecondary}
+              color={colors.muted}
               style={styles.subtitle}>
               Nothing to report yet. Log one expense and your monthly breakdown
               starts filling in.
@@ -53,11 +55,11 @@ export function FirstExpenseEmptyState({
           </Stagger>
 
           <Stagger index={2} style={styles.preview}>
-            <View style={styles.card}>
-              <AppText variant="caption" color={colors.inkMuted}>
+            <Card radius={radii.cardHero} padding={spacing.xl}>
+              <AppText variant="caption" color={colors.muted}>
                 Spent this month
               </AppText>
-              <AppText variant="numeric" style={styles.amount}>
+              <AppText variant="numericHero" style={styles.amount}>
                 {currency.symbol}0
               </AppText>
 
@@ -69,12 +71,10 @@ export function FirstExpenseEmptyState({
                   }
                   return (
                     <View key={id} style={styles.legendRow}>
-                      <View
-                        style={[styles.dot, {backgroundColor: category.color}]}
-                      />
+                      <CategoryIconSquare id={id} size={28} />
                       <AppText
                         variant="body"
-                        color={colors.inkSecondary}
+                        color={colors.text}
                         style={styles.legendLabel}>
                         {category.label}
                       </AppText>
@@ -83,7 +83,7 @@ export function FirstExpenseEmptyState({
                   );
                 })}
               </View>
-            </View>
+            </Card>
           </Stagger>
         </View>
 
@@ -122,13 +122,6 @@ const styles = StyleSheet.create({
   preview: {
     marginTop: spacing.xxxl,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-    padding: spacing.xl,
-  },
   amount: {
     marginTop: spacing.xs,
   },
@@ -140,14 +133,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  dot: {
-    width: 9,
-    height: 9,
-    borderRadius: radii.pill,
-    opacity: 0.45,
-  },
   legendLabel: {
-    marginLeft: spacing.sm,
+    marginLeft: spacing.md,
     width: 108,
   },
   // Flat rails stand in for the bars that will appear once data lands.
@@ -155,6 +142,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.canvasSunk,
+    backgroundColor: colors.line,
   },
 });

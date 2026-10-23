@@ -128,7 +128,7 @@ export function TextField({
     }
     return focus.interpolate({
       inputRange: [0, 1],
-      outputRange: [colors.hairline, colors.accent],
+      outputRange: [colors.line, colors.lavender],
     });
   }, [error, focus]);
 
@@ -138,7 +138,7 @@ export function TextField({
     }
     return focus.interpolate({
       inputRange: [0, 1],
-      outputRange: [colors.inkMuted, colors.accent],
+      outputRange: [colors.muted, colors.lavender],
     });
   }, [error, focus]);
 
@@ -176,7 +176,7 @@ export function TextField({
         {prefix && floated ? (
           <AppText
             variant="bodyStrong"
-            color={focused ? colors.ink : colors.inkMuted}
+            color={focused ? colors.ink : colors.muted}
             style={styles.prefix}>
             {prefix}
           </AppText>
@@ -192,8 +192,8 @@ export function TextField({
           // appears once the label has moved out of the way.
           placeholder={focused ? placeholder : undefined}
           style={styles.input}
-          placeholderTextColor={colors.inkMuted}
-          selectionColor={colors.accent}
+          placeholderTextColor={colors.muted}
+          selectionColor={colors.lavender}
         />
         {trailing}
       </Animated.View>
@@ -205,7 +205,7 @@ export function TextField({
       {footer ? (
         <AppText
           variant="caption"
-          color={error ? colors.danger : colors.inkMuted}
+          color={error ? colors.danger : colors.muted}
           style={styles.footer}>
           {footer}
         </AppText>
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     marginTop: LABEL_SLOT,
     height: layout.controlHeight,
     borderRadius: radii.input,
-    borderWidth: 1.5,
+    borderWidth: 1,
     backgroundColor: colors.surface,
     flexDirection: 'row',
     alignItems: 'center',

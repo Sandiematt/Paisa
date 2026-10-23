@@ -7,6 +7,7 @@
 
 import type {
   CalculatedStats,
+  CategoryBreakdownStat,
   CategoryChangeStats,
   CategoryRef,
   ChangeKind,
@@ -22,6 +23,7 @@ import type {
   TransactionRecord,
   TrendBucketStat,
   UnusualSpendingStats,
+  WeekdaySpendStat,
 } from './types.ts';
 
 // Rows with kind opening_balance / balance_adjustment (see
@@ -39,8 +41,11 @@ const MAX_HIGHLIGHTS = 5;
 
 const MONTH_BASELINE_PERIODS = 3; // trailing 3 months, same-day-range each
 const WEEK_BASELINE_PERIODS = 4; // trailing 4 weeks
+const YEAR_BASELINE_PERIODS = 1; // the previous year over the same span
+const MAX_BREAKDOWN_CATEGORIES = 12;
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // ---------------------------------------------------------------------------
 // Date helpers (all dates are plain `YYYY-MM-DD` calendar strings, UTC-based
@@ -126,6 +131,24 @@ function computePeriodWindows(period: PeriodKind, referenceDate: string): Period
     return {currentStart, currentEnd, previousStart, previousEnd, baselineStart, baselineEnd, baselinePeriods: WEEK_BASELINE_PERIODS};
   }
 
+  if (period === 'year') {
+    const [year, month, day] = referenceDate.split('-').map(Number);
+    const currentStart = `${year}-01-01`;
+    const currentEnd = referenceDate;
+    const previousStart = `${year - 1}-01-01`;
+    // Same span of the previous year; Feb 29 clamps to Feb 28 in a non-leap year.
+    const previousEnd = formatDateUTC(new Date(Date.UTC(year - 1, month - 1, Math.min(day, daysInMonthUTC(year - 1, month)))));
+    return {
+      currentStart,
+      currentEnd,
+      previousStart,
+      previousEnd,
+      baselineStart: previousStart,
+      baselineEnd: previousEnd,
+      baselinePeriods: YEAR_BASELINE_PERIODS,
+    };
+  }
+
   const currentStart = monthStartOf(referenceDate);
   const currentEnd = referenceDate;
   const elapsedDays = daysBetweenInclusive(currentStart, currentEnd);
@@ -147,11 +170,13 @@ export function earliestDateNeeded(period: PeriodKind, referenceDate: string): s
 
 function previousPeriodLabel(period: PeriodKind): string {
   if (period === 'month') return 'last month';
+  if (period === 'year') return 'last year';
   return 'last week';
 }
 
 function periodNoun(period: PeriodKind): string {
   if (period === 'month') return 'month';
+  if (period === 'year') return 'year';
   return 'week';
 }
 
@@ -511,6 +536,19 @@ function buildTrendBuckets(
     return buckets;
   }
 
+  if (period === 'year') {
+    const buckets: TrendBucketStat[] = [];
+    let cursor = monthStartOf(currentStart);
+    while (cursor <= currentEnd) {
+      const nextMonth = addMonths(cursor, 1);
+      const monthEnd = addDays(nextMonth, -1) > currentEnd ? currentEnd : addDays(nextMonth, -1);
+      const monthIndex = Number(cursor.slice(5, 7)) - 1;
+      buckets.push({date: cursor, amount: bucketAmount(transactions, cursor, monthEnd), label: MONTH_LABELS[monthIndex]});
+      cursor = nextMonth;
+    }
+    return buckets;
+  }
+
   const buckets: TrendBucketStat[] = [];
   let cursor = currentStart;
   let index = 1;
@@ -521,6 +559,54 @@ function buildTrendBuckets(
     index += 1;
   }
   return buckets;
+}
+
+// ---------------------------------------------------------------------------
+// Summary-card extras: transaction count, daily average, biggest weekday,
+// full category breakdown (display aids for the Insights screen)
+// ---------------------------------------------------------------------------
+
+function currentExpenses(transactions: TransactionRecord[], start: string, end: string): TransactionRecord[] {
+  return transactions.filter(t => t.type === 'expense' && !isLedgerEntry(t) && inRange(t.transactionDate, start, end));
+}
+
+function computeTopSpendingWeekday(rows: TransactionRecord[]): WeekdaySpendStat | null {
+  const totals = new Array<number>(7).fill(0);
+  for (const row of rows) {
+    const [year, month, day] = row.transactionDate.split('-').map(Number);
+    totals[new Date(Date.UTC(year, month - 1, day)).getUTCDay()] += row.amount;
+  }
+  let best = -1;
+  for (let weekday = 0; weekday < 7; weekday += 1) {
+    if (totals[weekday] > 0 && (best === -1 || totals[weekday] > totals[best])) best = weekday;
+  }
+  return best === -1 ? null : {label: WEEKDAY_LABELS[best], amount: roundMoney(totals[best])};
+}
+
+function computeCategoryBreakdown(
+  transactions: TransactionRecord[],
+  currentStart: string,
+  currentEnd: string,
+  previousStart: string,
+  previousEnd: string,
+): CategoryBreakdownStat[] {
+  const slugs = new Map<string, string | null>();
+  for (const row of transactions) {
+    if (row.type === 'expense' && !isLedgerEntry(row)) slugs.set(categoryKeyOf(row.category), row.category?.slug ?? null);
+  }
+  const currentMap = groupExpensesByCategory(transactions, currentStart, currentEnd);
+  const previousMap = groupExpensesByCategory(transactions, previousStart, previousEnd);
+
+  return [...currentMap.entries()]
+    .map(([key, value]) => ({
+      category: value.label,
+      slug: slugs.get(key) ?? null,
+      currentAmount: roundMoney(value.amount),
+      previousAmount: roundMoney(previousMap.get(key)?.amount ?? 0),
+    }))
+    .filter(item => item.currentAmount > 0)
+    .sort((a, b) => b.currentAmount - a.currentAmount)
+    .slice(0, MAX_BREAKDOWN_CATEGORIES);
 }
 
 // ---------------------------------------------------------------------------
@@ -624,6 +710,10 @@ export function calculateInsightStats(
 
   const trendBuckets = buildTrendBuckets(transactions, currentStart, currentEnd, period);
 
+  const currentRows = currentExpenses(transactions, currentStart, currentEnd);
+  const elapsedDays = Math.max(1, daysBetweenInclusive(currentStart, currentEnd));
+  const budget = profile?.monthlyBudget ?? null;
+
   const stats: CalculatedStats = {
     referenceDate,
     period,
@@ -640,6 +730,11 @@ export function calculateInsightStats(
     savingsProgress,
     patternChanges,
     trendBuckets,
+    transactionCount: currentRows.length,
+    dailyAverage: roundMoney(periodComparison.currentTotal / elapsedDays),
+    topSpendingWeekday: computeTopSpendingWeekday(currentRows),
+    categoryBreakdown: computeCategoryBreakdown(transactions, currentStart, currentEnd, previousStart, previousEnd),
+    monthlyBudget: budget !== null && budget > 0 ? roundMoney(budget) : null,
   };
 
   return {stats, highlights: buildHighlights(stats)};

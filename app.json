@@ -5,13 +5,16 @@
     "scheme": "paisa",
     "version": "1.0.0",
     "orientation": "portrait",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0E0E11",
     "ios": {
       "bundleIdentifier": "org.reactjs.native.example.expense-tracker",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "backgroundColor": "#0E0E11"
     },
     "android": {
-      "package": "com.expense_tracker"
+      "package": "com.expense_tracker",
+      "backgroundColor": "#0E0E11"
     },
     "plugins": [
       "expo-font",

@@ -6,16 +6,26 @@ import {SecondaryButton} from '../../../components/ui';
 type GoogleButtonProps = {
   label: string;
   onPress: () => void;
+  /** Dims the button and ignores presses, e.g. while a sign-in is in flight. */
+  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
-/** Official Google G (FirebaseUI asset). */
-export function GoogleButton({label, onPress, style}: GoogleButtonProps) {
+/**
+ * Official Google G (FirebaseUI asset) on a surface button with a line border,
+ * so the coloured mark is the only colour on the row.
+ */
+export function GoogleButton({
+  label,
+  onPress,
+  disabled = false,
+  style,
+}: GoogleButtonProps) {
   return (
     <SecondaryButton
       label={label}
       onPress={onPress}
-      style={style}
+      style={[style, disabled ? styles.disabled : null]}
       accessibilityHint="Opens Google to sign in"
       leading={
         <Image
@@ -31,7 +41,11 @@ export function GoogleButton({label, onPress, style}: GoogleButtonProps) {
 
 const styles = StyleSheet.create({
   mark: {
-    width: 18,
-    height: 18,
+    width: 20,
+    height: 20,
+  },
+  disabled: {
+    opacity: 0.5,
+    pointerEvents: 'none',
   },
 });

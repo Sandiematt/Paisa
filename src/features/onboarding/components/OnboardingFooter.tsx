@@ -26,7 +26,7 @@ export function OnboardingFooter({
     <View style={styles.root}>
       <PrimaryButton
         label={primaryLabel}
-        trailing={'\u2192'}
+        trailing={'→'}
         onPress={onPrimary}
       />
       {skippable ? (
@@ -44,8 +44,8 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.hairline,
-    backgroundColor: colors.canvas,
+    borderTopColor: colors.line,
+    backgroundColor: colors.ground,
   },
   skip: {
     marginTop: spacing.xs,

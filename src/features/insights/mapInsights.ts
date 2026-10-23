@@ -1,15 +1,6 @@
-import {InsightDirection, InsightsResponse} from '../../lib/supabase/insights';
-import {AiHighlight, CategoryMovement, InsightsData, WeeklyBar} from './insightsPlaceholder';
-
-function buildWeeklyBars(buckets: {amount: number; label: string}[]): WeeklyBar[] {
-  const max = Math.max(1, ...buckets.map(bucket => bucket.amount));
-  return buckets.map(bucket => ({
-    label: bucket.label,
-    // Floor at 6% so a ₹0 bucket still renders a visible sliver instead of nothing.
-    percent: Math.max(6, Math.round((bucket.amount / max) * 100)),
-    tone: bucket.amount > 0 && bucket.amount === max ? 'accent' : 'sand',
-  }));
-}
+import type {InsightDirection, InsightsResponse} from '../../lib/supabase/insights';
+import {averagePerDay, topWeekdayFromBuckets} from './insightsMath';
+import type {AiHighlight, CategoryMovement, CategorySpend, InsightsData} from './insightsTypes';
 
 function highlightTone(direction: InsightDirection): 'positive' | 'warning' {
   return direction === 'down' ? 'positive' : 'warning';
@@ -19,18 +10,48 @@ function slugify(label: string): string {
   return label.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
-function periodNounFor(period: InsightsResponse['stats']['period']): string {
-  if (period === 'month') return 'this month';
-  return 'this week';
+type Stats = InsightsResponse['stats'];
+
+/**
+ * The full per-category breakdown when the backend sends it. A generate-insights
+ * deployment from before the DX redesign only reports categories that moved by
+ * 20 or more, so fall back to those: incomplete, but never wrong.
+ */
+function buildCategories(stats: Stats): CategorySpend[] {
+  if (stats.categoryBreakdown) {
+    return stats.categoryBreakdown
+      .filter(item => item.currentAmount > 0)
+      .map(item => ({
+        id: item.slug ?? slugify(item.category),
+        label: item.category,
+        slug: item.slug,
+        amount: item.currentAmount,
+        previousAmount: item.previousAmount,
+      }));
+  }
+  return stats.categoryChanges
+    .filter(change => change.currentAmount > 0)
+    .map(change => ({
+      id: slugify(change.category),
+      label: change.category,
+      slug: null,
+      amount: change.currentAmount,
+      previousAmount: change.previousAmount,
+    }))
+    .sort((a, b) => b.amount - a.amount);
 }
 
-function comparisonLabelFor(period: InsightsResponse['stats']['period']): string {
-  if (period === 'month') return 'than last month';
-  return 'than last week';
+function buildTopWeekday(stats: Stats): string | null {
+  if (stats.topSpendingWeekday !== undefined) return stats.topSpendingWeekday?.label ?? null;
+  return topWeekdayFromBuckets(stats.period, stats.trendBuckets);
 }
 
-/** Converts the generate-insights Edge Function response into the screen's display shape. */
-export function buildInsightsDataFromResponse(response: InsightsResponse): InsightsData {
+/**
+ * Converts the generate-insights Edge Function response into the screen's
+ * display shape. `fallbackBudget` is the profile budget, used only when the
+ * backend did not report one.
+ */
+export function buildInsightsDataFromResponse(response: InsightsResponse, fallbackBudget: number | null = null): InsightsData {
   const {stats} = response;
   const {periodComparison} = stats;
 
@@ -49,7 +70,9 @@ export function buildInsightsDataFromResponse(response: InsightsResponse): Insig
   }));
 
   return {
-    periodNoun: periodNounFor(stats.period),
+    period: stats.period,
+    referenceDate: stats.referenceDate,
+    isPeriodComplete: stats.isPeriodComplete,
     currentTotal: periodComparison.currentTotal,
     previousTotal: periodComparison.previousTotal,
     changePct:
@@ -58,11 +81,17 @@ export function buildInsightsDataFromResponse(response: InsightsResponse): Insig
         : null,
     changeKind: periodComparison.changeKind,
     deltaAmount: Math.abs(periodComparison.changeAmount),
-    comparisonLabel: comparisonLabelFor(stats.period),
-    weeklyBars: buildWeeklyBars(stats.trendBuckets),
+    dailyAverage:
+      stats.dailyAverage ?? averagePerDay(periodComparison.currentTotal, stats.period, stats.referenceDate),
+    transactionCount: stats.transactionCount ?? null,
+    topWeekday: buildTopWeekday(stats),
+    buckets: stats.trendBuckets.map(bucket => ({date: bucket.date, label: bucket.label, amount: bucket.amount})),
+    monthlyBudget: stats.monthlyBudget ?? fallbackBudget,
+    categories: buildCategories(stats),
     aiSummary: response.summary,
     aiHighlights:
       highlights.length > 0 ? highlights : [{id: '1', tone: 'positive', text: 'No notable changes this period.'}],
     movements,
+    generatedAt: response.generatedAt,
   };
 }

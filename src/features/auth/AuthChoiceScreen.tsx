@@ -5,7 +5,7 @@ import {Logo} from '../../components/brand/Logo';
 import {
   AppText,
   DividerLabel,
-  GhostButton,
+  PressableScale,
   PrimaryButton,
   Screen,
   ScreenHeader,
@@ -28,22 +28,22 @@ export function AuthChoiceScreen({
   onBack,
 }: AuthChoiceScreenProps) {
   return (
-    <Screen>
+    <Screen glow={360}>
       <ScreenHeader onBack={onBack} />
 
       <View style={styles.root}>
         <View style={styles.center}>
           <Stagger index={0} style={styles.logo}>
-            <Logo size={120} />
+            <Logo size={150} />
           </Stagger>
 
           <Stagger index={1} style={styles.copy}>
-            <AppText variant="title" align="center" style={styles.headline}>
+            <AppText variant="display" align="center" style={styles.headline}>
               Let's set you up.
             </AppText>
             <AppText
               variant="body"
-              color={colors.inkSecondary}
+              color={colors.muted}
               align="center"
               style={styles.subtitle}>
               Setup takes about a minute, and you can change any of it later.
@@ -63,10 +63,20 @@ export function AuthChoiceScreen({
           <GoogleButton label="Sign up with Google" onPress={onGoogle} />
 
           <View style={styles.footer}>
-            <AppText variant="body" color={colors.inkSecondary}>
+            <AppText variant="body" color={colors.muted}>
               Already have an account?
             </AppText>
-            <GhostButton label="Sign in" tone="ink" onPress={onSignIn} />
+            <PressableScale
+              onPress={onSignIn}
+              scaleTo={0.96}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in"
+              style={styles.signInLink}>
+              <AppText variant="bodyStrong" color={colors.lavender}>
+                Sign in
+              </AppText>
+            </PressableScale>
           </View>
         </Stagger>
       </View>
@@ -104,8 +114,12 @@ const styles = StyleSheet.create({
   divider: {
     marginVertical: spacing.lg,
   },
+  signInLink: {
+    paddingVertical: spacing.md,
+    paddingLeft: spacing.sm,
+  },
   footer: {
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

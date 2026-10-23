@@ -8,7 +8,7 @@ export type MoneyFlow = 'income' | 'expense';
 
 export type Direction = 'up' | 'down' | 'flat';
 
-export type PeriodKind = 'week' | 'month';
+export type PeriodKind = 'week' | 'month' | 'year';
 
 /**
  * How a current-vs-previous comparison should be displayed. Percentages are
@@ -121,8 +121,23 @@ export interface TrendBucketStat {
   /** Bucket start date, `YYYY-MM-DD`. */
   date: string;
   amount: number;
-  /** Short axis label, e.g. "Mon" (week), "W1" (month). */
+  /** Short axis label, e.g. "Mon" (week), "W1" (month), "Jan" (year). */
   label: string;
+}
+
+/** One row of the "where it went" breakdown: spend per category in the current window. */
+export interface CategoryBreakdownStat {
+  category: string;
+  /** Stable category slug when the category has one (used by the app for icons). */
+  slug: string | null;
+  currentAmount: number;
+  previousAmount: number;
+}
+
+export interface WeekdaySpendStat {
+  /** Short weekday label, e.g. "Sat". */
+  label: string;
+  amount: number;
 }
 
 export interface CalculatedStats {
@@ -138,6 +153,16 @@ export interface CalculatedStats {
   savingsProgress: SavingsProgressStats;
   patternChanges: PatternChangeStats[];
   trendBuckets: TrendBucketStat[];
+  /** Number of (non-ledger) expense transactions in the current window. */
+  transactionCount: number;
+  /** Current total divided by the days elapsed in the current window. */
+  dailyAverage: number;
+  /** Weekday with the highest total spend in the current window, or null with no spending. */
+  topSpendingWeekday: WeekdaySpendStat | null;
+  /** All categories with spending in the current window, largest first (top 12). */
+  categoryBreakdown: CategoryBreakdownStat[];
+  /** The user's monthly budget (for the pace line), or null when unset. */
+  monthlyBudget: number | null;
 }
 
 // ---------------------------------------------------------------------------

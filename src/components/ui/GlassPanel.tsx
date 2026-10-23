@@ -24,7 +24,7 @@ type GlassPanelProps = {
 };
 
 /**
- * Frosted glass: native blur with a light tint so the page wash shows through.
+ * Dark glass: native blur under a `glass` tint with a 1px `line` border.
  * Shadow belongs on the outer wrap so overflow clipping does not eat it.
  */
 export function GlassPanel({
@@ -43,17 +43,16 @@ export function GlassPanel({
         <BlurView
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
-          blurType="light"
+          blurType="dark"
           blurAmount={amount}
           {...(Platform.OS === 'android'
             ? {blurRadius: amount, overlayColor: 'transparent'}
-            : {reducedTransparencyFallbackColor: overlayColor})}
+            : {reducedTransparencyFallbackColor: colors.surface})}
         />
         <View
           pointerEvents="none"
           style={[styles.tint, {backgroundColor: overlayColor}]}
         />
-        <View pointerEvents="none" style={styles.sheen} />
         <View style={[styles.content, contentStyle]}>{children}</View>
       </View>
     </View>
@@ -63,19 +62,11 @@ export function GlassPanel({
 const styles = StyleSheet.create({
   clip: {
     overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairlineStrong,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   tint: {
     ...StyleSheet.absoluteFill,
-  },
-  sheen: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    left: 0,
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
   },
   content: {
     zIndex: 1,

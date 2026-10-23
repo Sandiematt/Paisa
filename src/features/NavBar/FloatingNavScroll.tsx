@@ -5,8 +5,8 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {spacing} from '../../theme';
 
 export const FLOATING_NAV_GAP = 12;
-export const FLOATING_NAV_PILL_PAD_V = 14;
-export const FLOATING_NAV_ITEM_HEIGHT = 48;
+export const FLOATING_NAV_PILL_PAD_V = 6;
+export const FLOATING_NAV_ITEM_HEIGHT = 56;
 export const FLOATING_NAV_PILL_HEIGHT =
   FLOATING_NAV_PILL_PAD_V * 2 + FLOATING_NAV_ITEM_HEIGHT;
 /** Air between the last home cards and the top of the floating pill. */

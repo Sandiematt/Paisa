@@ -18,13 +18,15 @@ import {SavingsDetailsScreen} from '../home/SavingsDetailsScreen';
 import {useHomeDashboard} from '../home/useHomeDashboard';
 import {FloatingNavScrollProvider} from '../NavBar/FloatingNavScroll';
 import {NavBar, TabId} from '../NavBar/NavBar';
-import {currencyByCode} from '../onboarding/constants';
+import {currencyByCode, MIN_CATEGORIES} from '../onboarding/constants';
 import {OnboardingDraft} from '../onboarding/types';
 import {SaveProfileOptions} from '../../lib/profileStore';
 import {TransactionRow} from '../../lib/transactionsStore';
 import {InsightsScreen} from '../insights/InsightsScreen';
+import {NotificationHistorySheet} from '../notifications/NotificationHistorySheet';
 import {useNotifications} from '../notifications/NotificationsProvider';
 import {ProfileScreen} from '../profile/ProfileScreen';
+import {profileCompleteness} from '../profile/profileCompleteness';
 
 // Lets a closing modal finish dismissing before the next one is presented.
 const MODAL_HANDOFF_MS = 350;
@@ -50,6 +52,9 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   const [savingsOpen, setSavingsOpen] = useState(false);
   const [ledgerFocus, setLedgerFocus] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  // Week key of the Home spending nudge closed during this session.
+  const [dismissedNudgeKey, setDismissedNudgeKey] = useState<string | null>(null);
 
   useEffect(() => {
     setProfileDraft(draft);
@@ -89,6 +94,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
 
   const {setSnapshot, pendingTarget, consumeTarget} = useNotifications();
   const handoffTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const historyClosedAt = useRef(0);
 
   // Budget alerts and reminders are decided from the same ledger the
   // dashboard shows, so every change here is re-checked there.
@@ -132,8 +138,16 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       return;
     }
 
+    // The history sheet closes itself when a row is tapped, so give it the
+    // same dismiss time as an overlay that is still on screen.
     const overlayOpen =
-      profileOpen || budgetOpen || savingsOpen || addKind !== null;
+      profileOpen ||
+      budgetOpen ||
+      savingsOpen ||
+      addKind !== null ||
+      notificationsOpen ||
+      Date.now() - historyClosedAt.current < MODAL_HANDOFF_MS;
+    setNotificationsOpen(false);
     setProfileOpen(false);
     setBudgetOpen(false);
     setSavingsOpen(false);
@@ -169,6 +183,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     budgetOpen,
     consumeTarget,
     editRow,
+    notificationsOpen,
     pendingTarget,
     profileOpen,
     savingsOpen,
@@ -202,10 +217,24 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     page = (
       <HomeScreen
         name={profileDraft.name}
+        avatarUrl={profileDraft.avatarUrl}
         currencySymbol={currency.symbol}
+        profileProgress={profileCompleteness(profileDraft, MIN_CATEGORIES).ratio}
         onBudgetPress={() => setBudgetOpen(true)}
         onSavingsPress={() => setSavingsOpen(true)}
+        onSetupBudgetPress={() => setProfileOpen(true)}
+        onProfilePress={() => setProfileOpen(true)}
+        onNotificationsPress={() => setNotificationsOpen(true)}
+        onComposePress={openComposer}
+        onHistoryPress={() => {
+          setSheetOpen(false);
+          setTab('activity');
+        }}
         report={report}
+        transactions={transactions}
+        categories={categories}
+        dismissedNudgeKey={dismissedNudgeKey}
+        onDismissNudge={setDismissedNudgeKey}
         status={status}
         refreshing={refreshing}
         error={error}
@@ -224,6 +253,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
         transactions={transactions}
         categories={categories}
         refreshing={refreshing}
+        loading={status === 'loading'}
         reload={reload}
         onUpsert={upsertLocal}
         onRemove={removeLocal}
@@ -238,16 +268,14 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     page = (
       <InsightsScreen
         currencySymbol={currency.symbol}
-        name={profileDraft.name}
-        avatarUrl={profileDraft.avatarUrl}
-        onProfilePress={() => setProfileOpen(true)}
+        monthlyBudget={moneyPlan.monthlyBudget}
       />
     );
   }
 
   return (
     <FloatingNavScrollProvider
-          resetKey={`${tab}:${profileOpen}:${budgetOpen}:${savingsOpen}:${sheetOpen}:${addKind ?? ''}:${editRow?.id ?? ''}`}>
+          resetKey={`${tab}:${profileOpen}:${budgetOpen}:${savingsOpen}:${notificationsOpen}:${sheetOpen}:${addKind ?? ''}:${editRow?.id ?? ''}`}>
       <View style={styles.root} collapsable={false}>
         <View style={styles.stage} collapsable={false}>
           {page}
@@ -304,6 +332,8 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           overBudget={report.overBudget ?? false}
           slices={report.slices ?? []}
           range={report.range ?? 'month'}
+          transactions={transactions}
+          categories={categories}
         />
 
         <SavingsDetailsScreen
@@ -318,6 +348,16 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           savingsVsTarget={report.savingsVsTarget ?? 0}
           savingsState={report.savingsState ?? {kind: 'no-income'}}
           range={report.range ?? 'month'}
+          transactions={transactions}
+          categories={categories}
+        />
+
+        <NotificationHistorySheet
+          visible={notificationsOpen}
+          onClose={() => {
+            historyClosedAt.current = Date.now();
+            setNotificationsOpen(false);
+          }}
         />
 
         <ProfileScreen

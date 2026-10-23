@@ -77,7 +77,7 @@ export function OnboardingFlow({
   );
 
   return (
-    <Screen>
+    <Screen glow={280}>
       <KeyboardAvoidingView
         style={styles.fill}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

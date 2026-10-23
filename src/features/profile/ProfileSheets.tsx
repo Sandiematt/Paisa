@@ -1,32 +1,52 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
+  Animated,
+  KeyboardAvoidingView,
   Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {X} from 'phosphor-react-native';
 
 import {
   AppText,
-  BackButton,
   Chip,
   PressableScale,
+  PrimaryButton,
   SelectCard,
+  TextField,
 } from '../../components/ui';
-import {colors, layout, radii, spacing} from '../../theme';
+import {useReducedMotion} from '../../hooks/useReducedMotion';
+import {
+  colors,
+  duration,
+  easing,
+  layout,
+  radii,
+  spacing,
+} from '../../theme';
 import {CATEGORIES, GOALS, MIN_CATEGORIES} from '../onboarding/constants';
 import {GoalId} from '../onboarding/types';
+import {groupMoneyInput, sanitizeMoneyInput} from './moneyInput';
 
 type SheetFrameProps = {
   visible: boolean;
   title: string;
   onClose: () => void;
-  /** Sits where the header's right edge would otherwise be empty. */
+  /** Replaces the close button at the header's right edge. */
   trailing?: React.ReactNode;
   children: React.ReactNode;
 };
 
+/**
+ * DX bottom sheet: dark scrim, `surfaceRaised` panel with 28px top corners and
+ * a grab handle. Tapping the scrim, the close button or the system back
+ * gesture dismisses it.
+ */
 export function SheetFrame({
   visible,
   title,
@@ -35,30 +55,96 @@ export function SheetFrame({
   children,
 }: SheetFrameProps) {
   const insets = useSafeAreaInsets();
+  const {height} = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
+  const [mounted, setMounted] = useState(visible);
+  const progress = useRef(new Animated.Value(visible ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: reducedMotion ? 0 : duration.enter,
+        easing: easing.out,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+    Animated.timing(progress, {
+      toValue: 0,
+      duration: reducedMotion ? 0 : duration.exit,
+      easing: easing.standard,
+      useNativeDriver: true,
+    }).start(({finished}) => {
+      if (finished) {
+        setMounted(false);
+      }
+    });
+  }, [visible, progress, reducedMotion]);
+
+  const translateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [reducedMotion ? 0 : height * 0.5, 0],
+  });
+
   return (
     <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
+      visible={mounted}
+      transparent
+      animationType="none"
+      statusBarTranslucent
       onRequestClose={onClose}>
-      <View style={[styles.root, {paddingTop: insets.top || spacing.md}]}>
-        <View style={styles.header}>
-          <BackButton onPress={onClose} />
-          <AppText variant="heading" style={styles.headerTitle}>
-            {title}
-          </AppText>
-          {trailing ?? <View style={styles.headerSpacer} />}
-        </View>
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {paddingBottom: Math.max(insets.bottom, spacing.xxl)},
-          ]}
-          showsVerticalScrollIndicator={false}>
-          {children}
-        </ScrollView>
-      </View>
+      <Animated.View style={[styles.scrim, {opacity: progress}]}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessible={false}
+          importantForAccessibility="no"
+        />
+      </Animated.View>
+      <KeyboardAvoidingView
+        behavior="padding"
+        pointerEvents="box-none"
+        style={styles.sheetHost}>
+        <Animated.View
+          accessibilityViewIsModal
+          style={[
+            styles.sheet,
+            {
+              maxHeight: height - insets.top - spacing.xl,
+              transform: [{translateY}],
+            },
+          ]}>
+          <View style={styles.handle} />
+          <View style={styles.header}>
+            <AppText variant="title" numberOfLines={1} style={styles.headerTitle}>
+              {title}
+            </AppText>
+            {trailing ?? (
+              <PressableScale
+                onPress={onClose}
+                scaleTo={0.92}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Close"
+                style={styles.closeButton}>
+                <X size={18} color={colors.text} weight="bold" />
+              </PressableScale>
+            )}
+          </View>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={[
+              styles.scrollContent,
+              {paddingBottom: Math.max(insets.bottom, spacing.xl) + spacing.sm},
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            {children}
+          </ScrollView>
+        </Animated.View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -72,8 +158,8 @@ type GoalSheetProps = {
 
 export function GoalSheet({visible, value, onSelect, onClose}: GoalSheetProps) {
   return (
-    <SheetFrame visible={visible} title="Primary Goal" onClose={onClose}>
-      <AppText variant="body" color={colors.inkSecondary} style={styles.lead}>
+    <SheetFrame visible={visible} title="Primary goal" onClose={onClose}>
+      <AppText variant="body" color={colors.muted} style={styles.lead}>
         This decides which insights lead your dashboard.
       </AppText>
       {GOALS.map((item, index) => (
@@ -126,8 +212,8 @@ export function CategoriesSheet({
   const tooFew = draftIds.length < MIN_CATEGORIES;
 
   return (
-    <SheetFrame visible={visible} title="Tracked Categories" onClose={onClose}>
-      <AppText variant="body" color={colors.inkSecondary} style={styles.lead}>
+    <SheetFrame visible={visible} title="Tracked categories" onClose={onClose}>
+      <AppText variant="body" color={colors.muted} style={styles.lead}>
         Used for expenses. Choose at least {MIN_CATEGORIES}.
       </AppText>
       <View style={styles.chipWrap}>
@@ -143,63 +229,204 @@ export function CategoriesSheet({
       </View>
       <AppText
         variant="caption"
-        color={tooFew ? colors.danger : colors.inkMuted}
+        color={tooFew ? colors.roseLight : colors.muted}
         style={styles.chipStatus}>
         {tooFew
           ? `Choose at least ${MIN_CATEGORIES} categories.`
           : `${draftIds.length} categories active.`}
       </AppText>
-      <PressableScale
+      <PrimaryButton
+        label="Done"
+        disabled={tooFew}
         onPress={() => {
-          if (tooFew) {
-            return;
-          }
           onChange(draftIds);
           onClose();
         }}
-        disabled={tooFew}
-        scaleTo={0.98}
-        accessibilityRole="button"
-        accessibilityState={{disabled: tooFew}}
-        style={[styles.doneBtn, tooFew && styles.doneBtnDisabled]}>
-        <AppText
-          variant="bodyStrong"
-          color={tooFew ? colors.inkMuted : colors.onInk}>
-          Done
+      />
+    </SheetFrame>
+  );
+}
+
+type MoneySheetProps = {
+  visible: boolean;
+  title: string;
+  /** Floating label on the field. */
+  label: string;
+  symbol: string;
+  /** Raw digits (and optional `.`), no separators. */
+  value: string;
+  allowDecimal?: boolean;
+  lead?: string;
+  helper?: string;
+  /** Extra content under the field, built from the in-progress value. */
+  renderExtra?: (draft: string) => React.ReactNode;
+  onDone: (value: string) => void;
+  onClose: () => void;
+};
+
+/** One amount field in a sheet. Edits only land when the user taps Done. */
+export function MoneySheet({
+  visible,
+  title,
+  label,
+  symbol,
+  value,
+  allowDecimal = false,
+  lead,
+  helper,
+  renderExtra,
+  onDone,
+  onClose,
+}: MoneySheetProps) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    if (visible) {
+      setDraft(value);
+    }
+    // Reset only when the sheet opens; typing must not be overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  return (
+    <SheetFrame visible={visible} title={title} onClose={onClose}>
+      {lead ? (
+        <AppText variant="body" color={colors.muted} style={styles.lead}>
+          {lead}
         </AppText>
-      </PressableScale>
+      ) : null}
+      <TextField
+        label={label}
+        prefix={symbol}
+        helper={helper}
+        value={groupMoneyInput(draft)}
+        onChangeText={text => setDraft(sanitizeMoneyInput(text, allowDecimal))}
+        keyboardType={allowDecimal ? 'decimal-pad' : 'number-pad'}
+        placeholder="0"
+        autoFocus
+      />
+      {renderExtra ? renderExtra(draft) : null}
+      <PrimaryButton
+        label="Done"
+        style={styles.action}
+        onPress={() => {
+          onDone(draft);
+          onClose();
+        }}
+      />
+    </SheetFrame>
+  );
+}
+
+type NameSheetProps = {
+  visible: boolean;
+  value: string;
+  onDone: (value: string) => void;
+  onClose: () => void;
+};
+
+export function NameSheet({visible, value, onDone, onClose}: NameSheetProps) {
+  const [draft, setDraft] = useState(value);
+  const [error, setError] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (visible) {
+      setDraft(value);
+      setError(undefined);
+    }
+    // Reset only when the sheet opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  const commit = () => {
+    if (!draft.trim()) {
+      setError('Please enter your name.');
+      return;
+    }
+    onDone(draft.trim());
+    onClose();
+  };
+
+  return (
+    <SheetFrame visible={visible} title="Your name" onClose={onClose}>
+      <TextField
+        label="Name"
+        value={draft}
+        error={error}
+        onChangeText={text => {
+          setDraft(text);
+          if (error) {
+            setError(undefined);
+          }
+        }}
+        autoCapitalize="words"
+        autoComplete="name"
+        textContentType="name"
+        returnKeyType="done"
+        onSubmitEditing={commit}
+        placeholder="e.g. Ananya Raghunathan"
+        autoFocus
+      />
+      <PrimaryButton label="Done" style={styles.action} onPress={commit} />
     </SheetFrame>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  scrim: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: colors.scrim,
+  },
+  sheetHost: {
     flex: 1,
-    backgroundColor: colors.canvas,
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: colors.surfaceRaised,
+    borderTopLeftRadius: radii.sheet,
+    borderTopRightRadius: radii.sheet,
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: colors.line,
+    overflow: 'hidden',
+  },
+  handle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.hairlineStrong,
+    marginTop: spacing.md,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: layout.screenPadding,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: layout.screenPadding + spacing.xs,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    gap: spacing.md,
   },
   headerTitle: {
-    letterSpacing: -0.4,
-  },
-  headerSpacer: {
-    width: 44,
-  },
-  scroll: {
     flex: 1,
   },
+  closeButton: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  scroll: {
+    flexGrow: 0,
+  },
   scrollContent: {
-    paddingHorizontal: layout.screenPadding,
-    paddingTop: spacing.md,
+    paddingHorizontal: layout.screenPadding + spacing.xs,
+    paddingTop: spacing.sm,
   },
   lead: {
     marginBottom: spacing.lg,
-    marginHorizontal: spacing.xs,
   },
   goalGap: {
     marginTop: spacing.md,
@@ -213,14 +440,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     marginBottom: spacing.xl,
   },
-  doneBtn: {
-    height: layout.controlHeight,
-    borderRadius: radii.pill,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  doneBtnDisabled: {
-    backgroundColor: colors.canvasSunk,
+  action: {
+    marginTop: spacing.xl,
   },
 });

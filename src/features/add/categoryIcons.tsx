@@ -1,472 +1,195 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
-
+import {StyleSheet} from 'react-native';
 import {
-  HomeGlyph,
-  ReceiptGlyph,
-  RefreshGlyph,
-} from '../../components/icons/Glyphs';
-import {colors, radii} from '../../theme';
+  Airplane,
+  ArrowCounterClockwise,
+  Briefcase,
+  Car,
+  DotsThree,
+  ForkKnife,
+  GameController,
+  GraduationCap,
+  Heart,
+  House,
+  Laptop,
+  Lightning,
+  Repeat,
+  ShoppingBag,
+  ShoppingCart,
+  Tag,
+  User,
+} from 'phosphor-react-native';
+import type {Icon as PhosphorIcon} from 'phosphor-react-native';
 
-type IconProps = {
-  color: string;
-  size?: number;
+import {GradientIconSquare, GradientView} from '../../components/ui';
+import {GradientKey, colors, shadows, withAlpha} from '../../theme';
+
+/**
+ * Category look shared across the app. One lookup, `categoryVisual`, maps a
+ * category slug (or a free-form name) to a Phosphor icon plus a gradient, so
+ * Activity rows, the Add grid and any other feature draw a category the same.
+ *
+ *   const {Icon, gradient, iconColor} = categoryVisual(row.categorySlug);
+ */
+
+type GradientSource = GradientKey | readonly string[];
+
+export type CategoryVisual = {
+  Icon: PhosphorIcon;
+  /** Named DX gradient, or explicit stops for the variants the DX set lacks. */
+  gradient: GradientSource;
+  /** Icon colour that reads on the gradient (`text`, or `ground` on gold). */
+  iconColor: string;
 };
 
-function Dot({color, size = 4}: {color: string; size?: number}) {
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: radii.pill,
-        backgroundColor: color,
-      }}
+// Darker partner stops for the colours the DX gradient set has no pair for.
+const MINT_STOPS = [colors.mint, '#25A06A'] as const;
+const GOLD_STOPS = [colors.gold, '#B8862F'] as const;
+const VIOLET_STOPS = [colors.violet, colors.indigo] as const;
+const SKY_STOPS = [colors.sky, colors.violet] as const;
+const NEUTRAL_STOPS = [
+  withAlpha(colors.text, 0.22),
+  withAlpha(colors.text, 0.1),
+] as const;
+
+const VISUALS: Record<string, CategoryVisual> = {
+  housing: {Icon: House, gradient: VIOLET_STOPS, iconColor: colors.text},
+  dining: {Icon: ForkKnife, gradient: 'rose', iconColor: colors.text},
+  groceries: {Icon: ShoppingCart, gradient: 'primary', iconColor: colors.text},
+  transport: {Icon: Car, gradient: 'savings', iconColor: colors.text},
+  health: {Icon: Heart, gradient: 'rose', iconColor: colors.text},
+  shopping: {Icon: ShoppingBag, gradient: SKY_STOPS, iconColor: colors.text},
+  entertainment: {
+    Icon: GameController,
+    gradient: VIOLET_STOPS,
+    iconColor: colors.text,
+  },
+  bills: {Icon: Lightning, gradient: GOLD_STOPS, iconColor: colors.ground},
+  personal: {Icon: User, gradient: 'primary', iconColor: colors.text},
+  education: {
+    Icon: GraduationCap,
+    gradient: 'savings',
+    iconColor: colors.text,
+  },
+  travel: {Icon: Airplane, gradient: SKY_STOPS, iconColor: colors.text},
+  subscriptions: {Icon: Repeat, gradient: 'primary', iconColor: colors.text},
+  salary: {Icon: Briefcase, gradient: MINT_STOPS, iconColor: colors.ground},
+  freelance: {Icon: Laptop, gradient: MINT_STOPS, iconColor: colors.ground},
+  refund: {
+    Icon: ArrowCounterClockwise,
+    gradient: MINT_STOPS,
+    iconColor: colors.ground,
+  },
+  other: {Icon: DotsThree, gradient: NEUTRAL_STOPS, iconColor: colors.text},
+};
+
+const FALLBACK: CategoryVisual = {
+  Icon: Tag,
+  gradient: NEUTRAL_STOPS,
+  iconColor: colors.text,
+};
+
+/** Free-form names (custom categories, profile presets) to a known slug. */
+const ALIASES: [RegExp, string][] = [
+  [/(dining|food|restaurant|cafe|coffee|\beat)/, 'dining'],
+  [/(grocer|supermarket|vegetable)/, 'groceries'],
+  [/(transport|fuel|petrol|taxi|\bcab\b|metro|\bbus\b|commute|\bcar\b)/, 'transport'],
+  [/(rent|home|house|housing|mortgage)/, 'housing'],
+  [/(health|medical|doctor|pharmacy|fitness|gym)/, 'health'],
+  [/(shop|cloth|fashion)/, 'shopping'],
+  [/(entertain|movie|game|fun)/, 'entertainment'],
+  [/(bill|utilit|electric|water|internet|phone)/, 'bills'],
+  [/(subscri|membership)/, 'subscriptions'],
+  [/(educat|school|course|tuition|book)/, 'education'],
+  [/(travel|trip|flight|hotel|vacation)/, 'travel'],
+  [/(salary|paycheck|wage|payroll)/, 'salary'],
+  [/(freelanc|contract|gig)/, 'freelance'],
+  [/(refund|cashback|reimburse)/, 'refund'],
+  [/(personal|care|self)/, 'personal'],
+];
+
+export function categoryVisual(
+  slugOrName?: string | null,
+): CategoryVisual {
+  const key = slugOrName?.trim().toLowerCase();
+  if (!key) {
+    return VISUALS.other;
+  }
+  const direct = VISUALS[key];
+  if (direct) {
+    return direct;
+  }
+  const alias = ALIASES.find(([pattern]) => pattern.test(key));
+  return alias ? VISUALS[alias[1]] : FALLBACK;
+}
+
+type CategoryIconSquareProps = {
+  /** Category slug or name. */
+  id?: string | null;
+  size?: number;
+  glow?: boolean;
+  iconSize?: number;
+};
+
+/** Gradient icon square for a category (34 rows, 40 grid tiles, ...). */
+export function CategoryIconSquare({
+  id,
+  size = 38,
+  glow = false,
+  iconSize,
+}: CategoryIconSquareProps) {
+  const {Icon, gradient, iconColor} = categoryVisual(id);
+  const glyph = (
+    <Icon
+      size={iconSize ?? Math.round(size * 0.5)}
+      color={iconColor}
+      weight="fill"
     />
   );
-}
 
-function DiningIcon({color, size = 18}: IconProps) {
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 3,
-      }}>
-      <View
-        style={{
-          width: 2,
-          height: size * 0.82,
-          borderRadius: radii.pill,
-          backgroundColor: color,
-        }}
-      />
-      <View
-        style={{
-          width: size * 0.34,
-          height: size * 0.72,
-          borderWidth: 1.7,
-          borderColor: color,
-          borderRadius: 8,
-        }}
-      />
-    </View>
-  );
-}
-
-function CartIcon({color, size = 18}: IconProps) {
-  return (
-    <View style={{width: size, height: size, justifyContent: 'flex-end'}}>
-      <View
-        style={{
-          width: size * 0.78,
-          height: size * 0.48,
-          borderWidth: 1.7,
-          borderColor: color,
-          borderRadius: 3,
-          alignSelf: 'center',
-        }}
-      />
-      <View
-        style={{
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          paddingHorizontal: 3,
-          marginTop: 2,
-        }}>
-        <Dot color={color} />
-        <Dot color={color} />
-      </View>
-    </View>
-  );
-}
-
-function CarIcon({color, size = 18}: IconProps) {
-  return (
-    <View style={{width: size, height: size, justifyContent: 'center'}}>
-      <View
-        style={{
-          width: size * 0.7,
-          height: size * 0.28,
-          backgroundColor: color,
-          borderRadius: 3,
-          alignSelf: 'center',
-          marginBottom: 2,
-        }}
-      />
-      <View
-        style={{
-          width: size * 0.9,
-          height: size * 0.28,
-          backgroundColor: color,
-          borderRadius: 4,
-          alignSelf: 'center',
-        }}
-      />
-    </View>
-  );
-}
-
-function HeartIcon({color, size = 18}: IconProps) {
-  const bump = size * 0.34;
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-      <View style={{flexDirection: 'row', marginBottom: -bump * 0.35}}>
-        <View
-          style={{
-            width: bump,
-            height: bump,
-            borderRadius: radii.pill,
-            backgroundColor: color,
-          }}
-        />
-        <View
-          style={{
-            width: bump,
-            height: bump,
-            borderRadius: radii.pill,
-            backgroundColor: color,
-            marginLeft: -2,
-          }}
-        />
-      </View>
-      <View
-        style={{
-          width: size * 0.42,
-          height: size * 0.42,
-          backgroundColor: color,
-          transform: [{rotate: '45deg'}],
-          marginTop: -4,
-        }}
-      />
-    </View>
-  );
-}
-
-function BagIcon({color, size = 18}: IconProps) {
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-      }}>
-      <View
-        style={{
-          width: size * 0.42,
-          height: size * 0.28,
-          borderWidth: 1.7,
-          borderBottomWidth: 0,
-          borderColor: color,
-          borderTopLeftRadius: 8,
-          borderTopRightRadius: 8,
-        }}
-      />
-      <View
-        style={{
-          width: size * 0.72,
-          height: size * 0.52,
-          borderWidth: 1.7,
-          borderColor: color,
-          borderRadius: 4,
-        }}
-      />
-    </View>
-  );
-}
-
-function PadIcon({color, size = 18}: IconProps) {
-  return (
-    <View
-      style={{
-        width: size * 0.9,
-        height: size * 0.58,
-        borderWidth: 1.7,
-        borderColor: color,
-        borderRadius: 8,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 4,
-      }}>
-      <Dot color={color} size={5} />
-      <Dot color={color} size={5} />
-    </View>
-  );
-}
-
-function DotsIcon({color, size = 18}: IconProps) {
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 3,
-      }}>
-      <Dot color={color} size={4} />
-      <Dot color={color} size={4} />
-      <Dot color={color} size={4} />
-    </View>
-  );
-}
-
-function PersonIcon({color, size = 18}: IconProps) {
-  return (
-    <View style={{width: size, height: size, alignItems: 'center'}}>
-      <View
-        style={{
-          width: size * 0.34,
-          height: size * 0.34,
-          borderRadius: radii.pill,
-          backgroundColor: color,
-          marginBottom: 2,
-        }}
-      />
-      <View
-        style={{
-          width: size * 0.62,
-          height: size * 0.36,
-          borderTopLeftRadius: size,
-          borderTopRightRadius: size,
-          backgroundColor: color,
-        }}
-      />
-    </View>
-  );
-}
-
-function PlaneIcon({color, size = 18}: IconProps) {
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-      <View
-        style={{
-          width: size * 0.72,
-          height: 2.2,
-          backgroundColor: color,
-          borderRadius: radii.pill,
-          transform: [{rotate: '-28deg'}],
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          width: size * 0.42,
-          height: 2.2,
-          backgroundColor: color,
-          borderRadius: radii.pill,
-          transform: [{rotate: '48deg'}],
-        }}
-      />
-    </View>
-  );
-}
-
-function CapIcon({color, size = 18}: IconProps) {
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-      <View
-        style={{
-          width: 0,
-          height: 0,
-          borderLeftWidth: size * 0.38,
-          borderRightWidth: size * 0.38,
-          borderBottomWidth: size * 0.22,
-          borderLeftColor: 'transparent',
-          borderRightColor: 'transparent',
-          borderBottomColor: color,
-        }}
-      />
-      <View
-        style={{
-          width: size * 0.62,
-          height: size * 0.2,
-          borderWidth: 1.6,
-          borderTopWidth: 0,
-          borderColor: color,
-          borderBottomLeftRadius: 6,
-          borderBottomRightRadius: 6,
-        }}
-      />
-    </View>
-  );
-}
-
-function BriefcaseIcon({color, size = 18}: IconProps) {
-  return (
-    <View style={{width: size, height: size, alignItems: 'center'}}>
-      <View
-        style={{
-          width: size * 0.32,
-          height: size * 0.2,
-          borderWidth: 1.6,
-          borderBottomWidth: 0,
-          borderColor: color,
-          borderTopLeftRadius: 3,
-          borderTopRightRadius: 3,
-        }}
-      />
-      <View
-        style={{
-          width: size * 0.82,
-          height: size * 0.52,
-          borderWidth: 1.7,
-          borderColor: color,
-          borderRadius: 4,
-        }}
-      />
-    </View>
-  );
-}
-
-const ICON_TINT: Record<string, {bg: string; fg: string}> = {
-  housing: {bg: '#FDECEA', fg: colors.coral},
-  dining: {bg: '#FBF0DA', fg: colors.accentPress},
-  groceries: {bg: '#E8F5EE', fg: colors.positive},
-  transport: {bg: '#E7F1FB', fg: '#3D7CC9'},
-  bills: {bg: '#EEECE6', fg: colors.slate},
-  health: {bg: '#FDECEA', fg: colors.coral},
-  travel: {bg: '#E7F6F4', fg: colors.teal},
-  shopping: {bg: '#F3EEFB', fg: colors.violet},
-  subscriptions: {bg: '#FBF0DA', fg: colors.accentPress},
-  education: {bg: '#EEE9FB', fg: colors.violet},
-  entertainment: {bg: '#EEE9FB', fg: colors.violet},
-  personal: {bg: '#E8F5EE', fg: colors.positive},
-  other: {bg: '#EEECE6', fg: colors.slate},
-  salary: {bg: '#E8F5EE', fg: colors.positive},
-  freelance: {bg: '#E7F6F4', fg: colors.teal},
-  refund: {bg: '#FBF0DA', fg: colors.accentPress},
-};
-
-function GlyphForId({id, color, size}: {id: string; color: string; size: number}) {
-  switch (id) {
-    case 'housing':
-      return <HomeGlyph color={color} size={size} />;
-    case 'dining':
-      return <DiningIcon color={color} size={size} />;
-    case 'groceries':
-      return <CartIcon color={color} size={size} />;
-    case 'transport':
-      return <CarIcon color={color} size={size} />;
-    case 'travel':
-      return <PlaneIcon color={color} size={size} />;
-    case 'health':
-      return <HeartIcon color={color} size={size} />;
-    case 'shopping':
-      return <BagIcon color={color} size={size} />;
-    case 'entertainment':
-      return <PadIcon color={color} size={size} />;
-    case 'personal':
-      return <PersonIcon color={color} size={size} />;
-    case 'bills':
-      return <ReceiptGlyph color={color} size={size} />;
-    case 'subscriptions':
-      return <RefreshGlyph color={color} size={size} />;
-    case 'education':
-      return <CapIcon color={color} size={size} />;
-    case 'salary':
-      return <BriefcaseIcon color={color} size={size} />;
-    case 'freelance':
-      return <PadIcon color={color} size={size} />;
-    case 'refund':
-      return <RefreshGlyph color={color} size={size} />;
-    default:
-      return <DotsIcon color={color} size={size} />;
+  if (typeof gradient === 'string') {
+    return (
+      <GradientIconSquare size={size} gradient={gradient} glow={glow}>
+        {glyph}
+      </GradientIconSquare>
+    );
   }
-}
 
-export function categoryTint(id: string): {bg: string; fg: string} {
-  return ICON_TINT[id] ?? ICON_TINT.other;
-}
-
-export function CategoryMark({
-  id,
-  color,
-  size = 16,
-}: {
-  id: string;
-  color?: string;
-  size?: number;
-}) {
-  const tint = categoryTint(id);
-  return <GlyphForId id={id} color={color ?? tint.fg} size={size} />;
-}
-
-export function CategoryIcon({id, size = 20}: {id: string; size?: number}) {
-  const tint = ICON_TINT[id] ?? ICON_TINT.other;
   return (
-    <View
-      style={{
-        width: 44,
-        height: 44,
-        borderRadius: radii.pill,
-        backgroundColor: tint.bg,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-      <GlyphForId id={id} color={tint.fg} size={size} />
-    </View>
+    <GradientView
+      gradient={gradient}
+      angle={140}
+      style={[
+        styles.square,
+        {width: size, height: size, borderRadius: Math.round(size * 0.31)},
+        glow ? shadows.iconGlow : null,
+      ]}>
+      {glyph}
+    </GradientView>
   );
 }
 
-/** Wonder Activity row disc: 36px, tinted fill + hairline. */
+/** Kept for existing call sites: same square, `color` is ignored in DX. */
 export function CategoryDisc({
   id,
-  color,
-  size = 36,
-  iconSize = 16,
+  size = 38,
+  iconSize,
 }: {
   id: string;
   color?: string;
   size?: number;
   iconSize?: number;
 }) {
-  const tint = ICON_TINT[id] ?? ICON_TINT.other;
-  const fg = color ?? tint.fg;
-  const withAlpha = (hex: string, alpha: string) => {
-    if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-      return tint.bg;
-    }
-    return `${hex}${alpha}`;
-  };
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: color ? withAlpha(fg, '1A') : tint.bg,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: color ? withAlpha(fg, '33') : `${tint.fg}33`,
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-      <GlyphForId id={id} color={fg} size={iconSize} />
-    </View>
-  );
+  return <CategoryIconSquare id={id} size={size} iconSize={iconSize} />;
 }
+
+export function CategoryIcon({id, size = 20}: {id: string; size?: number}) {
+  return <CategoryIconSquare id={id} size={40} iconSize={size} />;
+}
+
+const styles = StyleSheet.create({
+  square: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

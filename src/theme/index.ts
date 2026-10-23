@@ -1,5 +1,6 @@
-export {colors} from './colors';
-export type {ColorToken} from './colors';
+export {colors, gradients, gradientAngles} from './colors';
+export type {ColorToken, GradientKey} from './colors';
+export {linearGradient, withAlpha} from './gradients';
 export {spacing, radii, layout} from './spacing';
 export {typography, fonts} from './typography';
 export {useAppFonts} from './useAppFonts';

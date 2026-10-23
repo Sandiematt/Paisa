@@ -71,7 +71,7 @@ export function BudgetStep({draft, onChange}: BudgetStepProps) {
       </Stagger>
 
       <Stagger index={2} style={styles.spaced}>
-        <AppText variant="label" color={colors.inkSecondary}>
+        <AppText variant="label" color={colors.muted}>
           {income > 500 ? 'Based on your income' : 'Common starting points'}
         </AppText>
         <View style={styles.pills}>
@@ -117,20 +117,20 @@ export function BudgetStep({draft, onChange}: BudgetStepProps) {
       {perDay > 0 ? (
         <Stagger index={5} style={styles.spaced}>
           <View style={styles.readout}>
-            <AppText variant="caption" color={colors.inkMuted}>
+            <AppText variant="caption" color={colors.muted}>
               That works out to
             </AppText>
-            <AppText variant="numeric" style={styles.readoutValue}>
+            <AppText variant="numericHero" style={styles.readoutValue}>
               {currency.symbol}
               {perDay.toLocaleString('en-IN')}
             </AppText>
-            <AppText variant="body" color={colors.inkSecondary}>
+            <AppText variant="body" color={colors.muted}>
               a day across 30 days.
             </AppText>
             {leftover !== 0 ? (
               <AppText
                 variant="body"
-                color={leftover < savingsGoal ? colors.danger : colors.inkSecondary}
+                color={leftover < savingsGoal ? colors.roseLight : colors.muted}
                 style={styles.leftover}>
                 {leftover >= savingsGoal
                   ? `Income minus budget leaves ${currency.symbol}${leftover.toLocaleString('en-IN')} for savings.`
@@ -158,12 +158,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radii.card,
     borderWidth: 1,
-    borderColor: colors.hairline,
+    borderColor: colors.line,
     padding: spacing.xl,
   },
   readoutValue: {
     marginTop: spacing.xs,
     marginBottom: 2,
+    fontSize: 36,
+    lineHeight: 42,
   },
   leftover: {
     marginTop: spacing.md,

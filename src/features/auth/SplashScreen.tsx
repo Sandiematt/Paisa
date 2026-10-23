@@ -19,11 +19,11 @@ export function SplashScreen({
   ready = true,
 }: SplashScreenProps) {
   return (
-    <Screen>
+    <Screen glow={360}>
       <View style={styles.root}>
         <View style={styles.center}>
           <Stagger index={0} style={styles.logo}>
-            <Logo size={132} />
+            <Logo size={180} />
           </Stagger>
 
           <Stagger index={1} style={styles.copy}>
@@ -32,7 +32,7 @@ export function SplashScreen({
             </AppText>
             <AppText
               variant="body"
-              color={colors.inkSecondary}
+              color={colors.muted}
               align="center"
               style={styles.subtitle}>
               Log what you spend, see where it goes, and keep the month on

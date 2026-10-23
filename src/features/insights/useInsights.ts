@@ -7,7 +7,7 @@ export type InsightsFetchStatus = 'loading' | 'ready' | 'error';
 
 /**
  * Fetches the AI-summarized, backend-calculated insight for a given period
- * (week/month) from the `generate-insights` Edge Function.
+ * (week/month/year) from the `generate-insights` Edge Function.
  *
  * Caches the last response per period in memory: switching back to a period
  * that was already loaded shows it instantly (status "ready") while quietly
@@ -35,6 +35,11 @@ export function useInsights(period: InsightPeriod) {
       }
       try {
         const response = await generateInsights({period: targetPeriod});
+        // A generate-insights deployment from before the year period falls back to
+        // week for an unknown period. Never show that as if it were the year.
+        if (response.stats.period !== targetPeriod) {
+          throw new Error('This view needs the latest server update.');
+        }
         cacheRef.current.set(targetPeriod, response);
         setData(response);
         setStatus('ready');
@@ -64,7 +69,10 @@ export function useInsights(period: InsightPeriod) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, user]);
 
+  /** Retry from scratch: shows the loading state again. */
   const reload = useCallback(() => load(period), [load, period]);
+  /** Pull-to-refresh: keeps whatever is on screen and swaps data in when it arrives. */
+  const refresh = useCallback(() => load(period, {background: true}), [load, period]);
 
-  return {data, status, error, reload};
+  return {data, status, error, reload, refresh};
 }

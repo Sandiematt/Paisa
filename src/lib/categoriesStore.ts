@@ -87,7 +87,7 @@ export async function findOrCreateUserCategory(
       user_id: sessionData.user.id,
       name: trimmed,
       icon: 'tag',
-      color: '#8E887A',
+      color: '#A3A3AD',
       type,
     })
     .select('id, user_id, name, icon, color, type, slug')

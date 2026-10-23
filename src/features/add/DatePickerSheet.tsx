@@ -8,6 +8,8 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
+import {CaretLeft, CaretRight} from 'phosphor-react-native';
+
 import {AppText, PrimaryButton} from '../../components/ui';
 import {colors, layout, radii, spacing} from '../../theme';
 
@@ -121,7 +123,7 @@ export function DatePickerSheet({
             {paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.md},
           ]}>
           <View style={styles.handle} />
-          <AppText variant="heading">Date</AppText>
+          <AppText variant="title">Date</AppText>
 
           <View style={styles.quick}>
             <Pressable
@@ -137,7 +139,7 @@ export function DatePickerSheet({
               ]}>
               <AppText
                 variant="bodyStrong"
-                color={sameDay(draft, today) ? colors.onInk : colors.ink}>
+                color={sameDay(draft, today) ? colors.ground : colors.text}>
                 Today
               </AppText>
             </Pressable>
@@ -154,7 +156,7 @@ export function DatePickerSheet({
               ]}>
               <AppText
                 variant="bodyStrong"
-                color={sameDay(draft, yesterday) ? colors.onInk : colors.ink}>
+                color={sameDay(draft, yesterday) ? colors.ground : colors.text}>
                 Yesterday
               </AppText>
             </Pressable>
@@ -172,9 +174,9 @@ export function DatePickerSheet({
               accessibilityRole="button"
               accessibilityLabel="Previous month"
               style={styles.monthBtn}>
-              <AppText variant="heading">{'‹'}</AppText>
+              <CaretLeft size={18} color={colors.text} weight="bold" />
             </Pressable>
-            <AppText variant="bodyStrong">
+            <AppText variant="bodyStrong" color={colors.text}>
               {MONTHS[month.getMonth()]}
             </AppText>
             <Pressable
@@ -188,7 +190,7 @@ export function DatePickerSheet({
               accessibilityRole="button"
               accessibilityLabel="Next month"
               style={styles.monthBtn}>
-              <AppText variant="heading">{'›'}</AppText>
+              <CaretRight size={18} color={colors.text} weight="bold" />
             </Pressable>
           </View>
 
@@ -204,9 +206,11 @@ export function DatePickerSheet({
               accessibilityRole="button"
               accessibilityLabel="Previous year"
               style={styles.monthBtn}>
-              <AppText variant="heading">{'‹'}</AppText>
+              <CaretLeft size={18} color={colors.text} weight="bold" />
             </Pressable>
-            <AppText variant="bodyStrong">{String(month.getFullYear())}</AppText>
+            <AppText variant="bodyStrong" color={colors.text}>
+              {String(month.getFullYear())}
+            </AppText>
             <Pressable
               onPress={() => {
                 const year = month.getFullYear() + 1;
@@ -218,7 +222,7 @@ export function DatePickerSheet({
               accessibilityRole="button"
               accessibilityLabel="Next year"
               style={styles.monthBtn}>
-              <AppText variant="heading">{'›'}</AppText>
+              <CaretRight size={18} color={colors.text} weight="bold" />
             </Pressable>
           </View>
 
@@ -227,7 +231,7 @@ export function DatePickerSheet({
               <View
                 key={`${day}-${index}`}
                 style={[styles.cell, {width: cellSize, height: 28}]}>
-                <AppText variant="caption" color={colors.inkMuted} align="center">
+                <AppText variant="caption" color={colors.muted} align="center">
                   {day}
                 </AppText>
               </View>
@@ -266,7 +270,7 @@ export function DatePickerSheet({
                     ]}>
                     <AppText
                       variant="bodyStrong"
-                      color={selected ? colors.onInk : colors.ink}
+                      color={selected ? colors.ground : colors.text}
                       align="center">
                       {String(cell.getDate())}
                     </AppText>
@@ -296,12 +300,14 @@ const styles = StyleSheet.create({
   layer: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(21, 20, 18, 0.28)',
+    backgroundColor: colors.scrim,
   },
   sheet: {
-    backgroundColor: colors.canvas,
+    backgroundColor: colors.surfaceRaised,
     borderTopLeftRadius: radii.sheet,
     borderTopRightRadius: radii.sheet,
+    borderTopWidth: 1,
+    borderColor: colors.line,
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.md,
   },
@@ -311,7 +317,7 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: radii.pill,
     backgroundColor: colors.hairlineStrong,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   quick: {
     flexDirection: 'row',
@@ -323,13 +329,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: colors.hairline,
+    borderWidth: 1,
+    borderColor: colors.line,
     backgroundColor: colors.surface,
   },
   quickChipOn: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: colors.text,
+    borderColor: colors.text,
   },
   monthRow: {
     flexDirection: 'row',
@@ -344,6 +350,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   weekRow: {
     flexDirection: 'row',
@@ -355,10 +363,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cellOn: {
-    backgroundColor: colors.ink,
+    backgroundColor: colors.text,
   },
   cellToday: {
-    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: colors.lavender,
   },
   confirm: {
     marginTop: spacing.xl,

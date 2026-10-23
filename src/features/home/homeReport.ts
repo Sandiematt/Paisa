@@ -39,6 +39,12 @@ export type HomeReport = {
   compareLabel: string;
   net: number;
   balance: number;
+  /** Wallet balance at the start of the period (before its first day). */
+  startBalance: number;
+  /** Wallet balance now minus `startBalance`: what the period added or took. */
+  balanceChange: number;
+  /** First day of the period as `{day, monthIndex}` for "since 1 October". */
+  periodStart: {day: number; monthIndex: number};
   changePct: number | null;
   changeAmount: number;
   income: number;
@@ -806,6 +812,12 @@ export function buildHomeReport(
     compareLabel: compareLabel(range, now),
     net: current.net,
     balance: lifetime.balance,
+    startBalance,
+    balanceChange: roundMoney(lifetime.balance - startBalance),
+    periodStart: {
+      day: period.start.getDate(),
+      monthIndex: period.start.getMonth(),
+    },
     changePct: change.changePct,
     changeAmount: change.changeAmount,
     income: roundMoney(current.income),

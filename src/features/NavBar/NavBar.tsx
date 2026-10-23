@@ -2,22 +2,26 @@ import React, {useEffect, useRef} from 'react';
 import {Animated, Pressable, StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {House, ListBullets, ChartLineUp, User} from 'phosphor-react-native';
+import {ChartBar, House, Plus, Receipt, User} from 'phosphor-react-native';
 
 import {
   FLOATING_NAV_GAP,
   FLOATING_NAV_ITEM_HEIGHT,
+  FLOATING_NAV_PILL_HEIGHT,
   FLOATING_NAV_PILL_PAD_V,
   useFloatingNavClearance,
   useFloatingNavVisible,
 } from './FloatingNavScroll';
-import {GlassPanel, PressableScale} from '../../components/ui';
+import {AppText, GlassPanel, PressableScale} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {
   colors,
   duration,
   easing,
+  fonts,
+  gradients,
   layout,
+  linearGradient,
   radii,
   shadows,
   spacing,
@@ -34,39 +38,15 @@ type NavBarProps = {
   addOpen?: boolean;
 };
 
-const LEFT_TABS: {id: TabId; label: string}[] = [
+const TAB_ITEMS: {id: TabId; label: string}[] = [
   {id: 'home', label: 'Home'},
   {id: 'activity', label: 'Activity'},
-];
-const RIGHT_TABS: {id: TabId; label: string}[] = [
   {id: 'insights', label: 'Insights'},
 ];
 
-const ITEM_HEIGHT = FLOATING_NAV_ITEM_HEIGHT;
-const SLOT_WIDTH = 74;
-const ADD_FACE = 48;
-const ADD_ARM = 14;
-const ADD_THICK = 2;
-
-function AddPlusMark({
-  twist,
-}: {
-  twist?: Animated.Value;
-}) {
-  const fallback = useRef(new Animated.Value(0)).current;
-  const value =
-    twist && typeof twist.interpolate === 'function' ? twist : fallback;
-  const spin = value.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '45deg'],
-  });
-  return (
-    <>
-      <Animated.View style={[styles.addBarH, {transform: [{rotate: spin}]}]} />
-      <Animated.View style={[styles.addBarV, {transform: [{rotate: spin}]}]} />
-    </>
-  );
-}
+const ACTIVE_PILL_WIDTH = 70;
+const ADD_SIZE = layout.addButton;
+const FAB_IMAGE = linearGradient(gradients.fab, 140, [0, 0.55, 1]);
 
 function TabGlyph({
   id,
@@ -83,10 +63,46 @@ function TabGlyph({
     case 'home':
       return <House color={color} size={size} weight={weight} />;
     case 'activity':
-      return <ListBullets color={color} size={size} weight={weight} />;
+      return <Receipt color={color} size={size} weight={weight} />;
     case 'insights':
-      return <ChartLineUp color={color} size={size} weight={weight} />;
+      return <ChartBar color={color} size={size} weight={weight} />;
   }
+}
+
+function NavSlot({
+  label,
+  active,
+  onPress,
+  accessibilityRole,
+  accessibilityLabel,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  accessibilityRole: 'tab' | 'button';
+  accessibilityLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <PressableScale
+      onPress={onPress}
+      scaleTo={0.94}
+      accessibilityRole={accessibilityRole}
+      accessibilityState={accessibilityRole === 'tab' ? {selected: active} : undefined}
+      accessibilityLabel={accessibilityLabel}
+      containerStyle={styles.slot}
+      style={[styles.item, active && styles.itemActive]}>
+      {children}
+      <AppText
+        variant="caption"
+        color={active ? colors.text : colors.muted}
+        numberOfLines={1}
+        style={active ? styles.labelActive : styles.label}>
+        {label}
+      </AppText>
+    </PressableScale>
+  );
 }
 
 export function NavBar({
@@ -101,11 +117,7 @@ export function NavBar({
   const navVisible = useFloatingNavVisible();
   const hideDistance = useFloatingNavClearance() + spacing.lg;
   const hidden = useRef(new Animated.Value(0)).current;
-  const plusTwistRef = useRef<Animated.Value | null>(null);
-  if (plusTwistRef.current == null) {
-    plusTwistRef.current = new Animated.Value(0);
-  }
-  const plusTwist = plusTwistRef.current;
+  const plusTwist = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(hidden, {
@@ -140,6 +152,11 @@ export function NavBar({
     ],
   };
 
+  const spin = plusTwist.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '45deg'],
+  });
+
   return (
     <Animated.View
       pointerEvents={navVisible ? 'box-none' : 'none'}
@@ -149,78 +166,56 @@ export function NavBar({
         addOpen ? styles.dockRaised : null,
         dockMotion,
       ]}>
-      <GlassPanel
-        intensity="2xl"
-        overlayColor={colors.surfaceNav}
-        radius={radii.pill}
-        style={[styles.pillWrap, shadows.nav]}
-        contentStyle={styles.pill}>
-        <View style={styles.cluster}>
-          {LEFT_TABS.map(item => {
+      <View style={styles.row} pointerEvents="box-none">
+        <GlassPanel
+          intensity="2xl"
+          overlayColor={colors.glass}
+          radius={radii.pill}
+          style={[styles.pillWrap, shadows.nav]}
+          contentStyle={styles.pill}>
+          {TAB_ITEMS.map(item => {
             const active = activeTab === item.id;
-            const color = active ? colors.accent : colors.inkMuted;
             return (
-              <PressableScale
+              <NavSlot
                 key={item.id}
+                label={item.label}
+                active={active}
                 onPress={() => onTabPress(item.id)}
-                scaleTo={0.94}
                 accessibilityRole="tab"
-                accessibilityState={{selected: active}}
-                accessibilityLabel={item.label}
-                containerStyle={styles.slot}
-                style={styles.hit}>
-                <TabGlyph id={item.id} color={color} active={active} />
-              </PressableScale>
+                accessibilityLabel={item.label}>
+                <TabGlyph
+                  id={item.id}
+                  color={active ? colors.text : colors.muted}
+                  active={active}
+                />
+              </NavSlot>
             );
           })}
-        </View>
+          <NavSlot
+            label="Profile"
+            active={false}
+            onPress={onProfilePress}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile">
+            <User color={colors.muted} size={layout.navIcon} weight="regular" />
+          </NavSlot>
+        </GlassPanel>
+
         <Pressable
           onPress={onAddPress}
           accessibilityRole="button"
           accessibilityLabel="Add transaction"
           accessibilityHint="Adds an expense or income"
-          style={styles.addSlot}>
-          <View collapsable={false} style={styles.addFace}>
-            <View pointerEvents="none" style={styles.addShade} />
-            <View pointerEvents="none" style={styles.addSheen} />
-            <View pointerEvents="none" style={styles.addIconSlot}>
-              <AddPlusMark twist={plusTwist} />
-            </View>
+          style={styles.addHit}>
+          <View collapsable={false} style={[styles.addFace, shadows.add]}>
+            <Animated.View
+              pointerEvents="none"
+              style={{transform: [{rotate: spin}]}}>
+              <Plus color={colors.text} size={24} weight="bold" />
+            </Animated.View>
           </View>
         </Pressable>
-        <View style={styles.cluster}>
-          {RIGHT_TABS.map(item => {
-            const active = activeTab === item.id;
-            const color = active ? colors.accent : colors.inkMuted;
-            return (
-              <PressableScale
-                key={item.id}
-                onPress={() => onTabPress(item.id)}
-                scaleTo={0.94}
-                accessibilityRole="tab"
-                accessibilityState={{selected: active}}
-                accessibilityLabel={item.label}
-                containerStyle={styles.slot}
-                style={styles.hit}>
-                <TabGlyph id={item.id} color={color} active={active} />
-              </PressableScale>
-            );
-          })}
-          <PressableScale
-            onPress={onProfilePress}
-            scaleTo={0.94}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-            containerStyle={styles.slot}
-            style={styles.hit}>
-            <User
-              color={colors.inkMuted}
-              size={layout.navIcon}
-              weight="regular"
-            />
-          </PressableScale>
-        </View>
-      </GlassPanel>
+      </View>
     </Animated.View>
   );
 }
@@ -231,7 +226,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    alignItems: 'center',
     zIndex: 10,
   },
 
@@ -239,97 +233,67 @@ const styles = StyleSheet.create({
     zIndex: 21,
   },
 
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xxl,
+    gap: spacing.md,
+  },
+
   pillWrap: {
-    alignSelf: 'center',
-    overflow: 'hidden',
+    flex: 1,
     borderRadius: radii.pill,
   },
 
   pill: {
-    height: ITEM_HEIGHT + FLOATING_NAV_PILL_PAD_V * 2,
+    height: FLOATING_NAV_PILL_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: FLOATING_NAV_PILL_PAD_V,
-    overflow: 'hidden',
-  },
-
-  cluster: {
-    height: ITEM_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingHorizontal: FLOATING_NAV_PILL_PAD_V,
   },
 
   slot: {
-    width: SLOT_WIDTH,
-    height: ITEM_HEIGHT,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-
-  addSlot: {
-    width: ADD_FACE,
-    height: ITEM_HEIGHT,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  hit: {
     flex: 1,
-    height: ITEM_HEIGHT,
+    height: FLOATING_NAV_ITEM_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
-    overflow: 'hidden',
+  },
+
+  item: {
+    width: ACTIVE_PILL_WIDTH,
+    height: FLOATING_NAV_ITEM_HEIGHT,
+    borderRadius: radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+  },
+
+  itemActive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+
+  label: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+
+  labelActive: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontFamily: fonts.jakartaBold,
+  },
+
+  addHit: {
+    width: ADD_SIZE,
+    height: ADD_SIZE,
   },
 
   addFace: {
-    width: ADD_FACE,
-    height: ADD_FACE,
-    borderRadius: ADD_FACE / 2,
-    backgroundColor: '#F0A63C',
-    overflow: 'hidden',
-    ...shadows.add,
-  },
-  addIconSlot: {
-    ...StyleSheet.absoluteFill,
-  },
-  addBarH: {
-    position: 'absolute',
-    left: (ADD_FACE - ADD_ARM) / 2,
-    top: (ADD_FACE - ADD_THICK) / 2,
-    width: ADD_ARM,
-    height: ADD_THICK,
-    borderRadius: ADD_THICK / 2,
-    backgroundColor: '#FFFFFF',
-  },
-  addBarV: {
-    position: 'absolute',
-    left: (ADD_FACE - ADD_THICK) / 2,
-    top: (ADD_FACE - ADD_ARM) / 2,
-    width: ADD_THICK,
-    height: ADD_ARM,
-    borderRadius: ADD_THICK / 2,
-    backgroundColor: '#FFFFFF',
-  },
-  addShade: {
-    position: 'absolute',
-    right: -6,
-    bottom: -10,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E07A1C',
-  },
-
-  addSheen: {
-    position: 'absolute',
-    top: -8,
-    left: -8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFC14D',
-    opacity: 0.95,
+    width: ADD_SIZE,
+    height: ADD_SIZE,
+    borderRadius: ADD_SIZE / 2,
+    backgroundImage: FAB_IMAGE,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

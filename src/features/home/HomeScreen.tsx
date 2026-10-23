@@ -1,54 +1,75 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo} from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
-  Animated,
-  LayoutChangeEvent,
-  Pressable,
+  Image,
   RefreshControl,
   ScrollView,
   StyleSheet,
   View,
 } from 'react-native';
 
-import {Warning} from 'phosphor-react-native';
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Bell,
+  CaretRight,
+  ChartBar,
+  ClockCounterClockwise,
+  PiggyBank,
+  Wallet,
+  Warning,
+  X,
+} from 'phosphor-react-native';
 
 import {
-  ArrowDownRightIcon,
-  ChevronRightIcon,
-  CreditCardIcon,
-  TrendingUpIcon,
-} from '../../components/icons/FeatherIcons';
-import {
-  MoneyInGlyph,
-  MoneyOutGlyph,
-  RefreshGlyph,
-  SavedGlyph,
-} from '../../components/icons/Glyphs';
-import {GlassPanel, PressableScale, ProgressBar, Screen, Text} from '../../components/ui';
-import {useReducedMotion} from '../../hooks/useReducedMotion';
+  AppText,
+  GlassPanel,
+  GradientIconSquare,
+  GradientView,
+  PressableScale,
+  ProgressRing,
+  Screen,
+  SectionTitle,
+  SegmentedControl,
+  BannerPill,
+} from '../../components/ui';
+import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
-import {colors, fonts, layout, radii, shadows} from '../../theme';
+import {TransactionRow} from '../../lib/transactionsStore';
+import {colors, fonts, layout, radii, withAlpha} from '../../theme';
+import {AddKind} from '../add/types';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
-import {DonutChart} from './charts';
-import {HomeAmbient} from './HomeAmbient';
+import {useNotifications} from '../notifications/NotificationsProvider';
+import {AreaChart} from './charts';
 import {
-  HomeRange,
-  HomeReport,
-  SavingsState,
-  SpendSlice,
-  rangeNoun,
-  rangeScopeLabel,
-} from './homeReport';
+  dayMonthLabel,
+  daysToGo,
+  daysToGoLabel,
+  greetingForHour,
+  weeklySpendNudge,
+} from './homeInsights';
+import {HomeRange, HomeReport, SavingsState, rangeNoun, rangeScopeLabel} from './homeReport';
 
 type DashboardStatus = 'loading' | 'ready' | 'error';
 
 type HomeScreenProps = {
   name: string;
+  avatarUrl?: string;
   currencySymbol: string;
+  /** 0..1, how much of the profile is filled in (the ring around the avatar). */
+  profileProgress: number;
   onBudgetPress?: () => void;
   onSavingsPress?: () => void;
+  /** Opens where the budget is set when there is none yet. */
+  onSetupBudgetPress?: () => void;
+  onProfilePress?: () => void;
+  onNotificationsPress?: () => void;
+  onComposePress?: (kind: AddKind) => void;
+  onHistoryPress?: () => void;
   report: HomeReport;
+  transactions: TransactionRow[];
+  categories: CategoryRow[];
   status: DashboardStatus;
   refreshing: boolean;
   error: string | null;
@@ -56,66 +77,54 @@ type HomeScreenProps = {
   reload: () => void;
   range: HomeRange;
   setRange: (range: HomeRange) => void;
+  /** Week key of the nudge the user closed this session. */
+  dismissedNudgeKey: string | null;
+  onDismissNudge: (key: string) => void;
 };
 
-const RANGES: {id: HomeRange; label: string}[] = [
-  {id: 'week', label: 'Week'},
-  {id: 'month', label: 'Month'},
+const RANGE_OPTIONS = [
+  {value: 'week' as const, label: 'Week'},
+  {value: 'month' as const, label: 'Month'},
 ];
 
-const DONUT_SIZE = 104;
-const MAX_VISIBLE_SLICES = 4;
-const RANGE_PAD = 5;
-const RANGE_SEG_H = 34;
-
-const TINTS = {
-  income: colors.alertPositive,
-  expense: colors.alertDanger,
-  saved: colors.accentSoft,
-} as const;
+const AVATAR_RING = 46;
+const AVATAR_PHOTO = 36;
+const CARD_GRADIENT = [colors.surfaceRaised, colors.surface, withAlpha(colors.glow, 0.77)];
+const CARD_GRADIENT_POSITIONS = [0, 0.62, 1];
 
 const tabular = {fontVariant: ['tabular-nums'] as const};
 
-function Circle({
-  size,
-  backgroundColor,
-  borderColor,
-  children,
-  style,
-}: {
-  size: number;
-  backgroundColor?: string;
-  borderColor?: string;
-  children?: React.ReactNode;
-  style?: object;
-}) {
-  return (
-    <View
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: backgroundColor ?? 'transparent',
-          borderWidth: borderColor ? 1 : 0,
-          borderColor,
-        },
-        style,
-      ]}>
-      {children}
-    </View>
-  );
+function isSafeAvatarUrl(url: string | undefined): url is string {
+  if (!url) {
+    return false;
+  }
+  try {
+    return new URL(url).protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
-function timeGreeting(): string {
-  const hour = new Date().getHours();
-  if (hour < 5) return 'Still up,';
-  if (hour < 12) return 'Good morning,';
-  if (hour < 17) return 'Good afternoon,';
-  if (hour < 21) return 'Good evening,';
-  return 'Good night,';
+function initialsFrom(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) {
+    return 'P';
+  }
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+/** Same size steps as Insights, so long balances never wrap or flash. */
+function balanceFontSize(text: string): {fontSize: number; lineHeight: number} {
+  if (text.length > 12) {
+    return {fontSize: 30, lineHeight: 34};
+  }
+  if (text.length > 9) {
+    return {fontSize: 36, lineHeight: 40};
+  }
+  return {fontSize: 44, lineHeight: 48};
 }
 
 function syncCaption(
@@ -147,382 +156,177 @@ function syncCaption(
   return `Updated ${minutes} min ago`;
 }
 
-type SummaryKind = 'income' | 'expense' | 'saved';
-
-const SummaryIcon = React.memo(function SummaryIcon({kind}: {kind: SummaryKind}) {
-  if (kind === 'income') {
-    return <MoneyInGlyph color={colors.positive} size={16} />;
-  }
-  if (kind === 'expense') {
-    return <MoneyOutGlyph color={colors.danger} size={16} />;
-  }
-  return <SavedGlyph color="#C88A2E" size={16} />;
-});
-
-function IconDisk({
-  size,
-  backgroundColor,
-  borderColor,
-  children,
-}: {
-  size: number;
-  backgroundColor: string;
-  borderColor: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor,
-      }}>
-      {children}
-    </View>
-  );
-}
-
-function StatTile({
-  kind,
-  label,
-  amount,
-  currencySymbol,
-}: {
-  kind: SummaryKind;
+type QuickTileProps = {
   label: string;
-  amount: number;
-  currencySymbol: string;
-}) {
-  const disk =
-    kind === 'income'
-      ? {backgroundColor: TINTS.income, borderColor: '#3F7A4E33'}
-      : kind === 'expense'
-        ? {backgroundColor: TINTS.expense, borderColor: '#C0523A33'}
-        : {backgroundColor: TINTS.saved, borderColor: '#C88A2E33'};
-
-  return (
-    <GlassPanel style={[styles.statCard, shadows.cardSoft]} radius={radii.card} contentStyle={styles.statInner}>
-      <IconDisk size={32} {...disk}>
-        <SummaryIcon kind={kind} />
-      </IconDisk>
-      <Text
-        fontFamily={fonts.interMedium}
-        fontSize={12}
-        lineHeight={16}
-        fontWeight="500"
-        color={colors.inkSecondary}
-        numberOfLines={1}>
-        {label}
-      </Text>
-      <Text
-        fontFamily={fonts.outfitSemi}
-        fontSize={17}
-        lineHeight={22}
-        fontWeight="600"
-        color={colors.ink}
-        numberOfLines={1}
-        adjustsFontSizeToFit
-        minimumFontScale={0.7}
-        style={tabular}>
-        {formatMoney(amount, currencySymbol, {decimals: 0})}
-      </Text>
-    </GlassPanel>
-  );
-}
-
-const SummaryRow = React.memo(function SummaryRow({
-  income,
-  spent,
-  saved,
-  currencySymbol,
-}: {
-  income: number;
-  spent: number;
-  saved: number;
-  currencySymbol: string;
-}) {
-  return (
-    <View style={styles.statRow}>
-      <StatTile kind="income" label="Income" amount={income} currencySymbol={currencySymbol} />
-      <StatTile kind="expense" label="Expenses" amount={spent} currencySymbol={currencySymbol} />
-      <StatTile kind="saved" label="Saved" amount={Math.max(0, saved)} currencySymbol={currencySymbol} />
-    </View>
-  );
-});
-
-const SpendingCard = React.memo(function SpendingCard({
-  slices,
-  spent,
-  currencySymbol,
-  overBudget,
-}: {
-  slices: SpendSlice[] | undefined;
-  spent: number;
-  currencySymbol: string;
-  overBudget: boolean;
-}) {
-  const tone = overBudget ? colors.danger : colors.positive;
-  const safeSlices = slices ?? [];
-  const hasSlices = safeSlices.length > 0;
-  const visibleSlices = safeSlices.slice(0, MAX_VISIBLE_SLICES);
-  const remainder = safeSlices.length - visibleSlices.length;
-
-  return (
-    <GlassPanel style={[styles.spendCard, shadows.card]} radius={24} contentStyle={styles.spendInner}>
-      <View style={styles.rowBetween}>
-        <View>
-          <Text
-            fontFamily={fonts.outfitSemi}
-            fontSize={18}
-            lineHeight={24}
-            fontWeight="600"
-            letterSpacing={-0.45}
-            color={colors.ink}>
-            Spending
-          </Text>
-          <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} fontWeight="500" color={colors.inkMuted}>
-            By category
-          </Text>
-        </View>
-        {hasSlices ? (
-          <View
-            style={[
-              styles.chip,
-              {
-                backgroundColor: overBudget ? TINTS.expense : TINTS.income,
-                borderColor: overBudget ? '#C0523A40' : '#3F7A4E40',
-              },
-            ]}
-            accessibilityRole="text"
-            accessibilityLabel={`Spending ${overBudget ? 'off track' : 'on track'}`}>
-            <Circle size={6} backgroundColor={tone} />
-            <Text fontFamily={fonts.interSemi} fontSize={11} lineHeight={15} fontWeight="600" color={tone}>
-              {overBudget ? 'Off track' : 'On track'}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-
-      <View style={styles.spendBody}>
-        <DonutChart
-          slices={hasSlices ? safeSlices : [{id: 'empty', label: 'None', color: colors.hairline, percent: 100}]}
-          size={DONUT_SIZE}>
-          <View style={styles.donutLabel}>
-            <Text
-              fontFamily={fonts.interMedium}
-              fontSize={10}
-              lineHeight={13}
-              fontWeight="500"
-              color={colors.inkMuted}>
-              Spent
-            </Text>
-            <Text
-              fontFamily={fonts.outfitSemi}
-              fontSize={15}
-              lineHeight={18}
-              fontWeight="600"
-              color={colors.ink}
-              numberOfLines={1}
-              style={tabular}>
-              {formatMoney(spent, currencySymbol, {decimals: 0})}
-            </Text>
-          </View>
-        </DonutChart>
-
-        {hasSlices ? (
-          <View style={styles.categoryCol}>
-            {visibleSlices.map(slice => (
-              <View key={slice.id} style={styles.categoryBlock}>
-                <View style={styles.rowBetween}>
-                  <View style={styles.categoryName}>
-                    <Circle size={7} backgroundColor={slice.color} />
-                    <Text
-                      fontFamily={fonts.interMedium}
-                      fontSize={13}
-                      lineHeight={17}
-                      fontWeight="500"
-                      color={colors.inkSecondary}
-                      numberOfLines={1}
-                      style={{flex: 1}}>
-                      {slice.label}
-                    </Text>
-                  </View>
-                  <Text
-                    fontFamily={fonts.interSemi}
-                    fontSize={13}
-                    lineHeight={17}
-                    fontWeight="600"
-                    color={colors.ink}
-                    style={tabular}>
-                    {slice.percent}%
-                  </Text>
-                </View>
-                <View style={styles.track}>
-                  <View
-                    style={[
-                      styles.trackFill,
-                      {
-                        backgroundColor: slice.color,
-                        width: `${Math.min(100, Math.max(0, slice.percent))}%`,
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-            ))}
-            {remainder > 0 ? (
-              <Text fontSize={12} lineHeight={17} fontWeight="500" color={colors.inkMuted}>
-                +{remainder} more
-              </Text>
-            ) : null}
-          </View>
-        ) : (
-          <View style={styles.categoryCol}>
-            <Text fontSize={13} lineHeight={19} fontWeight="500" color={colors.inkMuted}>
-              Nothing logged yet — spending will show up here once you add it.
-            </Text>
-          </View>
-        )}
-      </View>
-    </GlassPanel>
-  );
-});
-
-type MetricCardProps = {
-  title: string;
-  amount: number;
-  amountColor: string;
-  amountText?: string;
-  currencySymbol: string;
-  progress: number;
-  progressColor: string;
-  progressGradient?: [string, string];
-  footerLeft?: string;
-  footerTone: string;
-  hideProgress?: boolean;
-  warningLine?: string;
-  amountIcon?: React.ReactNode;
-  accessibilityLabel: string;
   icon: React.ReactNode;
-  iconBackground: string;
-  iconBorder: string;
   onPress?: () => void;
+  accessibilityLabel: string;
 };
 
-function MetricCard({
-  title,
-  amount,
-  amountColor,
-  amountText,
-  currencySymbol,
-  progress,
-  progressColor,
-  progressGradient,
-  footerLeft,
-  footerTone,
-  hideProgress,
-  warningLine,
-  amountIcon,
-  accessibilityLabel,
-  icon,
-  iconBackground,
-  iconBorder,
-  onPress,
-}: MetricCardProps) {
+function QuickTile({label, icon, onPress, accessibilityLabel}: QuickTileProps) {
   return (
     <PressableScale
-      scaleTo={0.98}
       onPress={onPress}
+      scaleTo={0.96}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      containerStyle={styles.metricWrap}
-      style={[styles.metricPress, shadows.cardSoft]}>
-      <GlassPanel radius={radii.cardMetric} contentStyle={styles.metricCard} style={styles.metricGlass}>
-      <View style={styles.rowBetween}>
-        <View style={styles.metricTitle}>
-          <IconDisk size={28} backgroundColor={iconBackground} borderColor={iconBorder}>
-            {icon}
-          </IconDisk>
-          <Text fontFamily={fonts.interSemi} fontSize={13} lineHeight={18} fontWeight="600" color={colors.ink}>
-            {title}
-          </Text>
-        </View>
-        <ChevronRightIcon color={colors.inkMuted} size={16} />
-      </View>
-      <View style={styles.metricAmountRow}>
-        {amountIcon}
-        <Text
-          fontFamily={fonts.outfitBold}
-          fontSize={amountText ? 18 : 22}
-          lineHeight={26}
-          fontWeight="700"
-          color={amountColor}
-          numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.7}
-          style={[tabular, styles.metricAmountText]}>
-          {amountText ?? formatMoney(amount, currencySymbol, {decimals: 0})}
-        </Text>
-      </View>
-      {hideProgress ? null : (
-        <ProgressBar progress={progress} color={progressColor} gradient={progressGradient} />
-      )}
-      {warningLine ? (
-        <Text fontFamily={fonts.interMedium} fontSize={11} lineHeight={15} fontWeight="500" color={colors.danger}>
-          {warningLine}
-        </Text>
-      ) : null}
-      {footerLeft ? (
-        <Text fontFamily={fonts.interMedium} fontSize={11} lineHeight={15} fontWeight="500" color={footerTone}>
-          {footerLeft}
-        </Text>
-      ) : null}
-      </GlassPanel>
+      containerStyle={styles.tileWrap}
+      style={styles.tile}>
+      <GradientIconSquare size={38} glow>
+        {icon}
+      </GradientIconSquare>
+      <AppText variant="bodyStrong" style={styles.tileLabel}>
+        {label}
+      </AppText>
     </PressableScale>
   );
 }
 
-function BudgetCard({
+type GoalCardProps = {
+  icon: React.ReactNode;
+  iconGradient: 'primary' | 'savings';
+  ringProgress: number;
+  ringGradient: 'primary' | 'savings' | 'rose';
+  centerTop: React.ReactNode;
+  centerSub?: string;
+  title: string;
+  value: string;
+  valueTone?: string;
+  accessibilityLabel: string;
+  onPress?: () => void;
+};
+
+function GoalCard({
+  icon,
+  iconGradient,
+  ringProgress,
+  ringGradient,
+  centerTop,
+  centerSub,
+  title,
+  value,
+  valueTone = colors.muted,
+  accessibilityLabel,
+  onPress,
+}: GoalCardProps) {
+  return (
+    <PressableScale
+      onPress={onPress}
+      disabled={!onPress}
+      scaleTo={0.98}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      containerStyle={styles.goalWrap}
+      style={styles.goalCard}>
+      <View style={styles.goalHead}>
+        <GradientIconSquare size={34} gradient={iconGradient}>
+          {icon}
+        </GradientIconSquare>
+        <CaretRight size={18} color={colors.muted} weight="bold" />
+      </View>
+      <ProgressRing
+        size={112}
+        stroke={10}
+        progress={ringProgress}
+        gradient={ringGradient}
+        style={styles.ring}>
+        <View style={styles.ringCenter}>
+          {centerTop}
+          {centerSub ? (
+            <AppText variant="caption" color={colors.muted}>
+              {centerSub}
+            </AppText>
+          ) : null}
+        </View>
+      </ProgressRing>
+      <View style={styles.goalText}>
+        <AppText variant="bodyStrong">{title}</AppText>
+        <AppText variant="label" color={valueTone}>
+          {value}
+        </AppText>
+      </View>
+    </PressableScale>
+  );
+}
+
+function RingPercent({text, color = colors.text}: {text: string; color?: string}) {
+  return (
+    <AppText
+      style={[styles.ringPercent, tabular, {color}]}
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={0.6}>
+      {text}
+    </AppText>
+  );
+}
+
+function BudgetGoalCard({
   budget,
   remainingBudget,
   currencySymbol,
   range,
+  showBudget,
   onPress,
+  onSetupPress,
 }: {
   budget: number;
   remainingBudget: number;
   currencySymbol: string;
   range: HomeRange;
+  showBudget: boolean;
   onPress?: () => void;
+  onSetupPress?: () => void;
 }) {
+  const icon = <Wallet size={17} weight="fill" color={colors.text} />;
+  const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
+
+  if (!showBudget) {
+    return (
+      <GoalCard
+        icon={icon}
+        iconGradient="primary"
+        ringProgress={0}
+        ringGradient="primary"
+        centerTop={<RingPercent text="Set up" color={colors.lavender} />}
+        title="Budget"
+        value="No budget yet"
+        accessibilityLabel="Budget, not set. Opens your profile to set one"
+        onPress={onSetupPress}
+      />
+    );
+  }
+
+  const used = Math.max(0, budget - remainingBudget);
+  const progress = budget > 0 ? Math.max(0, Math.min(1, used / budget)) : 0;
+  const over = remainingBudget < 0;
+  const usedPct = budget > 0 ? Math.min(100, Math.round((used / budget) * 100)) : 0;
   const scope = rangeScopeLabel(range);
-  const usedAmount = Math.max(0, budget - remainingBudget);
-  const progress = budget > 0 ? Math.max(0, Math.min(1, usedAmount / budget)) : 0;
-  const overBudget = remainingBudget < 0;
-  const usedPct = budget > 0 ? Math.min(100, Math.round((usedAmount / budget) * 100)) : 0;
 
   return (
-    <MetricCard
+    <GoalCard
+      icon={icon}
+      iconGradient="primary"
+      ringProgress={over ? 1 : progress}
+      ringGradient={over ? 'rose' : 'primary'}
+      centerTop={
+        over ? (
+          <RingPercent text="Over" color={colors.roseLight} />
+        ) : (
+          <RingPercent text={`${usedPct}%`} />
+        )
+      }
+      centerSub={over ? 'budget' : 'used'}
       title="Budget"
-      amount={Math.abs(remainingBudget)}
-      amountColor={overBudget ? colors.danger : colors.ink}
-      currencySymbol={currencySymbol}
-      progress={progress}
-      progressColor={overBudget ? colors.danger : colors.accent}
-      progressGradient={overBudget ? ['#D98A2B', '#C0523A'] : ['#D98A2B', '#E8B15A']}
-      footerLeft={overBudget ? 'Over budget' : `${usedPct}% used`}
-      footerTone={overBudget ? colors.danger : colors.inkMuted}
-      icon={<CreditCardIcon color={colors.gold} size={14} />}
-      iconBackground={TINTS.saved}
-      iconBorder="#C88A2E33"
-      accessibilityLabel={`Budget, ${formatMoney(Math.abs(remainingBudget), currencySymbol, {
-        decimals: 0,
-      })} ${overBudget ? `over ${scope}` : `left ${scope}`}`}
+      value={
+        over
+          ? `${money(Math.abs(remainingBudget))} over ${money(budget)}`
+          : `${money(used)} of ${money(budget)}`
+      }
+      valueTone={over ? colors.roseLight : colors.muted}
+      accessibilityLabel={`Budget, ${money(Math.abs(remainingBudget))} ${
+        over ? `over ${scope}` : `left ${scope}`
+      }, ${usedPct} percent used`}
       onPress={onPress}
     />
   );
@@ -546,22 +350,20 @@ function SavingsGoalCard({
   onPress?: () => void;
 }) {
   const scope = rangeScopeLabel(range);
+  const icon = <PiggyBank size={17} weight="fill" color={colors.text} />;
+  const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
 
   if (savingsState.kind === 'no-income') {
     return (
-      <MetricCard
+      <GoalCard
+        icon={icon}
+        iconGradient="savings"
+        ringProgress={0}
+        ringGradient="savings"
+        centerTop={<RingPercent text="No" color={colors.muted} />}
+        centerSub="income"
         title="Savings"
-        amount={0}
-        amountText="No income recorded"
-        amountColor={colors.inkMuted}
-        currencySymbol={currencySymbol}
-        progress={0}
-        progressColor={colors.inkMuted}
-        hideProgress
-        footerTone={colors.inkMuted}
-        icon={<TrendingUpIcon color={colors.inkMuted} size={14} />}
-        iconBackground={TINTS.income}
-        iconBorder="#3F7A4E33"
+        value="No income recorded"
         accessibilityLabel={`Savings goal, no income recorded ${scope}`}
         onPress={onPress}
       />
@@ -569,25 +371,19 @@ function SavingsGoalCard({
   }
 
   if (savingsState.kind === 'negative') {
-    const overspend = formatMoney(savingsState.overspend, currencySymbol, {
-      decimals: 0,
-    });
+    const overspend = money(savingsState.overspend);
     const line = `You spent ${overspend} more than you earned this ${rangeNoun(range)}`;
     return (
-      <MetricCard
+      <GoalCard
+        icon={icon}
+        iconGradient="savings"
+        ringProgress={1}
+        ringGradient="rose"
+        centerTop={<Warning size={26} weight="fill" color={colors.roseLight} />}
+        centerSub="overspent"
         title="Savings"
-        amount={-savingsState.overspend}
-        amountColor={colors.danger}
-        amountIcon={<Warning size={18} weight="fill" color={colors.danger} />}
-        currencySymbol={currencySymbol}
-        progress={0}
-        progressColor={colors.danger}
-        hideProgress
-        warningLine={line}
-        footerTone={colors.danger}
-        icon={<TrendingUpIcon color={colors.danger} size={14} />}
-        iconBackground={TINTS.expense}
-        iconBorder="#C0523A33"
+        value={line}
+        valueTone={colors.roseLight}
         accessibilityLabel={`Savings goal, negative ${overspend}. ${line}`}
         onPress={onPress}
       />
@@ -597,131 +393,66 @@ function SavingsGoalCard({
   const saved = Math.max(0, actualSavings);
   if (periodSavingsTarget <= 0) {
     return (
-      <MetricCard
+      <GoalCard
+        icon={icon}
+        iconGradient="savings"
+        ringProgress={0}
+        ringGradient="savings"
+        centerTop={
+          <AppText
+            style={[styles.ringAmount, tabular]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.6}>
+            {money(saved)}
+          </AppText>
+        }
+        centerSub="saved"
         title="Savings"
-        amount={saved}
-        amountColor={colors.ink}
-        currencySymbol={currencySymbol}
-        progress={0}
-        progressColor={colors.positive}
-        hideProgress
-        footerTone={colors.positive}
-        icon={<TrendingUpIcon color={colors.positive} size={14} />}
-        iconBackground={TINTS.income}
-        iconBorder="#3F7A4E33"
-        accessibilityLabel={`Savings, ${formatMoney(saved, currencySymbol, {
-          decimals: 0,
-        })} saved ${scope}`}
+        value="No goal set"
+        accessibilityLabel={`Savings, ${money(saved)} saved ${scope}, no goal set`}
         onPress={onPress}
       />
     );
   }
+
   const onTrack = savingsVsTarget >= 0;
-  const progress =
-    periodSavingsTarget > 0 ? Math.max(0, Math.min(1, saved / periodSavingsTarget)) : saved > 0 ? 1 : 0;
-  const savedPct = Math.round(progress * 100);
+  const progress = Math.max(0, Math.min(1, saved / periodSavingsTarget));
+  const pct = Math.round(progress * 100);
   return (
-    <MetricCard
+    <GoalCard
+      icon={icon}
+      iconGradient="savings"
+      ringProgress={progress}
+      ringGradient="savings"
+      centerTop={<RingPercent text={`${pct}%`} />}
+      centerSub="of goal"
       title="Savings"
-      amount={saved}
-      amountColor={colors.ink}
-      currencySymbol={currencySymbol}
-      progress={progress}
-      progressColor={onTrack ? colors.positive : colors.danger}
-      progressGradient={onTrack ? ['#3F7A4E', '#6BA85A'] : ['#D98A2B', '#C0523A']}
-      footerLeft={`${savedPct}% of goal`}
-      footerTone={onTrack ? colors.positive : colors.danger}
-      icon={<TrendingUpIcon color={onTrack ? colors.positive : colors.danger} size={14} />}
-      iconBackground={onTrack ? TINTS.income : TINTS.expense}
-      iconBorder={onTrack ? '#3F7A4E33' : '#C0523A33'}
-      accessibilityLabel={`Savings goal, ${formatMoney(saved, currencySymbol, {
-        decimals: 0,
-      })} saved ${scope}, ${onTrack ? 'on track' : 'off track'}`}
+      value={`${money(saved)} of ${money(periodSavingsTarget)}`}
+      valueTone={onTrack ? colors.muted : colors.roseLight}
+      accessibilityLabel={`Savings goal, ${money(saved)} saved ${scope}, ${pct} percent of goal, ${
+        onTrack ? 'on track' : 'off track'
+      }`}
       onPress={onPress}
     />
   );
 }
 
-function RangeSwitch({
-  range,
-  setRange,
-}: {
-  range: HomeRange;
-  setRange: (range: HomeRange) => void;
-}) {
-  const reducedMotion = useReducedMotion();
-  const [trackW, setTrackW] = useState(0);
-  const selectedIndex = Math.max(
-    0,
-    RANGES.findIndex(item => item.id === range),
-  );
-  const innerW = Math.max(0, trackW - RANGE_PAD * 2);
-  const segmentW = innerW > 0 ? innerW / RANGES.length : 0;
-  const slideX = selectedIndex * segmentW;
-
-  const onTrackLayout = (event: LayoutChangeEvent) => {
-    setTrackW(event.nativeEvent.layout.width);
-  };
-
-  const slide = useRef(new Animated.Value(0)).current;
-  const placed = useRef(false);
-  useEffect(() => {
-    if (segmentW <= 0) {
-      return;
-    }
-    if (!placed.current) {
-      slide.setValue(slideX);
-      placed.current = true;
-      return;
-    }
-    Animated.timing(slide, {
-      toValue: slideX,
-      duration: reducedMotion ? 0 : 180,
-      useNativeDriver: true,
-    }).start();
-  }, [reducedMotion, segmentW, slide, slideX]);
-
-  return (
-    <View accessibilityRole="tablist" style={styles.rangeTrack} onLayout={onTrackLayout}>
-      {segmentW > 0 ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.rangeThumb,
-            {width: segmentW, transform: [{translateX: slide}]},
-          ]}
-        />
-      ) : null}
-      {RANGES.map(item => {
-        const selected = range === item.id;
-        return (
-          <Pressable
-            key={item.id}
-            style={styles.rangeSeg}
-            onPress={() => setRange(item.id)}
-            accessibilityRole="tab"
-            accessibilityState={{selected}}>
-            <Text
-              fontFamily={selected ? fonts.interSemi : fonts.interMedium}
-              fontSize={13}
-              lineHeight={18}
-              fontWeight={selected ? '600' : '500'}
-              color={selected ? '#FFFFFF' : colors.inkSecondary}>
-              {item.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
 export function HomeScreen({
   name,
+  avatarUrl,
   currencySymbol,
+  profileProgress,
   onBudgetPress,
   onSavingsPress,
+  onSetupBudgetPress,
+  onProfilePress,
+  onNotificationsPress,
+  onComposePress,
+  onHistoryPress,
   report: data,
+  transactions,
+  categories,
   status,
   refreshing,
   error,
@@ -729,10 +460,13 @@ export function HomeScreen({
   reload,
   range,
   setRange,
+  dismissedNudgeKey,
+  onDismissNudge,
 }: HomeScreenProps) {
   const navClearance = useFloatingNavClearance();
   const navDockHeight = useFloatingNavDockHeight();
   const navScroll = useFloatingNavScroll();
+  const {unreadCount} = useNotifications();
 
   useEffect(() => {
     if (status === 'error' && error) {
@@ -745,164 +479,287 @@ export function HomeScreen({
     [name],
   );
 
-  const changePositive = (data.changePct ?? data.changeAmount ?? 0) >= 0;
-  const showChangeBadge = !data.empty;
-  const changePct = Math.abs(data.changePct ?? 0);
+  const nudge = useMemo(
+    () => weeklySpendNudge(transactions, categories),
+    [categories, transactions],
+  );
+  const showNudge = nudge !== null && nudge.key !== dismissedNudgeKey;
+
+  const money = (amount: number, signed = false) =>
+    formatMoney(amount, currencySymbol, {decimals: 0, signed});
+
+  const noun = rangeNoun(range);
   const syncLabel = syncCaption(status, refreshing, error, updatedAt, data.empty);
-  const savedAmount = data.actualSavings;
-  const rangeWord = range === 'week' ? 'week' : 'month';
+  const syncing = refreshing || status === 'loading';
   const showBudget = data.monthlyBudget > 0;
+  const balanceText = money(data.balance);
+  const balanceSize = balanceFontSize(balanceText);
+  const change = data.balanceChange;
+  const sinceLabel = dayMonthLabel(data.periodStart.day, data.periodStart.monthIndex);
+  const daysLabel = daysToGoLabel(daysToGo(range));
+  const hasAvatar = isSafeAvatarUrl(avatarUrl);
+  const progressPct = Math.round(Math.max(0, Math.min(1, profileProgress)) * 100);
+
+  let stripText: string;
+  if (data.empty) {
+    stripText = 'Add your first transaction to get started';
+  } else if (showBudget) {
+    stripText = data.overBudget
+      ? `${money(Math.abs(data.remainingBudget))} over budget · ${daysLabel}`
+      : `${money(data.remainingBudget)} left in budget · ${daysLabel}`;
+  } else {
+    stripText = `${money(data.spent)} spent this ${noun} · ${daysLabel}`;
+  }
+  const stripOver = !data.empty && showBudget && data.overBudget;
+
+  const strip = (
+    <GradientView
+      gradient={stripOver ? 'rose' : 'budgetStrip'}
+      angle={90}
+      style={styles.strip}>
+      <Wallet size={16} weight="fill" color={colors.text} />
+      <AppText
+        variant="bodyStrong"
+        style={styles.stripText}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}>
+        {stripText}
+      </AppText>
+    </GradientView>
+  );
+
+  const notificationsLabel =
+    unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications';
+
   return (
-    <Screen edges={['top']} backdrop={<HomeAmbient />} bottomInset={navDockHeight}>
+    <Screen edges={['top']} glow={300} bottomInset={navDockHeight}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{
-          paddingHorizontal: layout.screenPadding,
-          paddingTop: 8,
-          paddingBottom: navClearance - navDockHeight,
-        }}
+        contentContainerStyle={[
+          styles.content,
+          {paddingBottom: navClearance - navDockHeight},
+        ]}
         onScroll={navScroll.onScroll}
         scrollEventThrottle={navScroll.scrollEventThrottle}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={reload}
-            tintColor={colors.ink}
-            colors={[colors.ink]}
+            tintColor={colors.text}
+            colors={[colors.lavender]}
+            progressBackgroundColor={colors.surfaceRaised}
           />
         }
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View style={styles.greeting}>
-            <Text
-              fontFamily={fonts.interMedium}
-              fontSize={13}
-              lineHeight={18}
-              fontWeight="500"
-              color={colors.inkSoft}
-              numberOfLines={1}>
-              {timeGreeting()}
-            </Text>
-            <Text
-              fontFamily={fonts.outfitSemi}
-              fontSize={26}
-              lineHeight={32}
-              fontWeight="600"
-              letterSpacing={-0.65}
-              color={colors.ink}
-              numberOfLines={1}>
-              {firstName}
-            </Text>
-          </View>
+          <PressableScale
+            onPress={onProfilePress}
+            disabled={!onProfilePress}
+            scaleTo={0.94}
+            accessibilityRole="button"
+            accessibilityLabel={`Open profile, ${progressPct} percent complete`}>
+            <ProgressRing
+              size={AVATAR_RING}
+              stroke={3}
+              progress={profileProgress}
+              style={styles.avatarRing}>
+              <View style={styles.avatarFace}>
+                {hasAvatar ? (
+                  <Image
+                    source={{uri: avatarUrl}}
+                    style={styles.avatarPhoto}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <AppText style={styles.avatarInitials}>{initialsFrom(name)}</AppText>
+                )}
+              </View>
+            </ProgressRing>
+          </PressableScale>
+
+          <GlassPanel
+            style={styles.greetingPill}
+            radius={AVATAR_RING / 2}
+            intensity="md"
+            contentStyle={styles.greetingContent}>
+            <AppText
+              variant="label"
+              style={styles.greetingText}
+              numberOfLines={1}
+              accessibilityRole="header">
+              {`${greetingForHour(new Date().getHours())} ${firstName}`}
+            </AppText>
+            <PressableScale
+              onPress={onNotificationsPress}
+              disabled={!onNotificationsPress}
+              scaleTo={0.9}
+              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel={notificationsLabel}
+              style={styles.bell}>
+              <Bell size={20} color={colors.text} />
+              {unreadCount > 0 ? <View style={styles.unreadDot} /> : null}
+            </PressableScale>
+          </GlassPanel>
         </View>
 
-        <GlassPanel
-          style={styles.heroCard}
-          radius={radii.cardHero}
-          contentStyle={styles.heroInner}
-          overlayColor={colors.glass}>
-            <View pointerEvents="none" style={styles.heroGlow} />
-            <View style={styles.rowBetween}>
-              <Text
-                fontFamily={fonts.interMedium}
-                fontSize={13}
-                lineHeight={18}
-                fontWeight="500"
-                color={colors.inkSecondary}>
-                Available balance
-              </Text>
-              {showChangeBadge ? (
-                <View
-                  style={[
-                    styles.chip,
-                    {
-                      backgroundColor: changePositive ? TINTS.income : TINTS.expense,
-                      borderColor: changePositive ? '#3F7A4E40' : '#C0523A40',
-                    },
-                  ]}
-                  accessibilityRole="text"
-                  accessibilityLabel={`${
-                    changePositive ? 'Up' : 'Down'
-                  } ${changePct} percent ${data.compareLabel}`}>
-                  {changePositive ? (
-                    <TrendingUpIcon color={colors.positive} size={13} />
-                  ) : (
-                    <ArrowDownRightIcon color={colors.danger} size={13} />
-                  )}
-                  <Text
-                    fontFamily={fonts.interSemi}
-                    fontSize={11}
-                    lineHeight={15}
-                    fontWeight="600"
-                    color={changePositive ? colors.positive : colors.danger}>
-                    {`${changePositive ? '' : '−'}${changePct}%`}
-                  </Text>
+        <AppText variant="sectionTitle" accessibilityRole="header" style={styles.spotlightTitle}>
+          {`This ${noun} at a glance`}
+        </AppText>
+
+        <View style={styles.spotlight}>
+          <GradientView
+            gradient={CARD_GRADIENT}
+            angle={160}
+            positions={CARD_GRADIENT_POSITIONS}
+            style={styles.spotlightFill}>
+            <View style={styles.spotlightBody}>
+              <View style={styles.spotlightTop}>
+                <View style={styles.liveLabel}>
+                  <AppText variant="caption" style={styles.liveLabelText}>
+                    Available balance
+                  </AppText>
                 </View>
-              ) : null}
-            </View>
-            <Text
-              fontFamily={fonts.outfitBold}
-              fontSize={42}
-              lineHeight={42}
-              fontWeight="700"
-              letterSpacing={-1.05}
-              color={data.balance < 0 ? colors.danger : colors.ink}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.5}
-              style={[tabular, styles.heroAmount]}>
-              {formatMoney(data.balance, currencySymbol, {decimals: 0})}
-            </Text>
-            <PressableScale
-              onPress={reload}
-              accessibilityRole="button"
-              accessibilityLabel={`Sync now. ${syncLabel}`}
-              style={styles.syncRow}>
-              {refreshing || status === 'loading' ? (
-                <ActivityIndicator size="small" color={colors.inkMuted} />
-              ) : status === 'error' ? (
-                <RefreshGlyph color={colors.danger} size={12} />
-              ) : null}
-              <Text
-                fontFamily={fonts.interMedium}
-                fontSize={12}
-                lineHeight={16}
-                fontWeight="500"
-                color={status === 'error' ? colors.danger : colors.inkMuted}
+                <SegmentedControl
+                  options={RANGE_OPTIONS}
+                  value={range}
+                  onChange={setRange}
+                  accessibilityLabel="Time range"
+                  style={styles.rangeControl}
+                />
+              </View>
+
+              <AppText
+                style={[
+                  styles.balance,
+                  balanceSize,
+                  data.balance < 0 ? {color: colors.roseLight} : null,
+                ]}
                 numberOfLines={1}>
-                {data.empty
-                  ? 'No activity yet • Tap to sync'
-                  : `This ${rangeWord} • ${syncLabel}`}
-              </Text>
-            </PressableScale>
-        </GlassPanel>
+                {balanceText}
+              </AppText>
 
-        <RangeSwitch range={range} setRange={setRange} />
+              {data.empty ? null : (
+                <AppText style={styles.changeLine} numberOfLines={1}>
+                  {change === 0 ? (
+                    <AppText style={styles.changeMuted}>{`No change since ${sinceLabel}`}</AppText>
+                  ) : (
+                    <>
+                      <AppText
+                        style={[
+                          styles.changeAmount,
+                          {color: change > 0 ? colors.mint : colors.roseLight},
+                        ]}>
+                        {money(change, true)}
+                      </AppText>
+                      <AppText style={styles.changeMuted}>{` since ${sinceLabel}`}</AppText>
+                    </>
+                  )}
+                </AppText>
+              )}
 
-        <SummaryRow
-          income={data.income}
-          spent={data.spent}
-          saved={savedAmount}
-          currencySymbol={currencySymbol}
-        />
+              <PressableScale
+                onPress={reload}
+                scaleTo={0.97}
+                accessibilityRole="button"
+                accessibilityLabel={`Sync now. ${syncLabel}`}
+                style={styles.syncRow}>
+                {syncing ? (
+                  <ActivityIndicator size="small" color={colors.muted} />
+                ) : status === 'error' ? (
+                  <Warning size={13} weight="fill" color={colors.roseLight} />
+                ) : null}
+                <AppText
+                  variant="caption"
+                  color={status === 'error' ? colors.roseLight : colors.muted}
+                  numberOfLines={1}
+                  style={styles.syncText}>
+                  {syncLabel}
+                </AppText>
+              </PressableScale>
 
-        <SpendingCard
-          slices={data.slices}
-          spent={data.spent}
-          currencySymbol={currencySymbol}
-          overBudget={data.overBudget}
-        />
+              <View style={styles.chart}>
+                <AreaChart
+                  values={data.series}
+                  accessibilityLabel={`Balance trend this ${noun}`}
+                />
+              </View>
+            </View>
 
-        <View style={styles.metricRow}>
-          {showBudget ? (
-            <BudgetCard
-              budget={data.budget}
-              remainingBudget={data.remainingBudget}
-              currencySymbol={currencySymbol}
-              range={range}
-              onPress={onBudgetPress}
-            />
-          ) : null}
+            {showBudget && !data.empty && onBudgetPress ? (
+              <PressableScale
+                onPress={onBudgetPress}
+                scaleTo={0.99}
+                accessibilityRole="button"
+                accessibilityLabel={`${stripText}. Opens budget details`}>
+                {strip}
+              </PressableScale>
+            ) : (
+              strip
+            )}
+          </GradientView>
+        </View>
+
+        <View style={styles.tiles}>
+          <QuickTile
+            label="Expense"
+            accessibilityLabel="Add an expense"
+            icon={<ArrowUpRight size={18} weight="bold" color={colors.text} />}
+            onPress={onComposePress ? () => onComposePress('expense') : undefined}
+          />
+          <QuickTile
+            label="Income"
+            accessibilityLabel="Add income"
+            icon={<ArrowDownLeft size={18} weight="bold" color={colors.text} />}
+            onPress={onComposePress ? () => onComposePress('income') : undefined}
+          />
+          <QuickTile
+            label="History"
+            accessibilityLabel="Open transaction history"
+            icon={<ClockCounterClockwise size={18} weight="bold" color={colors.text} />}
+            onPress={onHistoryPress}
+          />
+        </View>
+
+        {showNudge && nudge ? (
+          <BannerPill
+            style={styles.nudge}
+            iconGradient={nudge.direction === 'under' ? 'savings' : 'rose'}
+            icon={<ChartBar size={20} weight="fill" color={colors.text} />}
+            title={`${money(nudge.amount)} ${nudge.direction} last week`}
+            subtitle={
+              nudge.category
+                ? `${nudge.category.name} is ${
+                    nudge.direction === 'under' ? 'down' : 'up'
+                  } ${money(nudge.category.amount)} on the same days last week`
+                : 'Compared with the same days last week'
+            }
+            trailing={
+              <PressableScale
+                onPress={() => onDismissNudge(nudge.key)}
+                scaleTo={0.88}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss weekly spending note"
+                style={styles.nudgeClose}>
+                <X size={20} weight="bold" color={colors.text} />
+              </PressableScale>
+            }
+          />
+        ) : null}
+
+        <SectionTitle title="Budget and savings" style={styles.goalsTitle} />
+        <View style={styles.goals}>
+          <BudgetGoalCard
+            budget={data.budget}
+            remainingBudget={data.remainingBudget}
+            currencySymbol={currencySymbol}
+            range={range}
+            showBudget={showBudget}
+            onPress={onBudgetPress}
+            onSetupPress={onSetupBudgetPress}
+          />
           <SavingsGoalCard
             actualSavings={data.actualSavings}
             periodSavingsTarget={data.periodSavingsTarget}
@@ -923,207 +780,244 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
+  content: {
+    paddingHorizontal: layout.screenPadding,
+    paddingTop: 6,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 18,
   },
-  greeting: {
+  avatarRing: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarFace: {
+    width: AVATAR_PHOTO,
+    height: AVATAR_PHOTO,
+    borderRadius: AVATAR_PHOTO / 2,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceRaised,
+  },
+  avatarPhoto: {
+    width: AVATAR_PHOTO,
+    height: AVATAR_PHOTO,
+  },
+  avatarInitials: {
+    fontFamily: fonts.jakartaBold,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.lavender,
+  },
+  greetingPill: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
   },
-  rowBetween: {
+  greetingContent: {
+    height: AVATAR_RING - 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  greetingText: {
+    flex: 1,
+    fontFamily: fonts.jakartaMedium,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.text,
+  },
+  bell: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  unreadDot: {
+    position: 'absolute',
+    top: 0,
+    right: 1,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.roseLight,
+  },
+  spotlightTitle: {
+    marginTop: 22,
+  },
+  spotlight: {
+    marginTop: 14,
+    borderRadius: radii.cardHero,
+    borderWidth: 1,
+    borderColor: colors.line,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+  },
+  spotlightFill: {
+    width: '100%',
+  },
+  spotlightBody: {
+    paddingTop: 18,
+    paddingBottom: 14,
+    paddingHorizontal: 20,
+  },
+  spotlightTop: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
   },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  liveLabel: {
+    flexShrink: 1,
     paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'transparent',
+    paddingVertical: 4,
+    borderRadius: radii.pill,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
-  statRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    gap: 10,
-    marginBottom: 16,
+  liveLabelText: {
+    fontFamily: fonts.jakartaMedium,
+    color: colors.text,
   },
-  statCard: {
-    flex: 1,
-    minWidth: 0,
+  rangeControl: {
+    width: 136,
   },
-  statInner: {
-    padding: 14,
-    gap: 10,
-  },
-  spendCard: {
-    marginBottom: 16,
-  },
-  spendInner: {
-    padding: 20,
-    gap: 18,
-  },
-  spendBody: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  donutLabel: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-  },
-  categoryCol: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: 'center',
-    gap: 13,
-  },
-  categoryBlock: {
-    gap: 6,
-  },
-  categoryName: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-  },
-  track: {
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: colors.track,
-    overflow: 'hidden',
-  },
-  trackFill: {
-    height: 6,
-    borderRadius: 999,
-  },
-  heroCard: {
-    marginBottom: 18,
-    boxShadow: [
-      {
-        offsetX: 0,
-        offsetY: 8,
-        blurRadius: 28,
-        color: 'rgba(120, 100, 60, 0.12)',
-      },
-      {
-        offsetX: 0,
-        offsetY: 1,
-        blurRadius: 1,
-        color: 'rgba(255, 255, 255, 0.6)',
-        inset: true,
-      },
-    ],
-  },
-  heroInner: {
-    padding: 22,
-    overflow: 'hidden',
-  },
-  heroGlow: {
-    position: 'absolute',
-    top: -110,
-    right: -100,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundImage: [
-      {
-        type: 'radial-gradient',
-        shape: 'circle',
-        size: 'farthest-side',
-        position: {top: '50%', left: '50%'},
-        colorStops: [
-          {color: colors.orb, positions: ['0%']},
-          {color: 'rgba(240, 200, 120, 0.45)', positions: ['40%']},
-          {color: 'rgba(240, 200, 120, 0)', positions: ['72%']},
-        ],
-      },
-    ],
-  },
-  heroAmount: {
+  balance: {
     marginTop: 10,
+    fontFamily: fonts.jakartaExtraBold,
+    letterSpacing: -1.5,
+    color: colors.text,
     includeFontPadding: false,
+    ...tabular,
+  },
+  changeLine: {
+    marginTop: 4,
+  },
+  changeAmount: {
+    fontFamily: fonts.jakartaSemiBold,
+    fontSize: 13,
+    lineHeight: 18,
+    ...tabular,
+  },
+  changeMuted: {
+    fontFamily: fonts.jakartaMedium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
   },
   syncRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginTop: 8,
     alignSelf: 'flex-start',
-  },
-  metricRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    marginBottom: 8,
-    gap: 12,
-  },
-  metricWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  metricPress: {
-    flex: 1,
-  },
-  metricGlass: {
-    flex: 1,
-  },
-  metricCard: {
-    padding: 16,
-    gap: 12,
-  },
-  metricAmountRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 6,
+    marginTop: 4,
   },
-  metricAmountText: {
+  syncText: {
     flexShrink: 1,
   },
-  metricTitle: {
+  chart: {
+    marginTop: 12,
+  },
+  strip: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minWidth: 0,
-    flex: 1,
-  },
-  rangeTrack: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.canvasSunk,
-    borderRadius: 999,
-    padding: RANGE_PAD,
-    marginBottom: 16,
-    overflow: 'hidden',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairlineStrong,
-  },
-  rangeThumb: {
-    position: 'absolute',
-    top: RANGE_PAD,
-    left: RANGE_PAD,
-    height: RANGE_SEG_H,
-    borderRadius: 999,
-    backgroundColor: colors.ink,
-    shadowColor: '#000000',
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
-  },
-  rangeSeg: {
-    flex: 1,
-    zIndex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    height: RANGE_SEG_H,
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+  },
+  stripText: {
+    flexShrink: 1,
+    fontFamily: fonts.jakartaSemiBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.text,
+  },
+  tiles: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  tileWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tile: {
+    height: 96,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingBottom: 14,
+    gap: 8,
+    borderRadius: radii.tile,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  tileLabel: {
+    fontFamily: fonts.jakartaSemiBold,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  nudge: {
+    marginTop: 14,
+  },
+  nudgeClose: {
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goalsTitle: {
+    marginTop: 26,
+  },
+  goals: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 12,
+    marginTop: 14,
+  },
+  goalWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  goalCard: {
+    flex: 1,
+    padding: 16,
+    gap: 14,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  goalHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ring: {
+    alignSelf: 'center',
+  },
+  ringCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: 84,
+  },
+  ringPercent: {
+    fontFamily: fonts.jakartaExtraBold,
+    fontSize: 24,
+    lineHeight: 28,
+    includeFontPadding: false,
+  },
+  ringAmount: {
+    fontFamily: fonts.jakartaExtraBold,
+    fontSize: 20,
+    lineHeight: 24,
+    color: colors.text,
+    includeFontPadding: false,
+  },
+  goalText: {
+    gap: 2,
   },
 });

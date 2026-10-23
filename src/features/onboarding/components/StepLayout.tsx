@@ -18,8 +18,10 @@ export function StepLayout({title, subtitle, children}: StepLayoutProps) {
   return (
     <View style={styles.root}>
       <Stagger index={0}>
-        <AppText variant="title">{title}</AppText>
-        <AppText variant="body" color={colors.inkSecondary} style={styles.subtitle}>
+        <AppText variant="display" style={styles.title}>
+          {title}
+        </AppText>
+        <AppText variant="body" color={colors.muted} style={styles.subtitle}>
           {subtitle}
         </AppText>
       </Stagger>
@@ -33,6 +35,13 @@ const styles = StyleSheet.create({
   root: {
     paddingHorizontal: layout.screenPadding,
     paddingBottom: spacing.section,
+  },
+  // Display weight and tracking, scaled down so a long question still sits on
+  // two lines on a narrow phone.
+  title: {
+    fontSize: 30,
+    lineHeight: 35,
+    letterSpacing: -0.9,
   },
   subtitle: {
     marginTop: spacing.sm,

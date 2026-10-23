@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DX glow: deep violet at the top fading into the app's near-black ground. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#2B1A72"
+        android:endColor="#0E0E11"
+        android:type="linear" />
+</shape>

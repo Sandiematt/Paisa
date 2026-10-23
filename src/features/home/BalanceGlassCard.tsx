@@ -8,7 +8,7 @@ type BalanceGlassCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-/** Single glass surface — no inner glow, sheen, or nested wrapper. */
+/** Single glass surface: glass fill with a 1px `line` border. */
 export function BalanceGlassCard({children, style}: BalanceGlassCardProps) {
   return <View style={[styles.shell, style]}>{children}</View>;
 }
@@ -17,8 +17,8 @@ const styles = StyleSheet.create({
   shell: {
     borderRadius: radii.cardHero,
     backgroundColor: colors.glass,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairlineStrong,
+    borderWidth: 1,
+    borderColor: colors.line,
     padding: 22,
   },
 });

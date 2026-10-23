@@ -2,22 +2,18 @@ import React, {useEffect, useRef} from 'react';
 import {
   Animated,
   BackHandler,
-  Platform,
   Pressable,
   StyleSheet,
   View,
 } from 'react-native';
+import {ArrowDownLeft, ArrowUpRight} from 'phosphor-react-native';
 
-import {
-  ArrowDownLeftGlyph,
-  ArrowUpRightGlyph,
-} from '../../components/icons/Glyphs';
-import {AppText, GlassPanel, PressableScale} from '../../components/ui';
+import {AppText, PressableScale} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {
   useFloatingNavDockHeight,
 } from '../NavBar/FloatingNavScroll';
-import {colors, duration, easing, fonts, radii} from '../../theme';
+import {colors, duration, easing, radii, shadows, spacing, withAlpha} from '../../theme';
 import {AddKind} from './types';
 
 type AddActionSheetProps = {
@@ -26,34 +22,29 @@ type AddActionSheetProps = {
   onSelect: (kind: AddKind) => void;
 };
 
-const CARD_WIDTH = 250;
-const CARET = 14;
-const CARET_GAP = 14;
-const ROW_HEIGHT = 54;
+const CARD_WIDTH = 264;
+const CARET_GAP = 12;
+const ROW_HEIGHT = 60;
+/** The nav row pads 24 each side; the add button is the right-most item. */
+const SIDE_INSET = spacing.xxl;
 
 const OPTIONS: {
   kind: AddKind;
   title: string;
   description: string;
   accent: string;
-  accentSoft: string;
-  accentRing: string;
 }[] = [
   {
     kind: 'income',
-    title: 'Add Income',
+    title: 'Add income',
     description: 'Record money coming in',
-    accent: colors.positive,
-    accentSoft: colors.alertPositive,
-    accentRing: '#3F7A4E33',
+    accent: colors.mint,
   },
   {
     kind: 'expense',
-    title: 'Add Expense',
+    title: 'Add expense',
     description: 'Record money going out',
-    accent: colors.coral,
-    accentSoft: colors.alertDanger,
-    accentRing: '#C0523A33',
+    accent: colors.roseLight,
   },
 ];
 
@@ -91,7 +82,7 @@ export function AddActionSheet({
 
   const translateY = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [10, 0],
+    outputRange: [12, 0],
   });
   const scale = progress.interpolate({
     inputRange: [0, 1],
@@ -103,6 +94,10 @@ export function AddActionSheet({
       style={styles.layer}
       pointerEvents={visible ? 'auto' : 'none'}
       collapsable={false}>
+      <Animated.View
+        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, styles.scrim, {opacity: progress}]}
+      />
       <Pressable
         style={StyleSheet.absoluteFill}
         onPress={onClose}
@@ -120,12 +115,7 @@ export function AddActionSheet({
             transform: [{translateY}, {scale}],
           },
         ]}>
-        <GlassPanel
-          intensity="2xl"
-          overlayColor="rgba(255, 255, 255, 0.88)"
-          radius={26}
-          style={styles.cardWrap}
-          contentStyle={styles.card}>
+        <View style={styles.card}>
           {OPTIONS.map((option, index) => (
             <React.Fragment key={option.kind}>
               {index > 0 ? <View style={styles.divider} /> : null}
@@ -134,34 +124,42 @@ export function AddActionSheet({
                 scaleTo={0.98}
                 accessibilityRole="button"
                 accessibilityLabel={option.title}
+                accessibilityHint={option.description}
                 style={styles.row}>
                 <View
                   style={[
                     styles.mark,
                     {
-                      backgroundColor: option.accentSoft,
-                      borderColor: option.accentRing,
+                      backgroundColor: withAlpha(option.accent, 0.14),
+                      borderColor: withAlpha(option.accent, 0.3),
                     },
                   ]}>
                   {option.kind === 'income' ? (
-                    <ArrowDownLeftGlyph color={option.accent} size={18} />
+                    <ArrowDownLeft
+                      size={20}
+                      color={option.accent}
+                      weight="bold"
+                    />
                   ) : (
-                    <ArrowUpRightGlyph color={option.accent} size={18} />
+                    <ArrowUpRight
+                      size={20}
+                      color={option.accent}
+                      weight="bold"
+                    />
                   )}
                 </View>
                 <View style={styles.copy}>
-                  <AppText variant="heading" style={styles.title}>
+                  <AppText variant="heading" color={colors.text}>
                     {option.title}
                   </AppText>
-                  <AppText variant="caption" color={colors.inkSoft}>
+                  <AppText variant="caption" color={colors.muted}>
                     {option.description}
                   </AppText>
                 </View>
               </PressableScale>
             </React.Fragment>
           ))}
-        </GlassPanel>
-        <View style={styles.caret} />
+        </View>
       </Animated.View>
     </View>
   );
@@ -176,68 +174,47 @@ const styles = StyleSheet.create({
     left: 0,
     zIndex: 20,
   },
+  scrim: {
+    backgroundColor: colors.scrim,
+  },
   cluster: {
     position: 'absolute',
-    alignSelf: 'center',
-    alignItems: 'center',
+    right: SIDE_INSET,
     width: CARD_WIDTH,
-  },
-  cardWrap: {
-    width: CARD_WIDTH,
-    zIndex: 1,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#78643C',
-        shadowOpacity: 0.18,
-        shadowRadius: 17,
-        shadowOffset: {width: 0, height: 12},
-      },
-      default: {elevation: 10, shadowColor: '#78643C'},
-    }),
+    transformOrigin: 'bottom right',
   },
   card: {
-    padding: 8,
+    padding: spacing.sm,
+    borderRadius: radii.cardHero,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.line,
+    ...shadows.nav,
   },
   row: {
     height: ROW_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingLeft: 10,
-    paddingRight: 14,
-    borderRadius: 18,
-    gap: 14,
+    paddingLeft: spacing.sm,
+    paddingRight: spacing.md,
+    borderRadius: radii.tile,
+    gap: spacing.md,
   },
   mark: {
-    width: 38,
-    height: 38,
-    borderRadius: radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 40,
+    height: 40,
+    borderRadius: radii.iconSquare,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   copy: {
     flex: 1,
   },
-  title: {
-    fontFamily: fonts.outfitSemi,
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: '600',
-    letterSpacing: -0.2,
-  },
   divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(0, 0, 0, 0.06)',
-    marginVertical: 4,
-  },
-  caret: {
-    width: CARET,
-    height: CARET,
-    marginTop: -CARET / 2,
-    backgroundColor: 'rgba(255, 255, 255, 0.87)',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(0, 0, 0, 0.07)',
-    transform: [{rotate: '45deg'}],
+    height: 1,
+    backgroundColor: colors.line,
+    marginVertical: 2,
+    marginHorizontal: spacing.sm,
   },
 });

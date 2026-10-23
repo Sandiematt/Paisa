@@ -1,20 +1,33 @@
 import {TextStyle} from 'react-native';
 
 /**
- * Outfit for display and money, Inter for labels.
- * If the linked fonts are missing, the platform grotesk is used.
+ * Plus Jakarta Sans throughout (DX). Weight lives in the family name, so never
+ * pair these with `fontWeight` on iOS (it drops the named face).
+ *
+ * The legacy keys (`outfitBold`, `outfitSemi`, `interMedium`, `interSemi`) are
+ * kept so existing screens keep working; they now resolve to Jakarta faces.
+ * New code should use the `jakarta*` keys.
  */
 export const fonts = {
-  outfitBold: 'Outfit-Bold',
-  outfitSemi: 'Outfit-SemiBold',
-  interMedium: 'Inter-Medium',
-  interSemi: 'Inter-SemiBold',
+  jakartaRegular: 'PlusJakartaSans-Regular',
+  jakartaMedium: 'PlusJakartaSans-Medium',
+  jakartaSemiBold: 'PlusJakartaSans-SemiBold',
+  jakartaBold: 'PlusJakartaSans-Bold',
+  jakartaExtraBold: 'PlusJakartaSans-ExtraBold',
+
+  /** Legacy aliases (hero / display numbers). */
+  outfitBold: 'PlusJakartaSans-ExtraBold',
+  outfitSemi: 'PlusJakartaSans-Bold',
+  interMedium: 'PlusJakartaSans-Medium',
+  interSemi: 'PlusJakartaSans-SemiBold',
 } as const;
 
 type Variant =
   | 'display'
   | 'title'
+  | 'sectionTitle'
   | 'heading'
+  | 'rowLabel'
   | 'body'
   | 'bodyStrong'
   | 'label'
@@ -22,51 +35,69 @@ type Variant =
   | 'numeric'
   | 'numericHero';
 
+/**
+ * DX scale. `title` is the 20/26 screen title; `sectionTitle` is the 20 bold
+ * section header (-0.3 tracking); `heading` is the 16 bold card title;
+ * `rowLabel` is the 16 semibold settings/list row label.
+ */
 export const typography: Record<Variant, TextStyle> = {
   display: {
-    fontFamily: fonts.outfitBold,
-    fontSize: 34,
-    lineHeight: 39,
-    letterSpacing: -1.1,
+    fontFamily: fonts.jakartaExtraBold,
+    fontSize: 40,
+    lineHeight: 44,
+    letterSpacing: -1.2,
+    fontVariant: ['tabular-nums'],
   },
   title: {
-    fontFamily: fonts.outfitSemi,
-    fontSize: 22,
-    lineHeight: 28,
-    letterSpacing: -0.5,
+    fontFamily: fonts.jakartaBold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
+  },
+  sectionTitle: {
+    fontFamily: fonts.jakartaBold,
+    fontSize: 20,
+    lineHeight: 26,
+    letterSpacing: -0.3,
   },
   heading: {
-    fontFamily: fonts.outfitSemi,
-    fontSize: 18,
-    lineHeight: 24,
-    letterSpacing: -0.45,
+    fontFamily: fonts.jakartaBold,
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: -0.1,
+  },
+  rowLabel: {
+    fontFamily: fonts.jakartaSemiBold,
+    fontSize: 16,
+    lineHeight: 22,
+    letterSpacing: 0,
   },
   body: {
-    fontFamily: fonts.interMedium,
+    fontFamily: fonts.jakartaMedium,
     fontSize: 15,
-    lineHeight: 22,
-    letterSpacing: -0.1,
+    lineHeight: 21,
+    letterSpacing: 0,
   },
   bodyStrong: {
-    fontFamily: fonts.interSemi,
+    fontFamily: fonts.jakartaSemiBold,
     fontSize: 15,
-    lineHeight: 22,
-    letterSpacing: -0.1,
+    lineHeight: 21,
+    letterSpacing: 0,
   },
   label: {
-    fontFamily: fonts.interMedium,
+    fontFamily: fonts.jakartaMedium,
     fontSize: 13,
     lineHeight: 18,
     letterSpacing: 0,
   },
   caption: {
-    fontFamily: fonts.interMedium,
+    fontFamily: fonts.jakartaRegular,
     fontSize: 12,
     lineHeight: 17,
     letterSpacing: 0,
   },
   numeric: {
-    fontFamily: fonts.outfitSemi,
+    fontFamily: fonts.jakartaBold,
     fontSize: 17,
     lineHeight: 22,
     letterSpacing: -0.2,
@@ -74,10 +105,10 @@ export const typography: Record<Variant, TextStyle> = {
     includeFontPadding: false,
   },
   numericHero: {
-    fontFamily: fonts.outfitBold,
-    fontSize: 52,
-    lineHeight: 58,
-    letterSpacing: -2,
+    fontFamily: fonts.jakartaExtraBold,
+    fontSize: 44,
+    lineHeight: 48,
+    letterSpacing: -1.5,
     fontVariant: ['tabular-nums'],
     includeFontPadding: false,
   },

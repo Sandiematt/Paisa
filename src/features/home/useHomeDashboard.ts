@@ -25,7 +25,7 @@ export function useHomeDashboard(
   plan: MoneyPlan = EMPTY_MONEY_PLAN,
 ) {
   const {user} = useAuth();
-  const [range, setRange] = useState<HomeRange>('week');
+  const [range, setRange] = useState<HomeRange>('month');
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
   const [status, setStatus] = useState<DashboardStatus>('loading');

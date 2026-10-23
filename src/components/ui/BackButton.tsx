@@ -9,9 +9,9 @@ type BackButtonProps = {
 };
 
 /**
- * Geometric chevron instead of a text arrow. Unicode ← sits left of optical
- * centre in most fonts and Android adds extra font padding, which is why the
- * glyph looked off-centre in the circle.
+ * Round #FFFFFF14 glass button with a geometric chevron. Unicode arrows sit
+ * left of optical centre and Android adds font padding, so the glyph is drawn
+ * from two bars.
  */
 export function BackButton({onPress}: BackButtonProps) {
   return (
@@ -45,9 +45,9 @@ const styles = StyleSheet.create({
     width: BACK_BUTTON_SIZE,
     height: BACK_BUTTON_SIZE,
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.hairlineStrong,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     width: ARM_LENGTH,
     height: ARM_THICKNESS,
     borderRadius: radii.pill,
-    backgroundColor: colors.ink,
+    backgroundColor: colors.text,
   },
   armTop: {
     top: 3,

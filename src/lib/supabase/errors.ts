@@ -36,6 +36,16 @@ export function authErrorMessage(error: {message?: string} | null): string {
   if (normalized.includes('password should be at least')) {
     return 'Use a password with at least 6 characters.';
   }
+  if (
+    normalized.includes('token has expired') ||
+    normalized.includes('otp_expired') ||
+    normalized.includes('invalid or has expired')
+  ) {
+    return 'That code is wrong or has expired. Request a new one.';
+  }
+  if (normalized.includes('different from the old password')) {
+    return 'Choose a password you have not used before.';
+  }
   if (normalized.includes('rate limit') || normalized.includes('too many')) {
     return 'Too many attempts. Wait a moment, then try again.';
   }

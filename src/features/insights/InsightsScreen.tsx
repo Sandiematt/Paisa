@@ -1,343 +1,415 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Animated, Image, LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {Animated, RefreshControl, ScrollView, Share, StyleSheet, Text, View} from 'react-native';
+import {
+  ArrowsClockwise,
+  Airplane,
+  BookOpen,
+  Bag,
+  ChartBar,
+  Car,
+  Equals,
+  ForkKnife,
+  Heartbeat,
+  House,
+  Lightning,
+  ShareFat,
+  ShoppingCart,
+  Sparkle,
+  Tag,
+  TrendDown,
+  TrendUp,
+  WifiSlash,
+} from 'phosphor-react-native';
+import type {Icon} from 'phosphor-react-native';
 
 import {
-  ArrowDownRightIcon,
-  ArrowUpRightIcon,
-  BoltIcon,
-  TrendingDownIcon,
-  TrendingUpIcon,
-} from '../../components/icons/FeatherIcons';
-import {GlassPanel, PressableScale, Screen, Text} from '../../components/ui';
+  BannerPill,
+  Card,
+  GradientIconSquare,
+  GradientView,
+  PressableScale,
+  ProgressBar,
+  Screen,
+  SectionTitle,
+  SegmentedControl,
+} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
-import {colors, fonts, layout, radii, shadows} from '../../theme';
+import {colors, fonts, layout, linearGradient, typography, withAlpha} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
-import {InsightsAmbient} from './InsightsAmbient';
-import {ChangeKind, InsightsData, InsightsPeriod, insightsData, previousPeriodLabel} from './insightsPlaceholder';
+import {CategoryIconKey, CategoryTone, TONE_GRADIENT, categoryVisual} from './categoryVisual';
+import {
+  PeriodLabels,
+  buildCategoryRows,
+  buildShareText,
+  buildSpendingBars,
+  compareFractions,
+  describeDelta,
+  isOfflineError,
+  periodLabels,
+  previousPeriodLabel,
+  updatedLabel,
+} from './insightsMath';
+import {InsightsData, InsightsPeriod, insightsData} from './insightsPlaceholder';
+import type {ChangeKind} from './insightsTypes';
 import {buildInsightsDataFromResponse} from './mapInsights';
+import {SpendingBars} from './SpendingBars';
 import {useInsights} from './useInsights';
 
 export type InsightsScreenProps = {
   currencySymbol: string;
+  /** Profile budget, used for the pace line only when the backend reports none. */
+  monthlyBudget?: number | null;
+  /** Kept so MainTabs wiring is unchanged. The DX header no longer shows an avatar. */
   name?: string;
   avatarUrl?: string;
   onProfilePress?: () => void;
 };
 
-const PERIODS: {id: InsightsPeriod; label: string}[] = [
-  {id: 'week', label: 'Week'},
-  {id: 'month', label: 'Month'},
-];
+const PERIOD_OPTIONS = [
+  {value: 'week', label: 'Week'},
+  {value: 'month', label: 'Month'},
+  {value: 'year', label: 'Year'},
+] as const;
 
-const TAB_PAD = 5;
-const TAB_SEG_H = 34;
-const AVATAR_SIZE = 44;
+const COLLAPSED_CATEGORIES = 6;
+const GOLD_GRADIENT = [colors.gold, '#B8862F'] as const;
 
-const tabular = {fontVariant: ['tabular-nums'] as const};
+const CATEGORY_ICONS: Record<CategoryIconKey, Icon> = {
+  house: House,
+  dining: ForkKnife,
+  cart: ShoppingCart,
+  bag: Bag,
+  car: Car,
+  bolt: Lightning,
+  health: Heartbeat,
+  plane: Airplane,
+  repeat: ArrowsClockwise,
+  book: BookOpen,
+  tag: Tag,
+};
+
+const TONE_BAR_COLOR: Record<CategoryTone, string> = {
+  primary: colors.lavender,
+  rose: colors.roseLight,
+  savings: colors.sky,
+  strip: colors.violet,
+  gold: colors.gold,
+};
 
 /**
- * Deterministic font size for the hero amount, based on rendered length.
- *
- * We intentionally don't use `adjustsFontSizeToFit`: RN re-measures that
- * natively on every text change, and briefly paints at a shrunk scale
- * before settling — visible as a "small, then normal" flash whenever the
- * amount changes (e.g. switching Week/Month, or data finishing load).
- * Sizing from the string length up front avoids that remeasure entirely.
+ * Deterministic hero font size from the rendered length. `adjustsFontSizeToFit`
+ * re-measures natively on every change and flashes a small size first, so size
+ * from the string up front instead.
  */
 function amountFontSize(amountText: string): {fontSize: number; lineHeight: number} {
   if (amountText.length > 11) return {fontSize: 28, lineHeight: 32};
   if (amountText.length > 8) return {fontSize: 34, lineHeight: 38};
-  return {fontSize: 42, lineHeight: 44};
+  return {fontSize: 40, lineHeight: 44};
 }
 
-function isSafeAvatarUrl(url: string | undefined): url is string {
-  if (!url) return false;
-  try {
-    return new URL(url).protocol === 'https:';
-  } catch {
-    return false;
-  }
+function toneColor(tone: 'good' | 'bad' | 'neutral'): string {
+  if (tone === 'good') return colors.mint;
+  if (tone === 'bad') return colors.roseLight;
+  return colors.muted;
 }
 
-function initialsFrom(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return 'S';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+function changeColor(kind: ChangeKind): string {
+  if (kind === 'decrease') return colors.mint;
+  if (kind === 'no-change') return colors.muted;
+  return colors.roseLight;
 }
 
-function barTone(tone: 'sand' | 'accent' | 'positive'): string {
-  if (tone === 'accent') return colors.accent;
-  if (tone === 'positive') return colors.positive;
-  return colors.orbSand;
-}
-
-/** Sliding segmented control — same construction as Home's RangeSwitch. */
-function PeriodTabs({period, onChange}: {period: InsightsPeriod; onChange: (period: InsightsPeriod) => void}) {
-  const reducedMotion = useReducedMotion();
-  const [trackW, setTrackW] = useState(0);
-  const selectedIndex = Math.max(0, PERIODS.findIndex(item => item.id === period));
-  const innerW = Math.max(0, trackW - TAB_PAD * 2);
-  const segmentW = innerW > 0 ? innerW / PERIODS.length : 0;
-  const slideX = selectedIndex * segmentW;
-
-  const slide = useRef(new Animated.Value(0)).current;
-  const placed = useRef(false);
-
-  const onTrackLayout = (event: LayoutChangeEvent) => setTrackW(event.nativeEvent.layout.width);
-
-  React.useEffect(() => {
-    if (segmentW <= 0) return;
-    if (!placed.current) {
-      slide.setValue(slideX);
-      placed.current = true;
-      return;
-    }
-    Animated.timing(slide, {
-      toValue: slideX,
-      duration: reducedMotion ? 0 : 180,
-      useNativeDriver: true,
-    }).start();
-  }, [reducedMotion, segmentW, slide, slideX]);
-
+function CategoryIconSquare({tone, icon, size = 40}: {tone: CategoryTone; icon: CategoryIconKey; size?: number}) {
+  const IconComponent = CATEGORY_ICONS[icon];
+  const gradient = TONE_GRADIENT[tone];
+  const onGold = tone === 'gold';
   return (
-    <View accessibilityRole="tablist" style={styles.tabsTrack} onLayout={onTrackLayout}>
-      {segmentW > 0 ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.tabsThumb, {width: segmentW, transform: [{translateX: slide}]}]}
-        />
-      ) : null}
-      {PERIODS.map(item => {
-        const selected = period === item.id;
-        return (
-          <Pressable
-            key={item.id}
-            style={styles.tabsSeg}
-            onPress={() => onChange(item.id)}
-            accessibilityRole="tab"
-            accessibilityState={{selected}}>
-            <Text
-              fontFamily={selected ? fonts.interSemi : fonts.interMedium}
-              fontSize={13}
-              lineHeight={18}
-              fontWeight={selected ? '600' : '500'}
-              color={selected ? '#FFFFFF' : colors.inkSecondary}>
-              {item.label}
-            </Text>
-          </Pressable>
-        );
-      })}
+    <GradientIconSquare
+      size={size}
+      gradient={gradient ?? 'primary'}
+      style={gradient ? undefined : {backgroundImage: linearGradient(GOLD_GRADIENT, 140)}}>
+      <IconComponent size={19} color={onGold ? colors.ground : colors.text} weight="fill" />
+    </GradientIconSquare>
+  );
+}
+
+function Header({canShare, onShare}: {canShare: boolean; onShare: () => void}) {
+  // Insights is a root tab, so there is nothing to go back to: no back button.
+  return (
+    <View style={styles.header}>
+      <Text style={styles.title} accessibilityRole="header">
+        Insights
+      </Text>
+      <PressableScale
+        onPress={onShare}
+        disabled={!canShare}
+        scaleTo={0.95}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Share this summary"
+        accessibilityState={{disabled: !canShare}}
+        style={[styles.shareButton, !canShare ? styles.shareDisabled : null]}>
+        <ShareFat size={18} color={colors.text} weight="regular" />
+        <Text style={styles.shareText}>Share</Text>
+      </PressableScale>
     </View>
   );
 }
 
-function ComparisonCard({data, currencySymbol}: {data: InsightsData; currencySymbol: string}) {
-  const isDecrease = data.changeKind === 'decrease';
-  const isNew = data.changeKind === 'new';
-  const isNoChange = data.changeKind === 'no-change';
-
-  const chipTone = isNoChange ? colors.inkMuted : isDecrease ? colors.positive : colors.coral;
-  const chipTint = isNoChange ? 'rgba(0, 0, 0, 0.05)' : isDecrease ? colors.alertPositive : colors.alertDanger;
-  const chipBorder = isNoChange ? colors.hairlineStrong : isDecrease ? '#3F7A4E40' : '#C0523A40';
-  const chipLabel = isNoChange ? 'No change' : isNew ? 'New' : `${Math.abs(data.changePct ?? 0)}%`;
-
-  const deltaText = isNoChange
-    ? 'No change'
-    : isNew
-    ? `+${formatMoney(data.deltaAmount, currencySymbol, {decimals: 0})} new spending`
-    : `${isDecrease ? '↓' : '↑'} ${formatMoney(data.deltaAmount, currencySymbol, {decimals: 0})} ${
-        isDecrease ? 'less' : 'more'
-      }`;
-
-  const amountText = formatMoney(data.currentTotal, currencySymbol, {decimals: 0});
-  const amountSize = amountFontSize(amountText);
+function SummaryCard({data, labels, currencySymbol}: {data: InsightsData; labels: PeriodLabels; currencySymbol: string}) {
+  const money = (value: number) => formatMoney(value, currencySymbol, {decimals: 0});
+  const delta = describeDelta(data, labels.deltaTarget, money);
+  const deltaColor = toneColor(delta.tone);
+  const amountText = money(data.currentTotal);
+  const size = amountFontSize(amountText);
+  const fractions = compareFractions(data.currentTotal, data.previousTotal);
+  const count = data.transactionCount;
 
   return (
-    <GlassPanel style={[styles.comparisonWrap, shadows.card]} radius={radii.cardHero} contentStyle={styles.comparisonInner}>
-      <View pointerEvents="none" style={styles.comparisonGlow} />
-      <View style={styles.rowBetween}>
-        <Text fontFamily={fonts.interMedium} fontSize={13} lineHeight={18} fontWeight="500" color={colors.inkSecondary}>
-          {`Spent ${data.periodNoun}`}
+    <GradientView gradient={[colors.surfaceRaised, colors.surface]} angle={160} style={styles.summaryCard}>
+      <View style={styles.summaryHead}>
+        <Text style={styles.summaryLabel}>{labels.summaryTitle}</Text>
+        <Text
+          style={[typography.display, size, styles.summaryAmount]}
+          numberOfLines={1}
+          accessibilityLabel={`${labels.summaryTitle}: ${amountText}`}>
+          {amountText}
         </Text>
-        <View style={[styles.chip, {backgroundColor: chipTint, borderColor: chipBorder}]}>
-          {!isNoChange ? (
-            isDecrease ? (
-              <ArrowDownRightIcon color={chipTone} size={13} />
-            ) : (
-              <ArrowUpRightIcon color={chipTone} size={13} />
-            )
-          ) : null}
-          <Text fontFamily={fonts.interSemi} fontSize={11} lineHeight={15} fontWeight="600" color={chipTone}>
-            {chipLabel}
-          </Text>
+        <View style={styles.deltaRow}>
+          {delta.direction === 'down' ? (
+            <TrendDown size={16} color={deltaColor} weight="bold" />
+          ) : delta.direction === 'up' ? (
+            <TrendUp size={16} color={deltaColor} weight="bold" />
+          ) : (
+            <Equals size={16} color={deltaColor} weight="bold" />
+          )}
+          <Text style={[styles.deltaText, {color: deltaColor}]}>{delta.text}</Text>
         </View>
       </View>
 
-      <Text
-        fontFamily={fonts.outfitBold}
-        fontSize={amountSize.fontSize}
-        lineHeight={amountSize.lineHeight}
-        fontWeight="700"
-        letterSpacing={-1.05}
-        color={colors.ink}
-        numberOfLines={1}
-        style={[tabular, styles.comparisonAmount]}>
-        {amountText}
-      </Text>
-
-      <View style={styles.comparisonDeltaRow}>
-        <Text fontFamily={fonts.interSemi} fontSize={13} lineHeight={18} fontWeight="600" color={chipTone}>
-          {deltaText}
-        </Text>
-        <Text fontFamily={fonts.interMedium} fontSize={13} lineHeight={18} fontWeight="500" color={colors.inkMuted}>
-          {data.comparisonLabel}
-        </Text>
-      </View>
-
-      <View style={styles.miniBarRow}>
-        {data.weeklyBars.map(bar => (
-          <View key={bar.label} style={styles.miniBarCol}>
-            <View style={styles.miniBarTrack}>
-              <View style={[styles.miniBarFill, {height: `${bar.percent}%`, backgroundColor: barTone(bar.tone)}]} />
-            </View>
-            <Text fontFamily={fonts.interMedium} fontSize={10} lineHeight={13} fontWeight="500" color={colors.inkMuted}>
-              {bar.label}
-            </Text>
+      <View style={styles.compare}>
+        <View style={styles.compareRow}>
+          <View style={styles.compareHead}>
+            <Text style={styles.compareLabelStrong}>{labels.currentLabel}</Text>
+            <Text style={styles.compareValueStrong}>{money(data.currentTotal)}</Text>
           </View>
-        ))}
+          <ProgressBar progress={fractions.current} gradient={[colors.violet, colors.lavender]} height={10} />
+        </View>
+        <View style={styles.compareRow}>
+          <View style={styles.compareHead}>
+            <Text style={styles.compareLabel}>
+              {labels.previousLabel}
+              {labels.previousQualifier ? <Text style={styles.compareQualifier}>{`  ${labels.previousQualifier}`}</Text> : null}
+            </Text>
+            <Text style={styles.compareValue}>{money(data.previousTotal)}</Text>
+          </View>
+          <ProgressBar progress={fractions.previous} color={colors.muted} height={10} />
+        </View>
       </View>
-    </GlassPanel>
+
+      <View style={styles.stats}>
+        <View style={styles.stat}>
+          <Text style={styles.statValue}>{money(data.dailyAverage)}</Text>
+          <Text style={styles.statLabel}>a day</Text>
+        </View>
+        <View style={[styles.stat, styles.statDivider]}>
+          <Text style={styles.statValue}>{count === null ? '-' : String(count)}</Text>
+          <Text style={styles.statLabel}>{count === 1 ? 'transaction' : 'transactions'}</Text>
+        </View>
+        <View style={[styles.stat, styles.statDivider]}>
+          <Text style={styles.statValue}>{data.topWeekday ?? '-'}</Text>
+          <Text style={styles.statLabel}>biggest day</Text>
+        </View>
+      </View>
+    </GradientView>
+  );
+}
+
+function PaceLegend({label}: {label: string}) {
+  return (
+    <View style={styles.legend}>
+      <View style={styles.legendDash} />
+      <Text style={styles.legendText}>{label}</Text>
+    </View>
+  );
+}
+
+function BarsCard({data, labels, currencySymbol}: {data: InsightsData; labels: PeriodLabels; currencySymbol: string}) {
+  const model = useMemo(() => buildSpendingBars(data), [data]);
+  const money = (value: number) => formatMoney(value, currencySymbol, {decimals: 0});
+  const paceLabel =
+    model.pace === null ? null : `${money(model.pace)} ${model.paceKind === 'budget' ? 'pace' : 'avg'}`;
+
+  return (
+    <Card radius={24} padding={18} style={styles.barsCard}>
+      <View style={styles.barsHead}>
+        <Text style={styles.cardTitle}>{labels.barsTitle}</Text>
+        {paceLabel ? <PaceLegend label={paceLabel} /> : null}
+      </View>
+      <SpendingBars bars={model.bars} pace={model.pace} currencySymbol={currencySymbol} bucketNoun={labels.bucketNoun} />
+    </Card>
+  );
+}
+
+function CategoriesCard({data, currencySymbol}: {data: InsightsData; currencySymbol: string}) {
+  const [expanded, setExpanded] = useState(false);
+  const rows = useMemo(() => buildCategoryRows(data.categories), [data.categories]);
+  if (rows.length === 0) return null;
+
+  const visible = expanded ? rows : rows.slice(0, COLLAPSED_CATEGORIES);
+  const hidden = rows.length - COLLAPSED_CATEGORIES;
+
+  return (
+    <>
+      <SectionTitle title="Where it went" style={styles.sectionGap} />
+      <Card radius={24} padding={0} style={styles.categoryCard}>
+        {visible.map((row, index) => {
+          const visual = categoryVisual(row.slug, row.label);
+          const isLast = index === visible.length - 1 && hidden <= 0;
+          const amount = formatMoney(row.amount, currencySymbol, {decimals: 0});
+          return (
+            <View
+              key={row.id}
+              style={[styles.categoryRow, !isLast ? styles.categoryRowDivider : null]}
+              accessible
+              accessibilityLabel={`${row.label}, ${amount}, ${row.sharePct}% of spending`}>
+              <CategoryIconSquare tone={visual.tone} icon={visual.icon} />
+              <View style={styles.categoryText}>
+                <View style={styles.categoryHead}>
+                  <Text style={styles.categoryName} numberOfLines={1}>
+                    {row.label}
+                  </Text>
+                  <Text style={styles.categoryAmount}>{amount}</Text>
+                </View>
+                <ProgressBar progress={row.fraction} color={TONE_BAR_COLOR[visual.tone]} height={4} />
+              </View>
+            </View>
+          );
+        })}
+        {hidden > 0 ? (
+          <PressableScale
+            onPress={() => setExpanded(value => !value)}
+            scaleTo={0.98}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Show fewer categories' : `Show ${hidden} more categories`}
+            style={styles.moreRow}>
+            <Text style={styles.moreText}>{expanded ? 'Show fewer' : `Show ${hidden} more`}</Text>
+          </PressableScale>
+        ) : null}
+      </Card>
+    </>
   );
 }
 
 function AiSummaryCard({data}: {data: InsightsData}) {
   return (
-    <View style={[styles.aiCard, shadows.card]}>
-      <View pointerEvents="none" style={styles.aiGlow} />
-      <View style={styles.aiHeaderRow}>
-        <View style={styles.aiIconWrap}>
-          <BoltIcon color="#FFFFFF" size={16} />
-        </View>
+    <GradientView gradient={[colors.surfaceRaised, colors.surface]} angle={160} style={[styles.aiCard, styles.sectionGap]}>
+      <View style={styles.aiHeader}>
+        <GradientIconSquare size={36} glow>
+          <Sparkle size={18} color={colors.text} weight="fill" />
+        </GradientIconSquare>
         <View style={styles.aiTitleBlock}>
-          <Text fontFamily={fonts.outfitSemi} fontSize={15} lineHeight={20} fontWeight="600" color="#FFFFFF">
-            AI Summary
-          </Text>
-          <Text fontFamily={fonts.interMedium} fontSize={11} lineHeight={15} fontWeight="500" color="#B8B2A4">
-            Updated just now
-          </Text>
+          <Text style={styles.cardTitle}>AI summary</Text>
+          <Text style={styles.caption}>{updatedLabel(data.generatedAt, new Date())}</Text>
         </View>
       </View>
 
-      <Text fontFamily={fonts.interMedium} fontSize={13} lineHeight={20} fontWeight="500" color="#E6E1D7" style={styles.aiBody}>
-        {data.aiSummary}
-      </Text>
+      <Text style={styles.aiBody}>{data.aiSummary}</Text>
 
       <View style={styles.aiHighlights}>
         {data.aiHighlights.map(highlight => (
           <View key={highlight.id} style={styles.aiHighlightRow}>
-            <View style={styles.aiHighlightIcon}>
-              {highlight.tone === 'positive' ? (
-                <TrendingDownIcon color="#8FC79A" size={15} />
-              ) : (
-                <TrendingUpIcon color="#E6A94A" size={15} />
-              )}
-            </View>
-            <Text
-              fontFamily={fonts.interMedium}
-              fontSize={12}
-              lineHeight={16}
-              fontWeight="500"
-              color="#E6E1D7"
-              style={styles.aiHighlightText}>
-              {highlight.text}
-            </Text>
+            {highlight.tone === 'positive' ? (
+              <TrendDown size={16} color={colors.mint} weight="bold" />
+            ) : (
+              <TrendUp size={16} color={colors.roseLight} weight="bold" />
+            )}
+            <Text style={styles.aiHighlightText}>{highlight.text}</Text>
           </View>
         ))}
       </View>
-    </View>
+    </GradientView>
   );
 }
 
-function MovementRow({
-  label,
-  spent,
-  deltaPct,
-  changeKind,
-  currencySymbol,
-}: {
-  label: string;
-  spent: number;
-  deltaPct: number | null;
-  changeKind: ChangeKind;
-  currencySymbol: string;
-}) {
-  const isDecrease = changeKind === 'decrease';
-  const isNoChange = changeKind === 'no-change';
-  const isNew = changeKind === 'new';
-
-  const tone = isNoChange ? colors.inkMuted : isDecrease ? colors.positive : colors.coral;
-  const tint = isNoChange ? 'rgba(0, 0, 0, 0.05)' : isDecrease ? colors.alertPositive : colors.alertDanger;
-  const border = isNoChange ? colors.hairlineStrong : isDecrease ? '#3F7A4E33' : '#C0523A33';
-  const valueLabel = isNoChange ? 'No change' : isNew ? 'New' : `${(deltaPct ?? 0) > 0 ? '+' : ''}${deltaPct}%`;
-
+function MovementPanel({data, currencySymbol, caption}: {data: InsightsData; currencySymbol: string; caption: string}) {
+  if (data.movements.length === 0) return null;
   return (
-    <View style={styles.movementRow}>
-      <View style={[styles.movementIconWrap, {backgroundColor: tint, borderColor: border}]}>
-        {isNoChange ? null : isDecrease ? (
-          <ArrowDownRightIcon color={tone} size={16} />
+    <>
+      <SectionTitle title="What changed" style={styles.sectionGap} />
+      <Card radius={24} padding={0} style={styles.categoryCard}>
+        <Text style={styles.movementCaption}>{`vs ${caption}`}</Text>
+        {data.movements.map((item, index) => {
+          const tone = changeColor(item.changeKind);
+          const isNoChange = item.changeKind === 'no-change';
+          const isDecrease = item.changeKind === 'decrease';
+          const value = isNoChange
+            ? 'No change'
+            : item.changeKind === 'new'
+            ? 'New'
+            : `${(item.deltaPct ?? 0) > 0 ? '+' : ''}${item.deltaPct}%`;
+          const spent = `${formatMoney(item.spent, currencySymbol, {decimals: 0})} spent`;
+          return (
+            <View
+              key={item.id}
+              style={[styles.movementRow, index < data.movements.length - 1 ? styles.categoryRowDivider : null]}
+              accessible
+              accessibilityLabel={`${item.label}, ${spent}, ${value}`}>
+              <View style={[styles.movementIcon, {backgroundColor: withAlpha(tone, 0.14), borderColor: withAlpha(tone, 0.3)}]}>
+                {isNoChange ? (
+                  <Equals size={16} color={tone} weight="bold" />
+                ) : isDecrease ? (
+                  <TrendDown size={16} color={tone} weight="bold" />
+                ) : (
+                  <TrendUp size={16} color={tone} weight="bold" />
+                )}
+              </View>
+              <View style={styles.movementText}>
+                <Text style={styles.categoryName} numberOfLines={1}>
+                  {item.label}
+                </Text>
+                <Text style={styles.caption}>{spent}</Text>
+              </View>
+              <Text style={[styles.movementValue, {color: tone}]}>{value}</Text>
+            </View>
+          );
+        })}
+      </Card>
+    </>
+  );
+}
+
+function EmptyCard({labels}: {labels: PeriodLabels}) {
+  return (
+    <Card radius={24} padding={24} style={[styles.emptyCard, styles.sectionGapSmall]}>
+      <GradientIconSquare size={48} glow>
+        <ChartBar size={24} color={colors.text} weight="fill" />
+      </GradientIconSquare>
+      <Text style={styles.emptyTitle}>{`No spending ${labels.phrase}`}</Text>
+      <Text style={styles.emptyBody}>Add an expense and your charts and categories will show up here.</Text>
+    </Card>
+  );
+}
+
+function StatusBanner({offline, message, onRetry}: {offline: boolean; message: string | null; onRetry: () => void}) {
+  return (
+    <BannerPill
+      style={styles.statusBanner}
+      iconGradient={offline ? 'savings' : 'rose'}
+      icon={
+        offline ? (
+          <WifiSlash size={20} color={colors.text} weight="bold" />
         ) : (
-          <ArrowUpRightIcon color={tone} size={16} />
-        )}
-      </View>
-      <View style={styles.movementText}>
-        <Text fontFamily={fonts.interSemi} fontSize={14} lineHeight={19} fontWeight="600" color={colors.ink}>
-          {label}
-        </Text>
-        <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} fontWeight="500" color={colors.inkMuted}>
-          {`${formatMoney(spent, currencySymbol, {decimals: 0})} spent`}
-        </Text>
-      </View>
-      <Text fontFamily={fonts.interSemi} fontSize={14} lineHeight={19} fontWeight="600" color={tone}>
-        {valueLabel}
-      </Text>
-    </View>
-  );
-}
-
-function CategoryMovementPanel({
-  data,
-  currencySymbol,
-  period,
-}: {
-  data: InsightsData;
-  currencySymbol: string;
-  period: InsightsPeriod;
-}) {
-  return (
-    <GlassPanel style={styles.movementWrap} radius={24} contentStyle={styles.movementInner}>
-      <View style={styles.rowBetween}>
-        <Text fontFamily={fonts.outfitSemi} fontSize={18} lineHeight={24} fontWeight="600" letterSpacing={-0.45} color={colors.ink}>
-          What changed
-        </Text>
-        <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} fontWeight="500" color={colors.inkMuted}>
-          {`vs ${previousPeriodLabel(period)}`}
-        </Text>
-      </View>
-      <View style={styles.movementList}>
-        {data.movements.map(item => (
-          <MovementRow
-            key={item.id}
-            label={item.label}
-            spent={item.spent}
-            deltaPct={item.deltaPct}
-            changeKind={item.changeKind}
-            currencySymbol={currencySymbol}
-          />
-        ))}
-      </View>
-    </GlassPanel>
+          <ArrowsClockwise size={20} color={colors.text} weight="bold" />
+        )
+      }
+      title={offline ? "You're offline" : "Couldn't refresh insights"}
+      subtitle={offline ? 'Showing example numbers until you reconnect.' : (message ?? 'Showing example numbers for now.')}
+      trailing={<Text style={styles.retryText}>Retry</Text>}
+      onPress={onRetry}
+      accessibilityLabel="Retry loading insights"
+    />
   );
 }
 
@@ -364,132 +436,137 @@ function SkeletonBlock({opacity, style}: {opacity: Animated.Value; style?: objec
   return <Animated.View style={[styles.skeletonBlock, style, {opacity}]} />;
 }
 
-/** Shown while the first fetch for a period is in flight — no fabricated numbers. */
+/** Shown while the first fetch for a period is in flight; no fabricated numbers. */
 function InsightsSkeleton() {
   const reducedMotion = useReducedMotion();
   const opacity = useSkeletonPulse(reducedMotion);
 
   return (
-    <View>
-      <GlassPanel style={[styles.comparisonWrap, shadows.card]} radius={radii.cardHero} contentStyle={styles.comparisonInner}>
-        <View style={styles.rowBetween}>
-          <SkeletonBlock opacity={opacity} style={styles.skeletonLabel} />
-          <SkeletonBlock opacity={opacity} style={styles.skeletonChip} />
-        </View>
+    <View accessibilityLabel="Loading insights" accessibilityRole="progressbar">
+      <Card radius={24} padding={20} style={styles.skeletonSummary}>
+        <SkeletonBlock opacity={opacity} style={styles.skeletonLabel} />
         <SkeletonBlock opacity={opacity} style={styles.skeletonAmount} />
         <SkeletonBlock opacity={opacity} style={styles.skeletonDelta} />
-        <View style={styles.miniBarRow}>
-          {[0, 1, 2, 3].map(index => (
-            <View key={index} style={styles.miniBarCol}>
-              <SkeletonBlock opacity={opacity} style={styles.skeletonBar} />
-            </View>
+        <SkeletonBlock opacity={opacity} style={styles.skeletonCompare} />
+        <SkeletonBlock opacity={opacity} style={styles.skeletonCompare} />
+      </Card>
+
+      <Card radius={24} padding={18} style={[styles.barsCard, styles.skeletonBarsCard]}>
+        <SkeletonBlock opacity={opacity} style={styles.skeletonLabel} />
+        <View style={styles.skeletonBarsRow}>
+          {[60, 96, 44, 72].map((height, index) => (
+            <SkeletonBlock key={index} opacity={opacity} style={[styles.skeletonBar, {height}]} />
           ))}
         </View>
-      </GlassPanel>
+      </Card>
 
-      <View style={[styles.aiCard, shadows.card]}>
-        <View style={styles.aiHeaderRow}>
-          <SkeletonBlock opacity={opacity} style={styles.skeletonAiIcon} />
-          <SkeletonBlock opacity={opacity} style={styles.skeletonAiTitle} />
-        </View>
-        <SkeletonBlock opacity={opacity} style={[styles.skeletonLine, {marginTop: 16}]} />
-        <SkeletonBlock opacity={opacity} style={[styles.skeletonLine, {width: '82%', marginTop: 8}]} />
-        <SkeletonBlock opacity={opacity} style={[styles.skeletonLine, {width: '58%', marginTop: 8}]} />
-      </View>
-
-      <GlassPanel style={styles.movementWrap} radius={24} contentStyle={styles.movementInner}>
-        <SkeletonBlock opacity={opacity} style={styles.skeletonSectionTitle} />
-        <View style={styles.movementList}>
-          {[0, 1, 2, 3].map(index => (
-            <View key={index} style={styles.movementRow}>
-              <SkeletonBlock opacity={opacity} style={styles.skeletonMovementIcon} />
-              <View style={styles.movementText}>
-                <SkeletonBlock opacity={opacity} style={styles.skeletonMovementLabel} />
-                <SkeletonBlock opacity={opacity} style={styles.skeletonMovementSub} />
-              </View>
-              <SkeletonBlock opacity={opacity} style={styles.skeletonMovementValue} />
+      <Card radius={24} padding={0} style={[styles.categoryCard, styles.sectionGap]}>
+        {[0, 1, 2].map(index => (
+          <View key={index} style={[styles.categoryRow, index < 2 ? styles.categoryRowDivider : null]}>
+            <SkeletonBlock opacity={opacity} style={styles.skeletonIcon} />
+            <View style={styles.categoryText}>
+              <SkeletonBlock opacity={opacity} style={styles.skeletonRowLabel} />
+              <SkeletonBlock opacity={opacity} style={styles.skeletonRowBar} />
             </View>
-          ))}
-        </View>
-      </GlassPanel>
+          </View>
+        ))}
+      </Card>
     </View>
   );
 }
 
-export function InsightsScreen({currencySymbol, name = 'there', avatarUrl, onProfilePress}: InsightsScreenProps) {
+export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsScreenProps) {
   const navClearance = useFloatingNavClearance();
   const navScroll = useFloatingNavScroll();
   const [period, setPeriod] = useState<InsightsPeriod>('month');
-  const hasSecureAvatar = isSafeAvatarUrl(avatarUrl);
-  const initials = initialsFrom(name);
+  const [refreshing, setRefreshing] = useState(false);
 
   const insights = useInsights(period);
   const isLive = insights.status === 'ready' && insights.data !== null;
   const showSkeleton = insights.status === 'loading' && !isLive;
+  const hasError = insights.status === 'error';
+
   const data = useMemo<InsightsData>(() => {
     if (isLive && insights.data) {
-      return buildInsightsDataFromResponse(insights.data);
+      return buildInsightsDataFromResponse(insights.data, monthlyBudget);
     }
-    return insightsData(currencySymbol, period);
-  }, [currencySymbol, isLive, insights.data, period]);
+    const example = insightsData(currencySymbol, period);
+    return monthlyBudget && monthlyBudget > 0 ? {...example, monthlyBudget} : example;
+  }, [currencySymbol, isLive, insights.data, monthlyBudget, period]);
+
+  const labels = useMemo(() => periodLabels(data.period, data.referenceDate), [data.period, data.referenceDate]);
+  const money = useCallback((value: number) => formatMoney(value, currencySymbol, {decimals: 0}), [currencySymbol]);
+
+  const canShare = isLive && !showSkeleton;
+  const onShare = useCallback(async () => {
+    try {
+      await Share.share({message: buildShareText(data, money)});
+    } catch {
+      // The user dismissed the sheet or no share target exists; nothing to recover.
+    }
+  }, [data, money]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await insights.refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [insights]);
+
+  const hasSpending = data.currentTotal > 0;
 
   return (
-    <Screen edges={['top']} backdrop={<InsightsAmbient />}>
+    <Screen edges={['top']} glow>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.content, {paddingBottom: navClearance}]}
         onScroll={navScroll.onScroll}
         scrollEventThrottle={navScroll.scrollEventThrottle}
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View style={styles.titleBlock}>
-            <Text fontFamily={fonts.interMedium} fontSize={13} lineHeight={18} fontWeight="500" color={colors.inkSoft}>
-              Your money, explained
-            </Text>
-            <Text
-              fontFamily={fonts.outfitSemi}
-              fontSize={26}
-              lineHeight={32}
-              fontWeight="600"
-              letterSpacing={-0.65}
-              color={colors.ink}>
-              Insights
-            </Text>
-          </View>
-          <PressableScale
-            scaleTo={0.94}
-            onPress={onProfilePress}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-            style={shadows.avatar}>
-            <GlassPanel intensity="md" overlayColor="#FFFFFFCC" radius={AVATAR_SIZE / 2} contentStyle={styles.avatarFace}>
-              {hasSecureAvatar ? (
-                <Image source={{uri: avatarUrl}} style={{width: AVATAR_SIZE, height: AVATAR_SIZE}} resizeMode="cover" />
-              ) : (
-                <Text fontFamily={fonts.outfitSemi} fontSize={15} lineHeight={18} fontWeight="600" color={colors.gold}>
-                  {initials}
-                </Text>
-              )}
-            </GlassPanel>
-          </PressableScale>
-        </View>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.lavender}
+            colors={[colors.violet]}
+            progressBackgroundColor={colors.surfaceRaised}
+          />
+        }>
+        <Header canShare={canShare} onShare={onShare} />
 
-        <PeriodTabs period={period} onChange={setPeriod} />
+        <SegmentedControl
+          options={PERIOD_OPTIONS}
+          value={period}
+          onChange={setPeriod}
+          style={styles.tabs}
+          accessibilityLabel="Insights period"
+        />
 
-        {insights.status === 'error' ? (
-          <Text fontFamily={fonts.interMedium} fontSize={12} lineHeight={16} fontWeight="500" color={colors.inkMuted} style={styles.liveErrorNote}>
-            Couldn't refresh this {period}'s insights — showing example data.
-          </Text>
+        {hasError ? (
+          <StatusBanner offline={isOfflineError(insights.error)} message={insights.error} onRetry={insights.reload} />
         ) : null}
 
         {showSkeleton ? (
           <InsightsSkeleton />
         ) : (
           <>
-            <ComparisonCard data={data} currencySymbol={currencySymbol} />
+            <SummaryCard data={data} labels={labels} currencySymbol={currencySymbol} />
+            {hasSpending ? (
+              <>
+                <BarsCard data={data} labels={labels} currencySymbol={currencySymbol} />
+                <CategoriesCard data={data} currencySymbol={currencySymbol} />
+              </>
+            ) : (
+              <EmptyCard labels={labels} />
+            )}
             <AiSummaryCard data={data} />
-            <CategoryMovementPanel data={data} currencySymbol={currencySymbol} period={period} />
+            <MovementPanel
+              data={data}
+              currencySymbol={currencySymbol}
+              caption={previousPeriodLabel(data.period, data.referenceDate)}
+            />
           </>
         )}
       </ScrollView>
@@ -504,336 +581,410 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: layout.screenPadding,
-    paddingTop: 8,
+    paddingTop: 6,
   },
-  rowBetween: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
+
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 18,
+    justifyContent: 'space-between',
+    minHeight: 44,
   },
-  titleBlock: {
+  title: {
+    ...typography.title,
+    color: colors.text,
     flex: 1,
-    minWidth: 0,
-    gap: 2,
   },
-  avatarFace: {
-    width: AVATAR_SIZE,
-    height: AVATAR_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  // Period tabs
-  tabsTrack: {
+  shareButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.03)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairlineStrong,
-    borderRadius: 999,
-    padding: TAB_PAD,
-    marginBottom: 16,
-    overflow: 'hidden',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  tabsThumb: {
-    position: 'absolute',
-    top: TAB_PAD,
-    left: TAB_PAD,
-    height: TAB_SEG_H,
-    borderRadius: 999,
-    backgroundColor: colors.ink,
-    shadowColor: '#000000',
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
+  shareDisabled: {
+    opacity: 0.4,
   },
-  tabsSeg: {
-    flex: 1,
-    zIndex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: TAB_SEG_H,
+  shareText: {
+    fontFamily: fonts.jakartaMedium,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.text,
   },
-  liveErrorNote: {
-    marginTop: -6,
-    marginBottom: 16,
+  tabs: {
+    marginTop: 16,
+  },
+  statusBanner: {
+    marginTop: 16,
+  },
+  retryText: {
+    fontFamily: fonts.jakartaBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.lavender,
+    paddingHorizontal: 6,
   },
 
-  // Comparison hero card
-  comparisonWrap: {
-    marginBottom: 16,
-  },
-  comparisonInner: {
-    padding: 22,
+  // Summary card
+  summaryCard: {
+    marginTop: 18,
+    padding: 20,
+    gap: 18,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.line,
     overflow: 'hidden',
   },
-  comparisonGlow: {
-    position: 'absolute',
-    top: -110,
-    right: -100,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundImage: [
-      {
-        type: 'radial-gradient',
-        shape: 'circle',
-        size: 'farthest-side',
-        position: {top: '50%', left: '50%'},
-        colorStops: [
-          {color: '#8FC79A', positions: ['0%']},
-          {color: 'rgba(143, 199, 154, 0.45)', positions: ['40%']},
-          {color: 'rgba(143, 199, 154, 0)', positions: ['72%']},
-        ],
-      },
-    ],
+  summaryHead: {
+    gap: 4,
   },
-  comparisonAmount: {
-    marginTop: 10,
+  summaryLabel: {
+    fontFamily: fonts.jakartaMedium,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.muted,
+  },
+  summaryAmount: {
+    color: colors.text,
     includeFontPadding: false,
   },
-  comparisonDeltaRow: {
+  deltaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 10,
+    gap: 6,
+    paddingTop: 2,
   },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  miniBarRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    height: 64,
-    marginTop: 18,
-    gap: 8,
-  },
-  miniBarCol: {
+  deltaText: {
     flex: 1,
+    fontFamily: fonts.jakartaSemiBold,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  compare: {
+    gap: 12,
+  },
+  compareRow: {
+    gap: 6,
+  },
+  compareHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  compareLabelStrong: {
+    fontFamily: fonts.jakartaSemiBold,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.text,
+  },
+  compareValueStrong: {
+    fontFamily: fonts.jakartaSemiBold,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  compareLabel: {
+    flexShrink: 1,
+    fontFamily: fonts.jakartaMedium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+  },
+  compareQualifier: {
+    fontFamily: fonts.jakartaRegular,
+    fontSize: 12,
+    color: colors.muted,
+  },
+  compareValue: {
+    fontFamily: fonts.jakartaMedium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+    fontVariant: ['tabular-nums'],
+  },
+  stats: {
+    flexDirection: 'row',
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  stat: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  statDivider: {
+    paddingLeft: 14,
+    borderLeftWidth: 1,
+    borderLeftColor: colors.line,
+  },
+  statValue: {
+    fontFamily: fonts.jakartaBold,
+    fontSize: 16,
+    lineHeight: 22,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  statLabel: {
+    fontFamily: fonts.jakartaRegular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.muted,
+  },
+
+  // Bars card
+  barsCard: {
+    marginTop: 14,
+    gap: 12,
+  },
+  barsHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  cardTitle: {
+    ...typography.heading,
+    color: colors.text,
+  },
+  legend: {
+    flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  miniBarTrack: {
-    width: '100%',
-    height: 46,
-    flexDirection: 'column',
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.04)',
-    borderRadius: 7,
-    overflow: 'hidden',
+  legendDash: {
+    width: 14,
+    height: 0,
+    borderTopWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: withAlpha(colors.text, 0.5),
   },
-  miniBarFill: {
-    width: '100%',
-    borderTopLeftRadius: 7,
-    borderTopRightRadius: 7,
+  legendText: {
+    fontFamily: fonts.jakartaRegular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.muted,
+    fontVariant: ['tabular-nums'],
   },
 
-  // AI summary card
-  aiCard: {
-    backgroundColor: colors.ink,
-    borderRadius: 24,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-    padding: 20,
-    overflow: 'hidden',
-    marginBottom: 16,
+  // Sections
+  sectionGap: {
+    marginTop: 26,
   },
-  aiGlow: {
-    // Simulated CSS blur(80px) over a 150px solid circle: the box grows by
-    // 2× the blur radius and the color fades in soft, uneven steps instead
-    // of a hard-edged disc, so the light reads as a diffuse bloom rather
-    // than a bright dot with a visible boundary (matches HomeAmbient/
-    // InsightsAmbient's glow() construction).
-    position: 'absolute',
-    top: -130,
-    right: -120,
-    width: 310,
-    height: 310,
-    borderRadius: 155,
-    backgroundImage: [
-      {
-        type: 'radial-gradient',
-        shape: 'circle',
-        size: 'farthest-side',
-        position: {top: '50%', left: '50%'},
-        colorStops: [
-          {color: colors.accent, positions: ['0%']},
-          {color: 'rgba(217, 138, 43, 0.55)', positions: ['34%']},
-          {color: 'rgba(217, 138, 43, 0.18)', positions: ['58%']},
-          {color: 'rgba(217, 138, 43, 0)', positions: ['78%']},
-        ],
-      },
-    ],
+  sectionGapSmall: {
+    marginTop: 14,
   },
-  aiHeaderRow: {
+  categoryCard: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+  },
+  categoryRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 14,
+    paddingVertical: 14,
   },
-  aiIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  categoryRowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  categoryText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 6,
+  },
+  categoryHead: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundImage: [
-      {
-        type: 'linear-gradient',
-        direction: '135deg',
-        colorStops: [
-          {color: 'rgb(240, 166, 60)', positions: ['0%']},
-          {color: 'rgb(217, 122, 31)', positions: ['100%']},
-        ],
-      },
-    ],
-    shadowColor: 'rgb(217, 138, 43)',
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    shadowOffset: {width: 0, height: 4},
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  categoryName: {
+    flexShrink: 1,
+    fontFamily: fonts.jakartaSemiBold,
+    fontSize: 15,
+    lineHeight: 21,
+    color: colors.text,
+  },
+  categoryAmount: {
+    fontFamily: fonts.jakartaBold,
+    fontSize: 15,
+    lineHeight: 21,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  moreRow: {
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+  moreText: {
+    fontFamily: fonts.jakartaBold,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.lavender,
+  },
+
+  // AI summary
+  aiCard: {
+    padding: 20,
+    gap: 14,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: colors.line,
+    overflow: 'hidden',
+  },
+  aiHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   aiTitleBlock: {
-    gap: 2,
+    gap: 1,
+  },
+  caption: {
+    fontFamily: fonts.jakartaRegular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.muted,
   },
   aiBody: {
-    marginTop: 14,
+    fontFamily: fonts.jakartaMedium,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.text,
   },
   aiHighlights: {
-    marginTop: 14,
     gap: 8,
   },
   aiHighlightRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    borderRadius: 16,
+    gap: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    gap: 10,
-  },
-  aiHighlightIcon: {
-    width: 15,
-    height: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   aiHighlightText: {
     flex: 1,
+    fontFamily: fonts.jakartaMedium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.text,
   },
 
-  // What changed panel
-  movementWrap: {
-    marginBottom: 8,
-  },
-  movementInner: {
-    padding: 20,
-  },
-  movementList: {
-    marginTop: 18,
-    gap: 14,
+  // What changed
+  movementCaption: {
+    fontFamily: fonts.jakartaRegular,
+    fontSize: 12,
+    lineHeight: 17,
+    color: colors.muted,
+    paddingTop: 14,
   },
   movementRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    paddingVertical: 14,
   },
-  movementIconWrap: {
+  movementIcon: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: 11,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: StyleSheet.hairlineWidth,
   },
   movementText: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+    gap: 1,
+  },
+  movementValue: {
+    fontFamily: fonts.jakartaBold,
+    fontSize: 14,
+    lineHeight: 20,
+    fontVariant: ['tabular-nums'],
+  },
+
+  // Empty
+  emptyCard: {
+    alignItems: 'center',
+    gap: 10,
+  },
+  emptyTitle: {
+    ...typography.heading,
+    color: colors.text,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  emptyBody: {
+    fontFamily: fonts.jakartaRegular,
+    fontSize: 14,
+    lineHeight: 20,
+    color: colors.muted,
+    textAlign: 'center',
   },
 
   // Loading skeleton
   skeletonBlock: {
-    backgroundColor: 'rgba(0, 0, 0, 0.08)',
+    backgroundColor: colors.surfaceRaised,
+  },
+  skeletonSummary: {
+    marginTop: 18,
+    gap: 14,
   },
   skeletonLabel: {
-    width: 96,
+    width: 120,
     height: 14,
     borderRadius: 7,
-  },
-  skeletonChip: {
-    width: 56,
-    height: 21,
-    borderRadius: 999,
   },
   skeletonAmount: {
-    width: 170,
+    width: 190,
     height: 40,
-    borderRadius: 10,
-    marginTop: 12,
+    borderRadius: 12,
   },
   skeletonDelta: {
-    width: 190,
+    width: 220,
     height: 14,
     borderRadius: 7,
-    marginTop: 12,
+  },
+  skeletonCompare: {
+    width: '100%',
+    height: 10,
+    borderRadius: 5,
+  },
+  skeletonBarsCard: {
+    marginTop: 14,
+  },
+  skeletonBarsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    height: 100,
   },
   skeletonBar: {
-    width: '100%',
-    height: 46,
-    borderRadius: 7,
+    width: '21%',
+    borderRadius: 14,
   },
-  skeletonAiIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  skeletonIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
   },
-  skeletonAiTitle: {
-    width: 110,
-    height: 16,
-    borderRadius: 8,
-  },
-  skeletonLine: {
-    width: '100%',
-    height: 13,
-    borderRadius: 6,
-  },
-  skeletonSectionTitle: {
-    width: 120,
-    height: 18,
-    borderRadius: 9,
-  },
-  skeletonMovementIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-  },
-  skeletonMovementLabel: {
-    width: '55%',
+  skeletonRowLabel: {
+    width: '45%',
     height: 14,
     borderRadius: 7,
   },
-  skeletonMovementSub: {
-    width: '35%',
-    height: 12,
-    borderRadius: 6,
-    marginTop: 4,
-  },
-  skeletonMovementValue: {
-    width: 42,
-    height: 14,
-    borderRadius: 7,
+  skeletonRowBar: {
+    width: '100%',
+    height: 4,
+    borderRadius: 2,
   },
 });

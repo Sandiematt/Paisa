@@ -8,8 +8,15 @@ import {
   View,
 } from 'react-native';
 
-import {SearchGlyph} from '../../components/icons/Glyphs';
-import {GlassPanel, PressableScale, Screen, Text} from '../../components/ui';
+import {MagnifyingGlass, Receipt, XCircle} from 'phosphor-react-native';
+
+import {
+  Card,
+  GradientIconSquare,
+  PressableScale,
+  Screen,
+  Text,
+} from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {
@@ -20,10 +27,9 @@ import {
   localDateISO,
   updateTransaction,
 } from '../../lib/transactionsStore';
-import {colors, fonts, layout, radii, shadows} from '../../theme';
-import {CategoryDisc} from '../add/categoryIcons';
-import {HomeAmbient} from '../home/HomeAmbient';
+import {colors, fonts, layout, radii} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
+import {ActivitySkeleton} from './ActivitySkeleton';
 import {ledgerForActivity, matchesFilter, matchesQuery} from './mapActivity';
 import {SwipeableTxnRow} from './SwipeableTxnRow';
 import {ActivityFilter, ActivityTransaction} from './types';
@@ -50,6 +56,8 @@ type ActivityScreenProps = {
   onRemove: (id: string) => void;
   onEdit: (row: TransactionRow) => void;
   focusDate?: string | null;
+  /** First load of the ledger: shows skeleton rows instead of the empty state. */
+  loading?: boolean;
 };
 
 type DayGroup = {
@@ -71,19 +79,17 @@ function formatGroupLabel(isoDate: string): string {
   const delta = Math.round((today - then) / 86400000);
 
   if (delta === 0) {
-    return 'TODAY';
+    return 'Today';
   }
   if (delta === 1) {
-    return 'YESTERDAY';
+    return 'Yesterday';
   }
 
-  return date
-    .toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    })
-    .toUpperCase();
+  return date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 export function ActivityScreen({
@@ -98,8 +104,10 @@ export function ActivityScreen({
   onRemove,
   onEdit,
   focusDate,
+  loading = false,
 }: ActivityScreenProps) {
   const [query, setQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [openRowId, setOpenRowId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const navClearance = useFloatingNavClearance();
@@ -203,81 +211,69 @@ export function ActivityScreen({
   );
 
   return (
-    <Screen edges={['top']} backdrop={<HomeAmbient />} bottomInset={navDockHeight}>
+    <Screen edges={['top']} glow bottomInset={navDockHeight}>
       <View style={styles.header}>
         <View style={styles.titleBlock}>
           <Text
-            fontFamily={fonts.interMedium}
+            fontFamily={fonts.jakartaMedium}
             fontSize={13}
             lineHeight={18}
-            fontWeight="500"
-            color={colors.inkSoft}>
+            color={colors.muted}>
             Recent activity
           </Text>
           <Text
-            fontFamily={fonts.outfitSemi}
+            fontFamily={fonts.jakartaBold}
             fontSize={26}
             lineHeight={32}
-            fontWeight="600"
-            letterSpacing={-0.65}
-            color={colors.ink}>
+            letterSpacing={-0.5}
+            color={colors.text}
+            accessibilityRole="header">
             Activity
           </Text>
         </View>
-        <GlassPanel
-          intensity="md"
-          overlayColor="#FFFFFFCC"
-          radius={radii.pill}
-          style={shadows.avatar}
-          contentStyle={styles.countFace}>
+        <View
+          style={styles.countPill}
+          accessibilityLabel={`Showing ${listed.length} of ${filtered.length}`}>
           <Text
-            fontFamily={fonts.interSemi}
+            fontFamily={fonts.jakartaSemiBold}
             fontSize={12}
             lineHeight={16}
-            fontWeight="600"
-            color={colors.inkSecondary}>
+            color={colors.muted}
+            style={tabular}>
             {listed.length} of {filtered.length}
           </Text>
-        </GlassPanel>
+        </View>
       </View>
 
-      <GlassPanel
-        intensity="xl"
-        overlayColor={colors.glass}
-        radius={radii.pill}
-        style={[styles.searchWrap, shadows.cardSoft]}
-        contentStyle={styles.searchFace}>
-        <SearchGlyph color={colors.inkMuted} size={17} />
+      <View
+        style={[styles.searchWrap, searchFocused && styles.searchWrapFocused]}>
+        <MagnifyingGlass size={18} color={colors.muted} weight="bold" />
         <TextInput
           value={query}
           onChangeText={setQuery}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
           placeholder="Search merchants, notes, amounts"
-          placeholderTextColor={colors.inkMuted}
+          placeholderTextColor={colors.muted}
+          selectionColor={colors.lavender}
           style={styles.searchInput}
           accessibilityLabel="Search activity"
           returnKeyType="search"
           autoCorrect={false}
           autoCapitalize="none"
-          clearButtonMode="while-editing"
+          clearButtonMode="never"
         />
         {searching ? (
           <PressableScale
             scaleTo={0.94}
             onPress={() => setQuery('')}
-            hitSlop={8}
+            hitSlop={10}
             accessibilityRole="button"
             accessibilityLabel="Clear search">
-            <Text
-              fontFamily={fonts.interSemi}
-              fontSize={12}
-              lineHeight={16}
-              fontWeight="600"
-              color={colors.inkMuted}>
-              Clear
-            </Text>
+            <XCircle size={18} color={colors.muted} weight="fill" />
           </PressableScale>
         ) : null}
-      </GlassPanel>
+      </View>
 
       <ScrollView
         horizontal
@@ -293,32 +289,17 @@ export function ActivityScreen({
               onPress={() => onFilterChange(item.id)}
               accessibilityRole="radio"
               accessibilityState={{selected}}
-              style={selected ? styles.filterOn : undefined}>
-              {selected ? (
-                <Text
-                  fontFamily={fonts.interSemi}
-                  fontSize={13}
-                  lineHeight={18}
-                  fontWeight="600"
-                  color={colors.onInk}>
-                  {item.label}
-                </Text>
-              ) : (
-                <GlassPanel
-                  intensity="md"
-                  overlayColor={colors.glass}
-                  radius={radii.pill}
-                  contentStyle={styles.filterOffFace}>
-                  <Text
-                    fontFamily={fonts.interMedium}
-                    fontSize={13}
-                    lineHeight={18}
-                    fontWeight="500"
-                    color={colors.inkSecondary}>
-                    {item.label}
-                  </Text>
-                </GlassPanel>
-              )}
+              accessibilityLabel={item.label}
+              style={[styles.filterPill, selected && styles.filterOn]}>
+              <Text
+                fontFamily={
+                  selected ? fonts.jakartaBold : fonts.jakartaMedium
+                }
+                fontSize={13}
+                lineHeight={18}
+                color={selected ? colors.ground : colors.muted}>
+                {item.label}
+              </Text>
             </PressableScale>
           );
         })}
@@ -351,109 +332,105 @@ export function ActivityScreen({
           <RefreshControl
             refreshing={refreshing}
             onRefresh={reload}
-            tintColor={colors.ink}
-            colors={[colors.ink]}
+            tintColor={colors.text}
+            colors={[colors.violet]}
+            progressBackgroundColor={colors.surfaceRaised}
           />
         }>
-        {groups.length === 0 ? (
-          <GlassPanel
-            style={shadows.card}
-            radius={24}
-            contentStyle={styles.emptyInner}>
-            <CategoryDisc id="other" />
-            <Text
-              fontFamily={fonts.outfitSemi}
-              fontSize={18}
-              lineHeight={24}
-              fontWeight="600"
-              letterSpacing={-0.45}
-              color={colors.ink}
-              textAlign="center">
-              {ledger.length === 0
-                ? 'Nothing here yet'
-                : searching
-                  ? 'No matching activity'
-                  : 'Nothing on this day'}
-            </Text>
-            <Text
-              fontFamily={fonts.interMedium}
-              fontSize={13}
-              lineHeight={18}
-              fontWeight="500"
-              color={colors.inkMuted}
-              textAlign="center">
-              {ledger.length === 0
-                ? 'Add an expense or income and it will land in this list.'
-                : searching
-                  ? 'Try a different search or filter.'
-                  : 'Pick another day, or add something for this one.'}
-            </Text>
-          </GlassPanel>
+        {loading && groups.length === 0 ? (
+          <ActivitySkeleton />
+        ) : groups.length === 0 ? (
+          <Card radius={radii.cardHero} padding={0} style={styles.emptyCard}>
+            <View style={styles.emptyInner}>
+              <GradientIconSquare size={48} glow>
+                <Receipt size={24} color={colors.text} weight="fill" />
+              </GradientIconSquare>
+              <Text
+                fontFamily={fonts.jakartaBold}
+                fontSize={18}
+                lineHeight={24}
+                letterSpacing={-0.3}
+                color={colors.text}
+                textAlign="center">
+                {ledger.length === 0
+                  ? 'Nothing here yet'
+                  : searching
+                    ? 'No matching activity'
+                    : 'Nothing on this day'}
+              </Text>
+              <Text
+                fontFamily={fonts.jakartaMedium}
+                fontSize={13}
+                lineHeight={19}
+                color={colors.muted}
+                textAlign="center">
+                {ledger.length === 0
+                  ? 'Add an expense or income and it will land in this list.'
+                  : searching
+                    ? 'Try a different search or filter.'
+                    : 'Pick another day, or add something for this one.'}
+              </Text>
+            </View>
+          </Card>
         ) : (
-          <GlassPanel
-            style={shadows.card}
-            radius={24}
-            contentStyle={styles.groupInner}>
-            {groups.map((group, index) => (
-              <View key={group.date}>
-                <View
-                  style={[
-                    styles.groupHeader,
-                    index > 0 ? styles.groupHeaderLater : null,
-                  ]}>
-                  <Text
-                    fontFamily={fonts.interSemi}
-                    fontSize={11}
-                    lineHeight={15}
-                    fontWeight="600"
-                    letterSpacing={0.5}
-                    color={colors.inkMuted}>
-                    {group.label}
-                  </Text>
-                  <Text
-                    fontFamily={fonts.interSemi}
-                    fontSize={12}
-                    lineHeight={16}
-                    fontWeight="600"
-                    color={group.total >= 0 ? colors.positive : colors.coral}
-                    style={tabular}>
-                    {formatMoney(group.total, currencySymbol, {signed: true})}
-                  </Text>
-                </View>
-                {group.items.map(item => (
-                  <SwipeableTxnRow
-                    key={item.id}
-                    item={item}
-                    currencySymbol={currencySymbol}
-                    open={openRowId === item.id}
-                    onOpen={() => setOpenRowId(item.id)}
-                    onClose={() =>
-                      setOpenRowId(current =>
-                        current === item.id ? null : current,
-                      )
-                    }
-                    onEdit={() => item.source && onEdit(item.source)}
-                    onDelete={() => onDelete(item)}
-                    onToggleRecurring={() =>
-                      run(
-                        () =>
-                          updateTransaction(item.id, {
-                            isRecurring: !item.recurring,
-                          }),
-                        'Could not update',
-                      )
-                    }
-                    onDuplicate={() =>
-                      run(
-                        () => duplicateTransaction(item.source!),
-                        'Could not duplicate',
-                      )
-                    }
-                  />
-                ))}
+          groups.map(group => (
+            <Card
+              key={group.date}
+              radius={radii.card}
+              padding={0}
+              style={styles.group}>
+              <View style={styles.groupHeader}>
+                <Text
+                  fontFamily={fonts.jakartaBold}
+                  fontSize={15}
+                  lineHeight={20}
+                  letterSpacing={-0.1}
+                  color={colors.text}
+                  accessibilityRole="header">
+                  {group.label}
+                </Text>
+                <Text
+                  fontFamily={fonts.jakartaBold}
+                  fontSize={13}
+                  lineHeight={18}
+                  color={group.total >= 0 ? colors.mint : colors.roseLight}
+                  style={tabular}>
+                  {formatMoney(group.total, currencySymbol, {signed: true})}
+                </Text>
               </View>
-            ))}
-          </GlassPanel>
+              {group.items.map(item => (
+                <SwipeableTxnRow
+                  key={item.id}
+                  item={item}
+                  currencySymbol={currencySymbol}
+                  open={openRowId === item.id}
+                  onOpen={() => setOpenRowId(item.id)}
+                  onClose={() =>
+                    setOpenRowId(current =>
+                      current === item.id ? null : current,
+                    )
+                  }
+                  onEdit={() => item.source && onEdit(item.source)}
+                  onDelete={() => onDelete(item)}
+                  onToggleRecurring={() =>
+                    run(
+                      () =>
+                        updateTransaction(item.id, {
+                          isRecurring: !item.recurring,
+                        }),
+                      'Could not update',
+                    )
+                  }
+                  onDuplicate={() =>
+                    run(
+                      () => duplicateTransaction(item.source!),
+                      'Could not duplicate',
+                    )
+                  }
+                />
+              ))}
+            </Card>
+          ))
         )}
       </ScrollView>
     </Screen>
@@ -471,29 +448,36 @@ const styles = StyleSheet.create({
   titleBlock: {
     gap: 2,
   },
-  countFace: {
+  countPill: {
     paddingHorizontal: 12,
     paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   searchWrap: {
     marginTop: 18,
     marginHorizontal: layout.screenPadding,
-    alignSelf: 'stretch',
-  },
-  searchFace: {
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  searchWrapFocused: {
+    borderColor: colors.lavender,
   },
   searchInput: {
     flex: 1,
     padding: 0,
-    color: colors.ink,
-    fontFamily: fonts.interMedium,
+    color: colors.text,
+    fontFamily: fonts.jakartaMedium,
     fontSize: 14,
-    fontWeight: '500',
   },
   filterRow: {
     flexGrow: 0,
@@ -504,19 +488,17 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
   },
-  filterOn: {
-    backgroundColor: colors.ink,
+  filterPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     borderRadius: radii.pill,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    shadowColor: '#000000',
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
-  filterOffFace: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  filterOn: {
+    backgroundColor: colors.text,
+    borderColor: colors.text,
   },
   list: {
     flex: 1,
@@ -524,29 +506,26 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: layout.screenPadding,
+    gap: 14,
   },
-  emptyInner: {
-    paddingVertical: 28,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    gap: 8,
-  },
-  groupInner: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 6,
+  group: {
     overflow: 'hidden',
   },
   groupHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingBottom: 10,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
   },
-  groupHeaderLater: {
+  emptyCard: {
     marginTop: 4,
-    paddingTop: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.08)',
+  },
+  emptyInner: {
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    gap: 10,
   },
 });

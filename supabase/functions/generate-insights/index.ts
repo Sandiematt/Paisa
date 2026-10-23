@@ -34,11 +34,14 @@ const requestBodySchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'referenceDate must be YYYY-MM-DD')
       .optional(),
     /** Which comparison window to calculate. Defaults to "week". */
-    period: z.enum(['week', 'month']).optional(),
+    period: z.enum(['week', 'month', 'year']).optional(),
   })
   .partial();
 
 type RequestBody = {referenceDate: string; period: PeriodKind};
+
+const TRANSACTION_PAGE_SIZE = 1000;
+const MAX_TRANSACTION_PAGES = 20; // 20k rows is far beyond a realistic 2-year window
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -185,21 +188,39 @@ Deno.serve(async req => {
   const {referenceDate, period} = await readRequestBody(req);
   const fetchFrom = earliestDateNeeded(period, referenceDate);
 
+  // PostgREST caps a single response (1000 rows by default). A year window can
+  // easily exceed that, and with an ascending order the newest rows would be the
+  // ones silently dropped, so page through the full range.
+  const fetchTransactions = async () => {
+    const rows: TransactionQueryRow[] = [];
+    for (let page = 0; page < MAX_TRANSACTION_PAGES; page += 1) {
+      const from = page * TRANSACTION_PAGE_SIZE;
+      const {data, error} = await supabase
+        .from('transactions')
+        .select(
+          'id, type, amount, merchant, description, transaction_date, kind, is_recurring, categories(name, slug)',
+        )
+        .eq('user_id', user.id)
+        .gte('transaction_date', fetchFrom)
+        .lte('transaction_date', referenceDate)
+        .order('transaction_date', {ascending: true})
+        .order('id', {ascending: true})
+        .range(from, from + TRANSACTION_PAGE_SIZE - 1);
+      if (error) return {data: null, error};
+      const batch = (data ?? []) as TransactionQueryRow[];
+      rows.push(...batch);
+      if (batch.length < TRANSACTION_PAGE_SIZE) break;
+    }
+    return {data: rows, error: null};
+  };
+
   const [{data: profileRow, error: profileError}, {data: transactionRows, error: transactionsError}] = await Promise.all([
     supabase
       .from('profiles')
       .select('currency, monthly_income, monthly_budget, monthly_savings_goal, starting_balance')
       .eq('id', user.id)
       .maybeSingle(),
-    supabase
-      .from('transactions')
-      .select(
-        'id, type, amount, merchant, description, transaction_date, kind, is_recurring, categories(name, slug)',
-      )
-      .eq('user_id', user.id)
-      .gte('transaction_date', fetchFrom)
-      .lte('transaction_date', referenceDate)
-      .order('transaction_date', {ascending: true}),
+    fetchTransactions(),
   ]);
 
   if (profileError) {

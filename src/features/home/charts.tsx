@@ -1,182 +1,144 @@
 /* Size-driven geometry; StyleSheet cannot take the `size` argument. */
 /* eslint-disable react-native/no-inline-styles */
-import React, {useMemo, useState} from 'react';
+import React, {useMemo, useRef, useState} from 'react';
 import {LayoutChangeEvent, StyleSheet, View} from 'react-native';
+import Svg, {Circle, Defs, LinearGradient, Path, Stop} from 'react-native-svg';
 
 import {AppText} from '../../components/ui';
-import {colors, radii, spacing} from '../../theme';
+import {colors} from '../../theme';
 import {HealthTone, SpendSlice} from './homeReport';
-
-const DRAW_H = 120;
-const TOP_PAD = 36;
-const X_AXIS_H = 24;
-const STROKE = 2.5;
 
 type AreaChartProps = {
   values: number[];
-  highlightIndex: number;
-  highlightLabel: string;
-  xLabels?: string[];
+  height?: number;
+  accessibilityLabel?: string;
 };
 
-export function AreaChart({
-  values,
-  highlightIndex,
-  highlightLabel,
-  xLabels,
-}: AreaChartProps) {
+type Point = {x: number; y: number};
+
+const CHART_PAD_TOP = 8;
+const CHART_PAD_BOTTOM = 6;
+const CHART_PAD_RIGHT = 6;
+const END_DOT = 5;
+
+let chartSeq = 0;
+
+/** Smooth line through the points; control points stay between neighbours so
+ *  the curve never overshoots a peak or dips below a valley. */
+function smoothPath(points: Point[]): string {
+  if (points.length === 0) {
+    return '';
+  }
+  let d = `M${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p0 = points[i - 1] ?? points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] ?? p2;
+    const lo = Math.min(p1.y, p2.y);
+    const hi = Math.max(p1.y, p2.y);
+    const c1y = Math.min(hi, Math.max(lo, p1.y + (p2.y - p0.y) / 6));
+    const c2y = Math.min(hi, Math.max(lo, p2.y - (p3.y - p1.y) / 6));
+    const c1x = p1.x + (p2.x - p0.x) / 6;
+    const c2x = p2.x - (p3.x - p1.x) / 6;
+    d += ` C${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(
+      2,
+    )} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+  }
+  return d;
+}
+
+/**
+ * DX balance spotlight chart: violet area fill, a soft glow under a
+ * lavender-violet line and a white dot on the latest value. Fills the width
+ * it is given.
+ */
+export function AreaChart({values, height = 92, accessibilityLabel}: AreaChartProps) {
   const [width, setWidth] = useState(0);
-  const n = Math.max(values.length, 1);
-  const safeValues = values.length > 0 ? values : [0];
-  const max = Math.max(0, ...safeValues);
-  const min = Math.min(0, ...safeValues);
-  const span = max - min || 1;
-  const norm = safeValues.map(value => (value - min) / span);
-  const baseline = (0 - min) / span;
-  const active = Math.min(Math.max(highlightIndex, 0), n - 1);
+  const idRef = useRef<string | null>(null);
+  if (idRef.current == null) {
+    chartSeq += 1;
+    idRef.current = `dxChart${chartSeq}`;
+  }
+  const id = idRef.current;
 
   const onLayout = (event: LayoutChangeEvent) => {
-    setWidth(event.nativeEvent.layout.width);
+    setWidth(Math.round(event.nativeEvent.layout.width));
   };
 
-  const points = useMemo(() => {
-    if (width <= 0) {
-      return [];
-    }
-    const inset = 12;
-    const inner = Math.max(width - inset * 2, 1);
-    return norm.map((value, index) => ({
-      x: inset + (n === 1 ? inner / 2 : (index / (n - 1)) * inner),
-      y: TOP_PAD + DRAW_H - value * DRAW_H,
+  const {line, area, last} = useMemo(() => {
+    const safe = values.length > 0 ? values : [0];
+    const max = Math.max(...safe);
+    const min = Math.min(...safe);
+    const span = max - min;
+    const drawW = Math.max(width - CHART_PAD_RIGHT, 1);
+    const drawH = height - CHART_PAD_TOP - CHART_PAD_BOTTOM;
+    const toY = (value: number) =>
+      span === 0
+        ? CHART_PAD_TOP + drawH / 2
+        : CHART_PAD_TOP + (1 - (value - min) / span) * drawH;
+    // One point (first day of the period) is drawn as a flat line.
+    const source = safe.length === 1 ? [safe[0], safe[0]] : safe;
+    const pts: Point[] = source.map((value, index) => ({
+      x: (index / (source.length - 1)) * drawW,
+      y: toY(value),
     }));
-  }, [n, norm, width]);
-
-  const baselineY = TOP_PAD + DRAW_H - baseline * DRAW_H;
+    const path = smoothPath(pts);
+    return {
+      line: path,
+      area: `${path} L${drawW.toFixed(2)} ${height} L0 ${height} Z`,
+      last: pts[pts.length - 1],
+    };
+  }, [height, values, width]);
 
   return (
-    <View style={styles.areaWrapper} onLayout={onLayout} collapsable={false}>
-      {width > 0 && points.length > 0 ? (
-        <View style={{height: TOP_PAD + DRAW_H}} collapsable={false}>
-          {points.slice(0, -1).map((point, index) => {
-            const next = points[index + 1];
-            const top = Math.min(point.y, next.y, baselineY);
-            const bottom = Math.max(point.y, next.y, baselineY);
-            return (
-              <View
-                key={`fill-${index}`}
-                style={{
-                  position: 'absolute',
-                  left: point.x,
-                  width: Math.max(next.x - point.x, 1),
-                  top,
-                  height: Math.max(bottom - top, 0),
-                  backgroundColor: colors.accentSoft,
-                }}
-              />
-            );
-          })}
-
-          {points.slice(0, -1).map((point, index) => {
-            const next = points[index + 1];
-            const dx = next.x - point.x;
-            const dy = next.y - point.y;
-            const length = Math.max(Math.sqrt(dx * dx + dy * dy), 1);
-            const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
-            return (
-              <View
-                key={`line-${index}`}
-                style={{
-                  position: 'absolute',
-                  left: (point.x + next.x) / 2 - length / 2,
-                  top: (point.y + next.y) / 2 - STROKE / 2,
-                  width: length,
-                  height: STROKE,
-                  borderRadius: 2,
-                  backgroundColor: colors.accent,
-                  transform: [{rotate: `${angle}deg`}],
-                }}
-              />
-            );
-          })}
-
-          <View
-            style={{
-              position: 'absolute',
-              left: points[active].x,
-              top: TOP_PAD,
-              width: 1.5,
-              height: DRAW_H,
-              marginLeft: -0.75,
-              backgroundColor: colors.accentPress,
-              opacity: 0.35,
-            }}
+    <View
+      style={{height}}
+      onLayout={onLayout}
+      collapsable={false}
+      accessible={accessibilityLabel != null}
+      accessibilityRole="image"
+      accessibilityLabel={accessibilityLabel}>
+      {width > 0 ? (
+        <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+          <Defs>
+            <LinearGradient id={`${id}Fill`} x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor={colors.violet} stopOpacity={0.45} />
+              <Stop offset="1" stopColor={colors.violet} stopOpacity={0} />
+            </LinearGradient>
+            <LinearGradient id={`${id}Stroke`} x1="0" y1="0" x2="1" y2="0">
+              <Stop offset="0" stopColor={colors.violet} />
+              <Stop offset="1" stopColor={colors.lavender} />
+            </LinearGradient>
+          </Defs>
+          <Path d={area} fill={`url(#${id}Fill)`} />
+          {/* Glow: wide, low-opacity strokes stand in for a blur filter. */}
+          <Path
+            d={line}
+            fill="none"
+            stroke={colors.orb}
+            strokeWidth={12}
+            strokeOpacity={0.1}
+            strokeLinecap="round"
           />
-
-          {points.map((point, index) => {
-            if (index !== 0 && index !== active && index !== n - 1) {
-              return null;
-            }
-            const isActive = index === active;
-            const size = isActive ? 11 : 6;
-            return (
-              <View
-                key={`dot-${index}`}
-                style={{
-                  position: 'absolute',
-                  left: point.x - size / 2,
-                  top: point.y - size / 2,
-                  width: size,
-                  height: size,
-                  borderRadius: 999,
-                  backgroundColor: isActive ? colors.accentPress : colors.accent,
-                  borderWidth: isActive ? 2.5 : 1.5,
-                  borderColor: colors.surface,
-                  zIndex: 10,
-                }}
-              />
-            );
-          })}
-
-          <View
-            style={[
-              styles.tip,
-              {
-                left: Math.min(
-                  Math.max(points[active].x - 70, 0),
-                  Math.max(width - 140, 0),
-                ),
-                top: Math.max(points[active].y - 34, 0),
-              },
-            ]}>
-            <AppText variant="caption" color={colors.onInk} numberOfLines={1}>
-              {highlightLabel}
-            </AppText>
-          </View>
-        </View>
-      ) : (
-        <View style={{height: TOP_PAD + DRAW_H}} />
-      )}
-
-      {xLabels && xLabels.length === n ? (
-        <View style={{flexDirection: 'row', height: X_AXIS_H, marginTop: 4}}>
-          {xLabels.map((label, index) => (
-            <View key={`xlabel-${index}`} style={{flex: 1, alignItems: 'center'}}>
-              {(n <= 8 ||
-                index === 0 ||
-                index === n - 1 ||
-                index === active) && (
-                <AppText
-                  variant="caption"
-                  color={
-                    index === active ? colors.accentPress : colors.inkMuted
-                  }
-                  numberOfLines={1}>
-                  {label}
-                </AppText>
-              )}
-            </View>
-          ))}
-        </View>
+          <Path
+            d={line}
+            fill="none"
+            stroke={colors.orb}
+            strokeWidth={7}
+            strokeOpacity={0.22}
+            strokeLinecap="round"
+          />
+          <Path
+            d={line}
+            fill="none"
+            stroke={`url(#${id}Stroke)`}
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Circle cx={last.x} cy={last.y} r={END_DOT} fill={colors.text} />
+        </Svg>
       ) : null}
     </View>
   );
@@ -199,7 +161,7 @@ export function DonutChart({slices, size = 132, children}: DonutChartProps) {
     }
   });
   while (ticks.length < TICKS) {
-    ticks.push(slices[slices.length - 1]?.color ?? colors.inkMuted);
+    ticks.push(slices[slices.length - 1]?.color ?? colors.muted);
   }
   if (ticks.length > TICKS) {
     ticks.length = TICKS;
@@ -258,10 +220,10 @@ type ScoreGaugeProps = {
 };
 
 const GAUGE_COLOR: Record<HealthTone, string> = {
-  good: colors.positive,
-  fair: colors.accent,
-  poor: colors.danger,
-  empty: colors.inkMuted,
+  good: colors.mint,
+  fair: colors.violet,
+  poor: colors.roseLight,
+  empty: colors.muted,
 };
 
 export function ScoreGauge({score, size = 88, tone = 'good'}: ScoreGaugeProps) {
@@ -284,7 +246,7 @@ export function ScoreGauge({score, size = 88, tone = 'good'}: ScoreGaugeProps) {
             height: stroke,
             borderRadius: 2,
             backgroundColor:
-              index < filled ? GAUGE_COLOR[tone] : colors.canvasSunk,
+              index < filled ? GAUGE_COLOR[tone] : colors.line,
             transform: [
               {rotate: `${(index / ticks) * 360}deg`},
               {translateY: -radius},
@@ -310,23 +272,9 @@ export function ScoreGauge({score, size = 88, tone = 'good'}: ScoreGaugeProps) {
 }
 
 const styles = StyleSheet.create({
-  areaWrapper: {
-    overflow: 'visible',
-  },
-  tip: {
-    position: 'absolute',
-    minWidth: 108,
-    maxWidth: 140,
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    zIndex: 20,
-  },
   donutHole: {
     position: 'absolute',
-    backgroundColor: colors.canvas,
+    backgroundColor: colors.ground,
     alignItems: 'center',
     justifyContent: 'center',
   },

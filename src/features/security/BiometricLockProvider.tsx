@@ -10,15 +10,21 @@ import React, {
 import {AppState, Modal, StatusBar, StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {LockIcon} from '../../components/icons/FeatherIcons';
-import {GhostButton, PrimaryButton, Text} from '../../components/ui';
+import {Lock} from 'phosphor-react-native';
+
+import {
+  AppText,
+  GhostButton,
+  GradientIconSquare,
+  PrimaryButton,
+} from '../../components/ui';
 import {
   authenticate,
   biometricSupport,
   loadBiometricPref,
   saveBiometricPref,
 } from '../../lib/biometricLock';
-import {colors, fonts} from '../../theme';
+import {colors, linearGradient, spacing} from '../../theme';
 import {useAuth} from '../auth/AuthProvider';
 
 // Leaving for the share sheet or a quick app switch should not re-prompt.
@@ -179,37 +185,29 @@ function LockScreen({
       presentationStyle="fullScreen"
       statusBarTranslucent
       onRequestClose={() => {}}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
       <View
         style={[
           styles.root,
           {paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24},
         ]}>
+        <View pointerEvents="none" style={styles.glow} />
         <View style={styles.center}>
-          <View style={styles.badge}>
-            <LockIcon color={colors.ink} size={28} />
-          </View>
-          <Text
-            fontFamily={fonts.outfitBold}
-            fontSize={24}
-            lineHeight={30}
-            fontWeight="700"
-            letterSpacing={-0.6}
-            color={colors.ink}
-            textAlign="center">
+          <GradientIconSquare size={72} glow style={styles.badge}>
+            <Lock size={32} color={colors.text} weight="fill" />
+          </GradientIconSquare>
+          <AppText variant="title" align="center" style={styles.title}>
             Paisa is locked
-          </Text>
-          <Text
-            fontFamily={fonts.interMedium}
-            fontSize={14}
-            lineHeight={20}
-            fontWeight="500"
-            color={colors.inkSecondary}
-            textAlign="center">
+          </AppText>
+          <AppText
+            variant="body"
+            color={failed ? colors.roseLight : colors.muted}
+            align="center"
+            accessibilityLiveRegion="polite">
             {failed
               ? 'Not recognised. Try again to see your money.'
               : 'Unlock with your fingerprint, face, or device PIN.'}
-          </Text>
+          </AppText>
         </View>
         <View style={styles.actions}>
           <PrimaryButton
@@ -224,12 +222,22 @@ function LockScreen({
   );
 }
 
+const GLOW_IMAGE = linearGradient([colors.glow, colors.ground], 180);
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.canvas,
-    paddingHorizontal: 24,
+    backgroundColor: colors.ground,
+    paddingHorizontal: spacing.xxl,
     justifyContent: 'space-between',
+  },
+  glow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 300,
+    backgroundImage: GLOW_IMAGE,
   },
   center: {
     flex: 1,
@@ -238,15 +246,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   badge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
+  },
+  title: {
+    fontSize: 24,
+    lineHeight: 30,
   },
   actions: {
-    gap: 4,
+    gap: spacing.xs,
   },
 });

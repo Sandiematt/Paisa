@@ -1,7 +1,15 @@
 import React, {useState} from 'react';
-import {Alert, Switch} from 'react-native';
+import {Alert} from 'react-native';
+import {
+  Bell,
+  BellRinging,
+  Clock,
+  ClockCountdown,
+  Percent,
+  Warning,
+} from 'phosphor-react-native';
 
-import {BellGlyph, CalendarGlyph} from '../../components/icons/Glyphs';
+import {SettingsRow, ToggleSwitch} from '../../components/ui';
 import {colors} from '../../theme';
 import {openSystemSettings} from '../../lib/notifications/notificationService';
 import {formatReminderTime} from '../../lib/notifications/reminders';
@@ -9,14 +17,17 @@ import {NotificationPrefs} from '../../lib/notifications/types';
 import {NotificationHistorySheet} from '../notifications/NotificationHistorySheet';
 import {useNotifications} from '../notifications/NotificationsProvider';
 import {TimePickerSheet} from '../notifications/TimePickerSheet';
-import {SettingsRow} from './SettingsRow';
-import {SettingsSection} from './SettingsSection';
-
-const ICON = '#6F6553';
 
 type ToggleKey = 'budgetExceeded' | 'budgetWarning' | 'expenseReminder';
 
-export function NotificationsSettingsSection() {
+const ICON_SIZE = 24;
+
+/**
+ * Notification preference rows for the "App settings" group, plus the sheets
+ * they open. Rows are returned as an array of elements because `SettingsGroup`
+ * needs its rows as direct children; render `sheets` anywhere in the screen.
+ */
+export function useNotificationSettings() {
   const {prefs, updatePrefs, permission, ensurePermission, unreadCount} =
     useNotifications();
   const [timeOpen, setTimeOpen] = useState(false);
@@ -42,75 +53,83 @@ export function NotificationsSettingsSection() {
     }
   };
 
-  const toggleRow = (key: ToggleKey, label: string, subtitle: string) => (
+  const toggleRow = (
+    key: ToggleKey,
+    label: string,
+    icon: React.ReactNode,
+  ) => (
     <SettingsRow
+      key={key}
+      icon={icon}
       label={label}
-      subtitle={subtitle}
-      kind="toggle"
-      accessory={
-        <Switch
+      trailing={
+        <ToggleSwitch
           value={prefs[key]}
           onValueChange={next => toggle(key, next)}
-          trackColor={{false: 'rgba(0,0,0,0.08)', true: colors.accent}}
-          thumbColor="#FFFFFF"
-          ios_backgroundColor="rgba(0,0,0,0.08)"
-          accessibilityLabel={`${label}, ${prefs[key] ? 'on' : 'off'}`}
+          accessibilityLabel={label}
         />
       }
     />
   );
 
-  return (
-    <>
-      <SettingsSection
-        title="Notifications"
-        footer={
-          blocked
-            ? 'Paisa is blocked from sending notifications. Alerts still collect in your history.'
-            : undefined
-        }>
-        {toggleRow(
-          'budgetExceeded',
-          'Budget exceeded',
-          'When this month’s spending passes your budget',
-        )}
-        {toggleRow(
-          'budgetWarning',
-          '80% budget warning',
-          'Once, when spending reaches 80% of your budget',
-        )}
-        {toggleRow(
-          'expenseReminder',
-          'Daily expense reminder',
-          'If nothing is logged by your reminder time',
-        )}
-        {prefs.expenseReminder ? (
-          <SettingsRow
-            icon={<CalendarGlyph color={ICON} size={16} />}
-            label="Reminder time"
-            value={formatReminderTime(prefs.reminderMinutes)}
-            kind="nav"
-            onPress={() => setTimeOpen(true)}
-          />
-        ) : null}
-        {blocked ? (
-          <SettingsRow
-            label="Allow notifications"
-            subtitle="Open system settings"
-            kind="nav"
-            onPress={openSystemSettings}
-          />
-        ) : null}
-        <SettingsRow
-          icon={<BellGlyph color={ICON} size={16} />}
-          label="Notification history"
-          value={unreadCount > 0 ? `${unreadCount} unread` : undefined}
-          kind="nav"
-          last
-          onPress={() => setHistoryOpen(true)}
-        />
-      </SettingsSection>
+  const rows: React.ReactElement[] = [
+    toggleRow(
+      'budgetExceeded',
+      'Budget exceeded alert',
+      <Warning size={ICON_SIZE} color={colors.text} />,
+    ),
+    toggleRow(
+      'budgetWarning',
+      '80% budget warning',
+      <Percent size={ICON_SIZE} color={colors.text} />,
+    ),
+    toggleRow(
+      'expenseReminder',
+      'Daily expense reminder',
+      <ClockCountdown size={ICON_SIZE} color={colors.text} />,
+    ),
+  ];
 
+  if (prefs.expenseReminder) {
+    rows.push(
+      <SettingsRow
+        key="reminderTime"
+        icon={<Clock size={ICON_SIZE} color={colors.text} />}
+        label="Reminder time"
+        value={formatReminderTime(prefs.reminderMinutes)}
+        onPress={() => setTimeOpen(true)}
+        accessibilityLabel={`Reminder time, ${formatReminderTime(prefs.reminderMinutes)}`}
+      />,
+    );
+  }
+  if (blocked) {
+    rows.push(
+      <SettingsRow
+        key="allow"
+        icon={<BellRinging size={ICON_SIZE} color={colors.text} />}
+        label="Allow notifications"
+        value="System settings"
+        onPress={openSystemSettings}
+      />,
+    );
+  }
+  rows.push(
+    <SettingsRow
+      key="history"
+      icon={<Bell size={ICON_SIZE} color={colors.text} />}
+      label="Notification history"
+      value={unreadCount > 0 ? `${unreadCount} unread` : undefined}
+      onPress={() => setHistoryOpen(true)}
+      accessibilityLabel={
+        unreadCount > 0
+          ? `Notification history, ${unreadCount} unread`
+          : 'Notification history'
+      }
+    />,
+  );
+
+  const sheets = (
+    <>
       <TimePickerSheet
         visible={timeOpen}
         minutes={prefs.reminderMinutes}
@@ -123,4 +142,13 @@ export function NotificationsSettingsSection() {
       />
     </>
   );
+
+  return {
+    rows,
+    sheets,
+    blocked,
+    /** Shown under the group when the OS has blocked notifications. */
+    blockedNote:
+      'Paisa is blocked from sending notifications. Alerts still collect in your history.',
+  };
 }

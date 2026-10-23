@@ -9,7 +9,7 @@ import {dataErrorMessage} from './errors';
 
 export type InsightDirection = 'up' | 'down' | 'flat';
 
-export type InsightPeriod = 'week' | 'month';
+export type InsightPeriod = 'week' | 'month' | 'year';
 
 /**
  * How a current-vs-previous comparison should be displayed:
@@ -94,6 +94,18 @@ export type TrendBucketStat = {
   label: string;
 };
 
+export type CategoryBreakdownStat = {
+  category: string;
+  slug: string | null;
+  currentAmount: number;
+  previousAmount: number;
+};
+
+export type WeekdaySpendStat = {
+  label: string;
+  amount: number;
+};
+
 export type CalculatedInsightStats = {
   referenceDate: string;
   period: InsightPeriod;
@@ -107,6 +119,14 @@ export type CalculatedInsightStats = {
   savingsProgress: SavingsProgressStats;
   patternChanges: PatternChangeStats[];
   trendBuckets: TrendBucketStat[];
+  // The fields below were added with the DX Insights redesign. They are optional
+  // because a generate-insights deployment from before that change omits them;
+  // the screen derives what it can and hides the rest.
+  transactionCount?: number;
+  dailyAverage?: number;
+  topSpendingWeekday?: WeekdaySpendStat | null;
+  categoryBreakdown?: CategoryBreakdownStat[];
+  monthlyBudget?: number | null;
 };
 
 export type InsightsResponse = {
@@ -118,7 +138,7 @@ export type InsightsResponse = {
 };
 
 export type GenerateInsightsOptions = {
-  /** Which comparison window to calculate. Defaults to "week". */
+  /** Which comparison window to calculate: week (last 7 days), month or year to date. Defaults to "week". */
   period?: InsightPeriod;
   /** Override "today" for the calculation window, `YYYY-MM-DD`. Mainly for testing. */
   referenceDate?: string;

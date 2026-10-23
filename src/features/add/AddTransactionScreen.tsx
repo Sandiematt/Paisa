@@ -1,13 +1,10 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Alert,
-  Animated,
   Keyboard,
   KeyboardAvoidingView,
-  LayoutChangeEvent,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -16,16 +13,18 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-
-import {useReducedMotion} from '../../hooks/useReducedMotion';
+import {CalendarBlank, CaretDown, Receipt} from 'phosphor-react-native';
 
 import {
-  CalendarGlyph,
-  MinusGlyph,
-  PlusGlyph,
-  ReceiptGlyph,
-} from '../../components/icons/Glyphs';
-import {AppText, DividerLabel, PressableScale} from '../../components/ui';
+  AppText,
+  BackButton,
+  DividerLabel,
+  GradientView,
+  PressableScale,
+  PrimaryButton,
+  SegmentedControl,
+  TextField,
+} from '../../components/ui';
 import {formatAmountInput, parseAmountInput} from '../../lib/formatMoney';
 import {buildTransactionPayload} from './transactionPayload';
 import {
@@ -42,9 +41,17 @@ import {
   localDateISO,
   updateTransaction,
 } from '../../lib/transactionsStore';
-import {colors, layout, radii, spacing, typography} from '../../theme';
+import {
+  colors,
+  layout,
+  linearGradient,
+  radii,
+  spacing,
+  typography,
+  withAlpha,
+} from '../../theme';
 import {CATEGORIES, CURRENCIES, categoryById} from '../onboarding/constants';
-import {CategoryIcon} from './categoryIcons';
+import {CategoryIconSquare} from './categoryIcons';
 import {DatePickerSheet} from './DatePickerSheet';
 import {AddKind} from './types';
 
@@ -58,59 +65,54 @@ type AddTransactionScreenProps = {
   onSaved?: (row: TransactionRow) => void;
 };
 
-const OTHER_CATEGORY = {id: 'other', label: 'Other', color: colors.slate};
+const OTHER_CATEGORY = {id: 'other', label: 'Other'};
 
 const EXPENSE_GRID = [
-  {id: 'housing', label: 'Housing', color: colors.coral},
-  {id: 'dining', label: 'Dining', color: colors.accent},
-  {id: 'groceries', label: 'Groceries', color: colors.positive},
-  {id: 'transport', label: 'Transport', color: '#3D7CC9'},
-  {id: 'health', label: 'Health', color: colors.coral},
-  {id: 'shopping', label: 'Shopping', color: colors.violet},
-  {id: 'entertainment', label: 'Entertainment', color: colors.violet},
-  {id: 'bills', label: 'Bills', color: colors.slate},
-  {id: 'personal', label: 'Personal', color: colors.positive},
-  {id: 'education', label: 'Education', color: colors.violet},
-  {id: 'travel', label: 'Travel', color: colors.teal},
+  {id: 'housing', label: 'Housing'},
+  {id: 'dining', label: 'Dining'},
+  {id: 'groceries', label: 'Groceries'},
+  {id: 'transport', label: 'Transport'},
+  {id: 'health', label: 'Health'},
+  {id: 'shopping', label: 'Shopping'},
+  {id: 'entertainment', label: 'Entertainment'},
+  {id: 'bills', label: 'Bills'},
+  {id: 'personal', label: 'Personal'},
+  {id: 'education', label: 'Education'},
+  {id: 'travel', label: 'Travel'},
   OTHER_CATEGORY,
 ];
 
 const INCOME_CATEGORIES = [
-  {id: 'salary', label: 'Salary', color: colors.positive},
-  {id: 'freelance', label: 'Freelance', color: colors.teal},
-  {id: 'refund', label: 'Refund', color: colors.accent},
+  {id: 'salary', label: 'Salary'},
+  {id: 'freelance', label: 'Freelance'},
+  {id: 'refund', label: 'Refund'},
   OTHER_CATEGORY,
 ];
 
 const NOTE_LIMIT = 100;
+
+const KIND_OPTIONS = [
+  {value: 'expense', label: 'Expense'},
+  {value: 'income', label: 'Income'},
+] as const;
 
 const KIND_META = {
   expense: {
     title: 'Add expense',
     subtitle: 'Keep track, build better habits',
     verb: 'Add expense',
-    accent: colors.coral,
-    accentSoft: colors.alertDanger,
+    accent: colors.roseLight,
   },
   income: {
     title: 'Add income',
     subtitle: 'Track money coming in',
     verb: 'Add income',
-    accent: colors.positive,
-    accentSoft: colors.alertPositive,
+    accent: colors.mint,
   },
 } as const;
 
-const KIND_PAD = 4;
-const KIND_SEG_H = 50;
-const KIND_MOTION = 180;
-const SUBMIT_H = 56;
-const CANVAS_EXPENSE = '#FFF8F4';
-const CANVAS_INCOME = '#D8F0DC';
-const WASH_EXPENSE = '#FFD9D0';
-const WASH_INCOME = '#A8DCB4';
-const THUMB_EXPENSE = KIND_META.expense.accent;
-const THUMB_INCOME = KIND_META.income.accent;
+const GLOW_HEIGHT = 300;
+const GLOW_IMAGE = linearGradient([colors.glow, colors.ground], 180);
 
 function sanitizeAmount(raw: string): string {
   const cleaned = raw.replace(/[^0-9.]/g, '');
@@ -148,89 +150,6 @@ function currencyCodeFromSymbol(symbol: string): string {
   return CURRENCIES.find(item => item.symbol === symbol)?.code ?? symbol;
 }
 
-function useKindMotion(kind: AddKind, resetToken: boolean) {
-  const reducedMotion = useReducedMotion();
-  const [trackW, setTrackW] = useState(0);
-  const selectedIndex = kind === 'income' ? 1 : 0;
-  const innerW = Math.max(0, trackW - KIND_PAD * 2);
-  const segmentW = innerW > 0 ? innerW / 2 : 0;
-  const slideX = selectedIndex * segmentW;
-
-  const slide = useRef(new Animated.Value(0)).current;
-  const progress = useRef(new Animated.Value(selectedIndex)).current;
-  const placed = useRef(false);
-
-  useEffect(() => {
-    if (resetToken) {
-      placed.current = false;
-    }
-  }, [resetToken]);
-
-  useEffect(() => {
-    if (segmentW <= 0) {
-      return;
-    }
-    if (!placed.current) {
-      slide.setValue(slideX);
-      progress.setValue(selectedIndex);
-      placed.current = true;
-      return;
-    }
-    const duration = reducedMotion ? 0 : KIND_MOTION;
-    Animated.parallel([
-      Animated.timing(slide, {
-        toValue: slideX,
-        duration,
-        useNativeDriver: false,
-      }),
-      Animated.timing(progress, {
-        toValue: selectedIndex,
-        duration,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [
-    progress,
-    reducedMotion,
-    resetToken,
-    segmentW,
-    selectedIndex,
-    slide,
-    slideX,
-  ]);
-
-  const canvasColor = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [CANVAS_EXPENSE, CANVAS_INCOME],
-  });
-  const thumbColor = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [THUMB_EXPENSE, THUMB_INCOME],
-  });
-  const incomeWashOpacity = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 0.45],
-  });
-  const expenseWashOpacity = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.45, 0],
-  });
-
-  const onTrackLayout = (event: LayoutChangeEvent) => {
-    setTrackW(event.nativeEvent.layout.width);
-  };
-
-  return {
-    slide,
-    canvasColor,
-    thumbColor,
-    incomeWashOpacity,
-    expenseWashOpacity,
-    segmentW,
-    onTrackLayout,
-  };
-}
-
 function amountDraft(value: number): string {
   const rounded = Number(value.toFixed(2));
   return Number.isInteger(rounded) ? String(rounded) : String(rounded);
@@ -259,7 +178,7 @@ export function AddTransactionScreen({
   const [saving, setSaving] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [dbCategories, setDbCategories] = useState<CategoryRow[]>([]);
-  const amountInputRef = useRef<TextInput>(null);
+  const amountInputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
 
   useEffect(() => {
     if (!visible) {
@@ -312,16 +231,6 @@ export function AddTransactionScreen({
     }, 350);
     return () => clearTimeout(timer);
   }, [visible]);
-
-  const {
-    slide,
-    canvasColor,
-    thumbColor,
-    incomeWashOpacity,
-    expenseWashOpacity,
-    segmentW,
-    onTrackLayout,
-  } = useKindMotion(kind, visible);
 
   const extraExpenseCategories = useMemo(() => {
     const shown = new Set(EXPENSE_GRID.map(item => item.id));
@@ -447,351 +356,251 @@ export function AddTransactionScreen({
     }
   };
 
+  const heroSize = compact ? 40 : 48;
+  const heroLine = compact ? 46 : 54;
+
   return (
     <Modal
       visible={visible}
       animationType="slide"
       presentationStyle="fullScreen"
       onRequestClose={onClose}>
-      <Animated.View
-        style={[styles.root, {backgroundColor: canvasColor}]}>
+      <View style={styles.root}>
+        <StatusBar barStyle="light-content" />
+        <View
+          pointerEvents="none"
+          style={[styles.glow, {backgroundImage: GLOW_IMAGE}]}
+        />
         <KeyboardAvoidingView
           style={[styles.screen, {paddingTop: insets.top}]}
           behavior="padding"
           keyboardVerticalOffset={Platform.OS === 'android' ? 0 : insets.top}>
-        <StatusBar barStyle="dark-content" />
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.wash, styles.washExpense, {opacity: expenseWashOpacity}]}
-        />
-        <Animated.View
-          pointerEvents="none"
-          style={[styles.wash, styles.washIncome, {opacity: incomeWashOpacity}]}
-        />
-
-        <View style={styles.topBar}>
-          <PressableScale
-            onPress={onClose}
-            scaleTo={0.92}
-            hitSlop={10}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            containerStyle={styles.backHit}
-            style={styles.backFace}>
-            <View style={styles.backChevron}>
-              <View style={[styles.backArm, styles.backArmTop]} />
-              <View style={[styles.backArm, styles.backArmBottom]} />
+          <View style={styles.topBar}>
+            <BackButton onPress={onClose} />
+            <View style={styles.headerCopy}>
+              <AppText variant="title" color={colors.text}>
+                {heading}
+              </AppText>
+              <AppText variant="caption" color={colors.muted}>
+                {subtitle}
+              </AppText>
             </View>
-          </PressableScale>
-          <View style={styles.headerCopy}>
-            <AppText variant="heading" color={colors.ink}>
-              {heading}
-            </AppText>
-            <AppText variant="caption" color={colors.inkMuted}>
-              {subtitle}
-            </AppText>
-          </View>
-          <PressableScale
-            onPress={() => {
-              Keyboard.dismiss();
-              setDateOpen(true);
-            }}
-            scaleTo={0.96}
-            accessibilityRole="button"
-            accessibilityLabel={`Date, ${formatDateLabel(occurredOn)}`}
-            accessibilityHint="Opens the date picker"
-            style={styles.dateChip}>
-            <CalendarGlyph color={colors.inkSecondary} size={14} />
-            <AppText
-              variant="label"
-              color={colors.ink}
-              numberOfLines={1}
-              style={styles.dateChipLabel}>
-              {formatDateLabel(occurredOn)}
-            </AppText>
-            <AppText variant="caption" color={colors.inkMuted}>
-              {'∨'}
-            </AppText>
-          </PressableScale>
-        </View>
-
-        <View
-          accessibilityRole="tablist"
-          style={styles.kindTrack}
-          onLayout={onTrackLayout}>
-          {segmentW > 0 ? (
-            <Animated.View
-              pointerEvents="none"
-              style={[
-                styles.kindThumb,
-                {
-                  width: segmentW,
-                  backgroundColor: thumbColor,
-                  transform: [{translateX: slide}],
-                },
-              ]}
-            />
-          ) : null}
-          {(['expense', 'income'] as const).map(item => {
-            const selected = kind === item;
-            const itemTone = KIND_META[item];
-            const thumbReady = segmentW > 0;
-            return (
-              <Pressable
-                key={item}
-                onPress={() => onKindChange(item)}
-                accessibilityRole="tab"
-                accessibilityState={{selected}}
-                android_ripple={{color: 'transparent'}}
-                style={[
-                  styles.kindOption,
-                  selected && !thumbReady && {backgroundColor: itemTone.accent},
-                ]}>
-                <View
-                  style={[
-                    styles.kindMark,
-                    {
-                      backgroundColor: selected
-                        ? colors.surface
-                        : itemTone.accent,
-                    },
-                  ]}>
-                  {item === 'income' ? (
-                    <PlusGlyph
-                      color={selected ? itemTone.accent : colors.onInk}
-                      size={10}
-                    />
-                  ) : (
-                    <MinusGlyph
-                      color={selected ? itemTone.accent : colors.onInk}
-                      size={10}
-                    />
-                  )}
-                </View>
-                <AppText
-                  variant="bodyStrong"
-                  color={selected ? '#FFFFFF' : colors.ink}>
-                  {item === 'expense' ? 'Expense' : 'Income'}
-                </AppText>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            compact && styles.scrollCompact,
-          ]}
-          keyboardDismissMode="on-drag"
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <View style={styles.amountBlock}>
             <PressableScale
-              onPress={() => {}}
-              scaleTo={0.98}
+              onPress={() => {
+                Keyboard.dismiss();
+                setDateOpen(true);
+              }}
+              scaleTo={0.96}
               accessibilityRole="button"
-              accessibilityLabel="Scan receipt"
-              accessibilityHint="Coming soon"
-              style={styles.scanBtn}>
-              <ReceiptGlyph color={colors.ink} size={22} />
-              <AppText variant="bodyStrong" color={colors.ink}>
-                Scan receipt
-              </AppText>
-            </PressableScale>
-
-            <DividerLabel label="or" style={styles.orRule} />
-
-            <AppText variant="caption" color={colors.inkMuted}>
-              Enter manually
-            </AppText>
-            <View style={styles.amountRow}>
+              accessibilityLabel={`Date, ${formatDateLabel(occurredOn)}`}
+              accessibilityHint="Opens the date picker"
+              style={styles.dateChip}>
+              <CalendarBlank size={16} color={colors.lavender} weight="bold" />
               <AppText
-                variant="numericHero"
-                color={colors.ink}
-                style={[
-                  styles.amountSymbol,
-                  {
-                    fontSize: compact ? 40 : 48,
-                    lineHeight: compact ? 46 : 54,
-                  },
-                ]}>
-                {currencySymbol}
+                variant="label"
+                color={colors.text}
+                numberOfLines={1}
+                style={styles.dateChipLabel}>
+                {formatDateLabel(occurredOn)}
               </AppText>
-              <TextInput
-                ref={amountInputRef}
-                value={amount === '0' ? '' : amount}
-                onChangeText={text => setAmount(sanitizeAmount(text))}
-                placeholder="0"
-                placeholderTextColor={colors.inkMuted}
-                keyboardType="decimal-pad"
-                inputMode="decimal"
-                returnKeyType="done"
-                blurOnSubmit
-                selectTextOnFocus
-                autoCorrect={false}
-                caretHidden={false}
-                underlineColorAndroid="transparent"
-                accessibilityLabel={`Amount, ${formatAmountInput(amount, currencySymbol)}`}
-                style={[
-                  styles.amountDigits,
-                  {
-                    fontSize: compact ? 40 : 48,
-                    lineHeight: compact ? 46 : 54,
-                  },
-                ]}
-              />
-              <View style={styles.currencyChip}>
-                <AppText variant="label" color={colors.ink}>
-                  {currencyCode}
-                </AppText>
-              </View>
-            </View>
-            <AppText variant="caption" color={colors.inkMuted}>
-              {kind === 'income'
-                ? 'Enter the amount you received'
-                : 'Enter the amount you spent'}
-            </AppText>
+              <CaretDown size={12} color={colors.muted} weight="bold" />
+            </PressableScale>
           </View>
 
-          <View style={styles.sectionHead}>
-            <AppText variant="bodyStrong" color={colors.ink}>
-              Select a category
-            </AppText>
-            {moreCategories ? (
+          <SegmentedControl
+            options={KIND_OPTIONS}
+            value={kind}
+            onChange={onKindChange}
+            accessibilityLabel="Transaction type"
+            style={styles.kindControl}
+          />
+
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={[
+              styles.scrollContent,
+              compact && styles.scrollCompact,
+            ]}
+            keyboardDismissMode="on-drag"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
+            <View style={styles.amountBlock}>
               <PressableScale
-                onPress={() => setShowAllCategories(current => !current)}
-                scaleTo={0.97}
+                onPress={() => {}}
+                scaleTo={0.98}
                 accessibilityRole="button"
-                accessibilityLabel={
-                  showAllCategories ? 'Show fewer categories' : 'See all categories'
-                }
-                style={styles.seeAll}>
-                <AppText variant="label" color={colors.inkMuted}>
-                  {showAllCategories ? 'Show less' : 'See all'}
-                </AppText>
-                <AppText variant="label" color={colors.inkMuted}>
-                  {showAllCategories ? '‹' : '›'}
+                accessibilityLabel="Scan receipt"
+                accessibilityHint="Coming soon"
+                style={styles.scanBtn}>
+                <Receipt size={20} color={colors.lavender} weight="bold" />
+                <AppText variant="bodyStrong" color={colors.text}>
+                  Scan receipt
                 </AppText>
               </PressableScale>
-            ) : null}
-          </View>
 
-          <View style={styles.categoryGrid}>
-            {categories.map(item => {
-              const selected = selectedCategory === item.id;
-              return (
-                <PressableScale
-                  key={item.id}
-                  onPress={() => {
-                    setCategoryId(item.id);
-                    if (item.id !== OTHER_CATEGORY.id) {
-                      setCustomCategory('');
-                    }
-                  }}
-                  scaleTo={0.96}
-                  accessibilityRole="radio"
-                  accessibilityState={{selected}}
-                  containerStyle={styles.categoryCell}
+              <DividerLabel label="or" style={styles.orRule} />
+
+              <AppText variant="label" color={colors.muted}>
+                Enter manually
+              </AppText>
+              <View style={styles.amountRow}>
+                <AppText
+                  variant="numericHero"
+                  color={tone.accent}
+                  style={{fontSize: heroSize, lineHeight: heroLine}}>
+                  {currencySymbol}
+                </AppText>
+                <TextInput
+                  ref={amountInputRef}
+                  value={amount === '0' ? '' : amount}
+                  onChangeText={text => setAmount(sanitizeAmount(text))}
+                  placeholder="0"
+                  placeholderTextColor={colors.muted}
+                  selectionColor={colors.lavender}
+                  keyboardType="decimal-pad"
+                  inputMode="decimal"
+                  returnKeyType="done"
+                  blurOnSubmit
+                  selectTextOnFocus
+                  autoCorrect={false}
+                  caretHidden={false}
+                  underlineColorAndroid="transparent"
+                  accessibilityLabel={`Amount, ${formatAmountInput(amount, currencySymbol)}`}
                   style={[
-                    styles.categoryTile,
-                    selected && {
-                      backgroundColor: tone.accentSoft,
-                      borderColor: tone.accent,
-                    },
-                  ]}>
-                  <CategoryIcon id={item.id} size={18} />
-                  <AppText
-                    variant="caption"
-                    color={selected ? colors.ink : colors.inkSecondary}
-                    numberOfLines={1}
-                    align="center">
-                    {item.label}
+                    styles.amountDigits,
+                    {fontSize: heroSize, lineHeight: heroLine},
+                  ]}
+                />
+                <View style={styles.currencyChip}>
+                  <AppText variant="label" color={colors.text}>
+                    {currencyCode}
+                  </AppText>
+                </View>
+              </View>
+              <AppText variant="caption" color={colors.muted}>
+                {kind === 'income'
+                  ? 'Enter the amount you received'
+                  : 'Enter the amount you spent'}
+              </AppText>
+            </View>
+
+            <View style={styles.sectionHead}>
+              <AppText variant="sectionTitle" color={colors.text}>
+                Select a category
+              </AppText>
+              {moreCategories ? (
+                <PressableScale
+                  onPress={() => setShowAllCategories(current => !current)}
+                  scaleTo={0.97}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    showAllCategories
+                      ? 'Show fewer categories'
+                      : 'See all categories'
+                  }
+                  style={styles.seeAll}>
+                  <AppText variant="label" color={colors.lavender}>
+                    {showAllCategories ? 'Show less' : 'See all'}
                   </AppText>
                 </PressableScale>
-              );
-            })}
-          </View>
+              ) : null}
+            </View>
 
-          {otherSelected ? (
-            <TextInput
-              value={customCategory}
-              onChangeText={setCustomCategory}
-              placeholder="Type a category"
-              placeholderTextColor={colors.inkMuted}
-              autoCapitalize="words"
-              returnKeyType="done"
-              blurOnSubmit
-              underlineColorAndroid="transparent"
-              style={styles.otherField}
-            />
-          ) : null}
+            <View style={styles.categoryGrid}>
+              {categories.map(item => {
+                const selected = selectedCategory === item.id;
+                return (
+                  <PressableScale
+                    key={item.id}
+                    onPress={() => {
+                      setCategoryId(item.id);
+                      if (item.id !== OTHER_CATEGORY.id) {
+                        setCustomCategory('');
+                      }
+                    }}
+                    scaleTo={0.96}
+                    accessibilityRole="radio"
+                    accessibilityLabel={item.label}
+                    accessibilityState={{selected}}
+                    containerStyle={styles.categoryCell}
+                    style={[
+                      styles.categoryTile,
+                      selected && styles.categoryTileOn,
+                    ]}>
+                    <CategoryIconSquare id={item.id} size={40} glow={selected} />
+                    <AppText
+                      variant="caption"
+                      color={selected ? colors.text : colors.muted}
+                      numberOfLines={1}
+                      align="center">
+                      {item.label}
+                    </AppText>
+                  </PressableScale>
+                );
+              })}
+            </View>
 
-          <View style={styles.noteField}>
-            <ReceiptGlyph color={colors.inkMuted} size={16} />
-            <TextInput
+            {otherSelected ? (
+              <TextField
+                label="Category name"
+                placeholder="Type a category"
+                value={customCategory}
+                onChangeText={setCustomCategory}
+                autoCapitalize="words"
+                returnKeyType="done"
+                blurOnSubmit
+                underlineColorAndroid="transparent"
+                style={styles.field}
+              />
+            ) : null}
+
+            <TextField
+              label="Note (optional)"
+              placeholder="What was this for?"
               value={note}
               onChangeText={setNote}
-              placeholder="Add a note (optional)"
-              placeholderTextColor={colors.inkMuted}
+              helper={`${note.length}/${NOTE_LIMIT}`}
               autoCapitalize="sentences"
               returnKeyType="done"
               blurOnSubmit
               maxLength={NOTE_LIMIT}
               underlineColorAndroid="transparent"
-              style={styles.noteInput}
+              style={styles.field}
             />
-            <AppText variant="caption" color={colors.inkMuted}>
-              {note.length}/{NOTE_LIMIT}
-            </AppText>
-          </View>
-        </ScrollView>
+          </ScrollView>
 
-        <Animated.View
-          style={[
-            styles.dock,
-            {
-              backgroundColor: canvasColor,
-              paddingBottom: Math.max(insets.bottom, spacing.md),
-            },
-          ]}>
-          <PressableScale
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            scaleTo={0.98}
-            accessibilityRole="button"
-            accessibilityState={{disabled: !canSubmit}}
-            accessibilityHint={
-              numericAmount > 0
-                ? `Saves this ${kind}`
-                : 'Enter an amount to continue'
-            }
+          <View
             style={[
-              styles.submit,
-              {backgroundColor: canSubmit ? tone.accent : colors.canvasSunk},
+              styles.dock,
+              {paddingBottom: Math.max(insets.bottom, spacing.md)},
             ]}>
-            <AppText
-              variant="bodyStrong"
-              color={canSubmit ? colors.onInk : colors.inkMuted}>
-              {submitLabel}
-            </AppText>
-            <AppText
-              variant="bodyStrong"
-              color={canSubmit ? colors.onInk : colors.inkMuted}>
-              {' →'}
-            </AppText>
-          </PressableScale>
-        </Animated.View>
+            <GradientView
+              pointerEvents="none"
+              gradient={[withAlpha(colors.ground, 0), colors.ground]}
+              angle={180}
+              style={styles.dockFade}
+            />
+            <PrimaryButton
+              label={submitLabel}
+              onPress={handleSubmit}
+              disabled={!canSubmit}
+              accessibilityHint={
+                numericAmount > 0
+                  ? `Saves this ${kind}`
+                  : 'Enter an amount to continue'
+              }
+            />
+          </View>
 
-        <DatePickerSheet
-          visible={dateOpen}
-          value={occurredOn}
-          onClose={() => setDateOpen(false)}
-          onChange={setOccurredOn}
-        />
+          <DatePickerSheet
+            visible={dateOpen}
+            value={occurredOn}
+            onClose={() => setDateOpen(false)}
+            onChange={setOccurredOn}
+          />
         </KeyboardAvoidingView>
-      </Animated.View>
+      </View>
     </Modal>
   );
 }
@@ -799,24 +608,18 @@ export function AddTransactionScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    backgroundColor: colors.ground,
+  },
+  glow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: GLOW_HEIGHT,
   },
   screen: {
     flex: 1,
     overflow: 'hidden',
-  },
-  wash: {
-    position: 'absolute',
-    top: -80,
-    right: -70,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-  },
-  washExpense: {
-    backgroundColor: WASH_EXPENSE,
-  },
-  washIncome: {
-    backgroundColor: WASH_INCOME,
   },
   topBar: {
     flexDirection: 'row',
@@ -825,45 +628,16 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     gap: spacing.md,
   },
-  backHit: {
-    width: 36,
-    height: 36,
-  },
-  backFace: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  backChevron: {
-    width: 14,
-    height: 14,
-    marginLeft: 2,
-  },
-  backArm: {
-    position: 'absolute',
-    left: 1,
-    width: 11,
-    height: 2,
-    borderRadius: radii.pill,
-    backgroundColor: colors.ink,
-  },
-  backArmTop: {
-    top: 3,
-    transform: [{rotate: '-42deg'}],
-  },
-  backArmBottom: {
-    bottom: 3,
-    transform: [{rotate: '42deg'}],
-  },
   headerCopy: {
     flex: 1,
   },
   dateChip: {
-    minHeight: 36,
+    minHeight: 40,
     maxWidth: 168,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
     paddingHorizontal: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
@@ -872,41 +646,9 @@ const styles = StyleSheet.create({
   dateChipLabel: {
     flexShrink: 1,
   },
-  kindTrack: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  kindControl: {
     marginHorizontal: layout.screenPadding,
-    marginTop: spacing.xl,
-    padding: KIND_PAD,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    overflow: 'hidden',
-  },
-  kindThumb: {
-    position: 'absolute',
-    top: KIND_PAD,
-    left: KIND_PAD,
-    height: KIND_SEG_H,
-    borderRadius: radii.pill,
-  },
-  kindOption: {
-    flex: 1,
-    zIndex: 1,
-    elevation: 0,
-    height: KIND_SEG_H,
-    borderRadius: radii.pill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    backgroundColor: 'transparent',
-  },
-  kindMark: {
-    width: 22,
-    height: 22,
-    borderRadius: radii.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginTop: spacing.lg,
   },
   scroll: {
     flex: 1,
@@ -914,7 +656,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.xxl,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   scrollCompact: {
     paddingTop: spacing.md,
@@ -928,17 +670,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: spacing.md,
   },
-  amountSymbol: {
-    fontVariant: ['tabular-nums'],
-  },
   amountDigits: {
     flex: 1,
     padding: 0,
     margin: 0,
     minHeight: 54,
     ...typography.numericHero,
-    fontVariant: ['tabular-nums'],
-    color: colors.ink,
+    color: colors.text,
     includeFontPadding: false,
     textAlignVertical: 'center',
   },
@@ -947,6 +685,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -958,8 +698,8 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.hairline,
+    borderWidth: 1,
+    borderColor: colors.line,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -980,6 +720,7 @@ const styles = StyleSheet.create({
   categoryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    marginHorizontal: -spacing.xs,
   },
   categoryCell: {
     width: '25%',
@@ -990,45 +731,29 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.sm,
     paddingVertical: spacing.md,
-    borderRadius: 18,
+    paddingHorizontal: spacing.xs,
+    borderRadius: radii.tile,
     borderWidth: 1.5,
-    borderColor: 'transparent',
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
   },
-  otherField: {
+  categoryTileOn: {
+    borderColor: colors.lavender,
+    backgroundColor: colors.surfaceRaised,
+  },
+  field: {
     marginTop: spacing.md,
-    height: 52,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
-    ...typography.body,
-    color: colors.ink,
-  },
-  noteField: {
-    marginTop: spacing.xl,
-    minHeight: 52,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  noteInput: {
-    flex: 1,
-    height: 52,
-    padding: 0,
-    ...typography.body,
-    color: colors.ink,
   },
   dock: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.md,
+    backgroundColor: colors.ground,
   },
-  submit: {
-    height: SUBMIT_H,
-    borderRadius: radii.pill,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  dockFade: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -24,
+    height: 24,
   },
 });

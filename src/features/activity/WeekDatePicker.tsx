@@ -1,15 +1,15 @@
 import React, {useEffect, useMemo, useRef} from 'react';
 import {ScrollView, StyleSheet, View} from 'react-native';
+import {CalendarBlank, CaretLeft, CaretRight} from 'phosphor-react-native';
 
-import {CalendarGlyph} from '../../components/icons/Glyphs';
-import {GlassPanel, PressableScale, Text} from '../../components/ui';
+import {PressableScale, Text} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
 import {localDateISO} from '../../lib/transactionsStore';
-import {colors, fonts, radii, shadows} from '../../theme';
+import {colors, fonts, layout, radii, withAlpha} from '../../theme';
 import {ActivityTransaction} from './types';
 
-const WEEKDAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
 const MONTHS = [
   'January',
   'February',
@@ -25,8 +25,8 @@ const MONTHS = [
   'December',
 ];
 const tabular = {fontVariant: ['tabular-nums'] as const};
-const DAY_W = 44;
-const DAY_GAP = 4;
+const DAY_W = 54;
+const DAY_GAP = 8;
 const DAY_SLOT = DAY_W + DAY_GAP;
 
 type WeekDatePickerProps = {
@@ -72,42 +72,6 @@ function monthDays(date: Date): Date[] {
   );
 }
 
-function Chevron({color, flip}: {color: string; flip?: boolean}) {
-  return (
-    <View
-      style={{
-        width: 14,
-        height: 14,
-        transform: flip ? [{scaleX: -1}] : undefined,
-      }}>
-      <View
-        style={{
-          position: 'absolute',
-          width: 8,
-          height: 1.8,
-          borderRadius: 1,
-          backgroundColor: color,
-          top: 3.6,
-          left: 3,
-          transform: [{rotate: '-40deg'}],
-        }}
-      />
-      <View
-        style={{
-          position: 'absolute',
-          width: 8,
-          height: 1.8,
-          borderRadius: 1,
-          backgroundColor: color,
-          top: 8.4,
-          left: 3,
-          transform: [{rotate: '40deg'}],
-        }}
-      />
-    </View>
-  );
-}
-
 function summaryCopy(items: ActivityTransaction[], date: Date): string {
   const weekday = date.toLocaleDateString('en-US', {weekday: 'short'});
   const month = date.toLocaleDateString('en-US', {month: 'short'});
@@ -133,78 +97,73 @@ export function WeekDatePicker({
   currencySymbol,
 }: WeekDatePickerProps) {
   const reducedMotion = useReducedMotion();
-  const scroller = useRef<ScrollView>(null);
+  const scroller = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const viewport = useRef(0);
   const days = useMemo(() => monthDays(selected), [selected]);
   const selectedIndex = Math.max(0, selected.getDate() - 1);
   const total = dayItems.reduce((sum, item) => sum + item.amount, 0);
   const tone =
-    total > 0 ? colors.positive : total < 0 ? colors.coral : colors.inkMuted;
+    total > 0 ? colors.mint : total < 0 ? colors.roseLight : colors.muted;
 
   const scrollToSelected = (animated: boolean) => {
     const width = viewport.current;
     if (width <= 0) {
       return;
     }
-    const center = selectedIndex * DAY_SLOT + DAY_W / 2;
-    const maxX = Math.max(0, days.length * DAY_SLOT - DAY_GAP - width);
+    const pad = layout.screenPadding;
+    const center = pad + selectedIndex * DAY_SLOT + DAY_W / 2;
+    const maxX = Math.max(0, days.length * DAY_SLOT - DAY_GAP + pad * 2 - width);
     const x = Math.min(maxX, Math.max(0, center - width / 2));
     scroller.current?.scrollTo({x, animated});
   };
 
   useEffect(() => {
     scrollToSelected(!reducedMotion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days, reducedMotion, selectedIndex]);
 
   return (
-    <GlassPanel
-      intensity="xl"
-      overlayColor={colors.glass}
-      radius={22}
-      style={[styles.wrap, shadows.cardSoft]}
-      contentStyle={styles.inner}>
+    <View style={styles.wrap}>
       <View style={styles.header}>
         <View style={styles.monthWrap}>
-          <View style={styles.calDisc}>
-            <CalendarGlyph color={colors.gold} size={14} />
+          <View style={styles.calSquare}>
+            <CalendarBlank size={16} color={colors.lavender} weight="bold" />
           </View>
           <View style={styles.titleCol}>
             <Text
-              fontFamily={fonts.outfitSemi}
-              fontSize={15}
-              lineHeight={20}
-              fontWeight="600"
-              letterSpacing={-0.2}
-              color={colors.ink}>
+              fontFamily={fonts.jakartaBold}
+              fontSize={16}
+              lineHeight={21}
+              letterSpacing={-0.1}
+              color={colors.text}>
               {MONTHS[selected.getMonth()]}
             </Text>
             <View style={styles.yearRow}>
               <PressableScale
                 scaleTo={0.94}
                 onPress={() => onSelect(shiftYear(selected, -1))}
-                hitSlop={6}
+                hitSlop={8}
                 accessibilityRole="button"
                 accessibilityLabel="Previous year"
                 style={styles.yearBtn}>
-                <Chevron color={colors.inkMuted} />
+                <CaretLeft size={12} color={colors.muted} weight="bold" />
               </PressableScale>
               <Text
-                fontFamily={fonts.interSemi}
+                fontFamily={fonts.jakartaSemiBold}
                 fontSize={12}
                 lineHeight={16}
-                fontWeight="600"
-                color={colors.inkSecondary}
+                color={colors.muted}
                 style={tabular}>
                 {String(selected.getFullYear())}
               </Text>
               <PressableScale
                 scaleTo={0.94}
                 onPress={() => onSelect(shiftYear(selected, 1))}
-                hitSlop={6}
+                hitSlop={8}
                 accessibilityRole="button"
                 accessibilityLabel="Next year"
                 style={styles.yearBtn}>
-                <Chevron color={colors.inkMuted} flip />
+                <CaretRight size={12} color={colors.muted} weight="bold" />
               </PressableScale>
             </View>
           </View>
@@ -217,7 +176,7 @@ export function WeekDatePicker({
             accessibilityRole="button"
             accessibilityLabel="Previous month"
             style={styles.navBtn}>
-            <Chevron color={colors.inkSecondary} />
+            <CaretLeft size={16} color={colors.text} weight="bold" />
           </PressableScale>
           <PressableScale
             scaleTo={0.94}
@@ -226,7 +185,7 @@ export function WeekDatePicker({
             accessibilityRole="button"
             accessibilityLabel="Next month"
             style={styles.navBtn}>
-            <Chevron color={colors.inkSecondary} flip />
+            <CaretRight size={16} color={colors.text} weight="bold" />
           </PressableScale>
         </View>
       </View>
@@ -244,6 +203,7 @@ export function WeekDatePicker({
           viewport.current = event.nativeEvent.layout.width;
           scrollToSelected(false);
         }}
+        style={styles.weekScroll}
         contentContainerStyle={styles.week}
         accessibilityRole="adjustable"
         accessibilityLabel="Days of the month"
@@ -261,19 +221,18 @@ export function WeekDatePicker({
               containerStyle={styles.dayHit}
               style={[styles.dayFace, active && styles.dayOn]}>
               <Text
-                fontFamily={fonts.interMedium}
-                fontSize={11}
-                lineHeight={14}
-                fontWeight="500"
-                color={active ? 'rgba(255,255,255,0.7)' : colors.inkMuted}>
+                fontFamily={active ? fonts.jakartaSemiBold : fonts.jakartaMedium}
+                fontSize={12}
+                lineHeight={16}
+                color={active ? withAlpha(colors.ground, 0.7) : colors.muted}>
                 {weekdayLabel(day)}
               </Text>
               <Text
-                fontFamily={fonts.outfitSemi}
-                fontSize={14}
-                lineHeight={18}
-                fontWeight="600"
-                color={active ? colors.onInk : colors.ink}>
+                fontFamily={fonts.jakartaBold}
+                fontSize={18}
+                lineHeight={24}
+                color={active ? colors.ground : colors.text}
+                style={tabular}>
                 {day.getDate()}
               </Text>
             </PressableScale>
@@ -285,20 +244,18 @@ export function WeekDatePicker({
         <View style={styles.summaryLabel}>
           <View style={[styles.dot, {backgroundColor: tone}]} />
           <Text
-            fontFamily={fonts.interMedium}
-            fontSize={12}
-            lineHeight={16}
-            fontWeight="500"
-            color={colors.inkSecondary}
+            fontFamily={fonts.jakartaMedium}
+            fontSize={13}
+            lineHeight={18}
+            color={colors.muted}
             numberOfLines={1}>
             {summaryCopy(dayItems, selected)}
           </Text>
         </View>
         <Text
-          fontFamily={fonts.outfitSemi}
+          fontFamily={fonts.jakartaBold}
           fontSize={15}
           lineHeight={20}
-          fontWeight="600"
           color={tone}
           style={tabular}>
           {dayItems.length === 0
@@ -306,35 +263,30 @@ export function WeekDatePicker({
             : formatMoney(total, currencySymbol, {signed: true})}
         </Text>
       </View>
-    </GlassPanel>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: 14,
-    marginHorizontal: 20,
-  },
-  inner: {
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 12,
+    marginTop: 18,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: layout.screenPadding,
   },
   monthWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     minWidth: 0,
     flex: 1,
   },
   titleCol: {
     minWidth: 0,
-    gap: 2,
+    gap: 1,
   },
   yearRow: {
     flexDirection: 'row',
@@ -347,36 +299,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  calDisc: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+  calSquare: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.iconSquareSm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accentSoft,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#C88A2E33',
+    backgroundColor: withAlpha(colors.violet, 0.18),
+    borderWidth: 1,
+    borderColor: withAlpha(colors.lavender, 0.25),
   },
   nav: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
   },
   navBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.03)',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.hairlineStrong,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  weekScroll: {
+    flexGrow: 0,
   },
   week: {
     flexDirection: 'row',
     marginTop: 14,
     gap: DAY_GAP,
-    paddingRight: 2,
+    paddingHorizontal: layout.screenPadding,
   },
   dayHit: {
     width: DAY_W,
@@ -384,26 +339,24 @@ const styles = StyleSheet.create({
   dayFace: {
     width: DAY_W,
     alignItems: 'center',
-    paddingTop: 6,
-    paddingBottom: 8,
-    borderRadius: 16,
-    gap: 4,
+    paddingTop: 10,
+    paddingBottom: 10,
+    borderRadius: radii.tile,
+    gap: 2,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   dayOn: {
-    backgroundColor: colors.ink,
-    shadowColor: '#000000',
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: {width: 0, height: 2},
+    backgroundColor: colors.text,
+    borderColor: colors.text,
   },
   summary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    marginTop: 14,
+    paddingHorizontal: layout.screenPadding,
     gap: 8,
   },
   summaryLabel: {

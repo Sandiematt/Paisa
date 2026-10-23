@@ -4,9 +4,9 @@ import DateTimePicker, {
   DateTimePickerAndroid,
 } from '@react-native-community/datetimepicker';
 
-import {AppText, PressableScale} from '../../components/ui';
+import {AppText, PrimaryButton} from '../../components/ui';
 import {formatReminderTime} from '../../lib/notifications/reminders';
-import {colors, layout, radii, spacing} from '../../theme';
+import {colors, spacing} from '../../theme';
 import {SheetFrame} from '../profile/ProfileSheets';
 
 type TimePickerSheetProps = {
@@ -72,17 +72,21 @@ export function TimePickerSheet({
 
   return (
     <SheetFrame visible={visible} title="Reminder time" onClose={onClose}>
-      <AppText variant="body" color={colors.inkSecondary} style={styles.lead}>
+      <AppText variant="body" color={colors.muted} style={styles.lead}>
         Paisa reminds you at this time on days you haven’t logged an expense.
       </AppText>
 
       <View style={styles.preview}>
-        <AppText variant="display">{formatReminderTime(chosen)}</AppText>
+        <AppText variant="display" accessibilityLiveRegion="polite">
+          {formatReminderTime(chosen)}
+        </AppText>
       </View>
 
       <DateTimePicker
         mode="time"
         display="spinner"
+        themeVariant="dark"
+        textColor={colors.text}
         value={dateAt(chosen)}
         onChange={(_event, date) => {
           if (date) {
@@ -91,18 +95,14 @@ export function TimePickerSheet({
         }}
       />
 
-      <PressableScale
+      <PrimaryButton
+        label="Done"
+        style={styles.action}
         onPress={() => {
           onSelect(chosen);
           onClose();
         }}
-        scaleTo={0.98}
-        accessibilityRole="button"
-        style={styles.doneBtn}>
-        <AppText variant="bodyStrong" color={colors.onInk}>
-          Done
-        </AppText>
-      </PressableScale>
+      />
     </SheetFrame>
   );
 }
@@ -116,12 +116,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.md,
   },
-  doneBtn: {
-    height: layout.controlHeight,
-    borderRadius: radii.pill,
-    backgroundColor: colors.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
+  action: {
     marginTop: spacing.md,
   },
 });

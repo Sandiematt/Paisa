@@ -22,7 +22,7 @@ export function CurrencyIncomeStep({draft, onChange}: CurrencyIncomeStepProps) {
   return (
     <StepLayout title={copy.title} subtitle={copy.subtitle}>
       <Stagger index={1}>
-        <AppText variant="label" color={colors.inkSecondary}>
+        <AppText variant="label" color={colors.muted}>
           Currency
         </AppText>
         <View style={styles.pills}>

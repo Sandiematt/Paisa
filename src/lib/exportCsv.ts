@@ -2,6 +2,7 @@ import {File, Paths} from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
 import {loadCategories} from './categoriesStore';
+import {monthKey, transactionsInMonth} from './exportMonth';
 import {
   isBalanceAdjustment,
   isLedgerSpecial,
@@ -78,13 +79,22 @@ export function transactionsToCsv(
   return `\uFEFF${lines.join('\r\n')}\r\n`;
 }
 
+export type ExportOptions = {
+  /** Export only real transactions from this calendar month. */
+  month?: Date;
+};
+
 export async function exportTransactionsCsv(
   currency: string,
+  options: ExportOptions = {},
 ): Promise<ExportResult> {
-  const [rows, categories] = await Promise.all([
+  const [allRows, categories] = await Promise.all([
     loadTransactions(),
     loadCategories(),
   ]);
+  const rows = options.month
+    ? transactionsInMonth(allRows, options.month)
+    : allRows;
   if (rows.length === 0) {
     return {rows: 0, shared: false};
   }
@@ -92,7 +102,8 @@ export async function exportTransactionsCsv(
   const names = new Map(categories.map(item => [item.id, item.name]));
   const csv = transactionsToCsv(rows, names, currency);
 
-  const file = new File(Paths.cache, `paisa-transactions-${localDateISO()}.csv`);
+  const stamp = options.month ? monthKey(options.month) : localDateISO();
+  const file = new File(Paths.cache, `paisa-transactions-${stamp}.csv`);
   if (file.exists) {
     file.delete();
   }

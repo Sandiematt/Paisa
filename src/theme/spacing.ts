@@ -10,24 +10,29 @@ export const spacing = {
 } as const;
 
 /**
- * One radius system for the whole app, documented so it stays consistent:
- * interactive pills are fully rounded, cards are 20, inputs and chips are 14.
+ * One radius system for the whole app (DX):
+ * pills and segmented controls are fully round, cards are 22-24, inputs 16,
+ * quick tiles 18, icon squares 11-12, sheets round their top corners at 28.
  */
 export const radii = {
-  input: 14,
-  chip: 14,
-  card: 20,
-  cardHero: 28,
+  input: 16,
+  chip: 16,
+  card: 22,
+  cardHero: 24,
   cardMetric: 22,
+  tile: 18,
+  iconSquare: 12,
+  iconSquareSm: 11,
   sheet: 28,
-  sheetLogin: 32,
+  sheetLogin: 28,
   pill: 999,
 } as const;
 
 export const layout = {
-  screenPadding: 20,
+  /** DX screen padding is 16. */
+  screenPadding: 16,
   controlHeight: 56,
   hairlineWidth: 1,
   navIcon: 22,
-  addButton: 56,
+  addButton: 60,
 } as const;

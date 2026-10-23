@@ -13,7 +13,7 @@ type SecondaryButtonProps = {
   accessibilityHint?: string;
 };
 
-/** White surface with ink text. Sits between the ink fill and a ghost link. */
+/** Surface fill with a 1px line border. Sits between primary and ghost. */
 export function SecondaryButton({
   label,
   onPress,
@@ -31,7 +31,7 @@ export function SecondaryButton({
       style={styles.surface}>
       <View style={styles.row}>
         {leading ? <View style={styles.leading}>{leading}</View> : null}
-        <AppText variant="bodyStrong" color={colors.ink} numberOfLines={1}>
+        <AppText variant="heading" color={colors.text} numberOfLines={1}>
           {label}
         </AppText>
       </View>
@@ -44,8 +44,8 @@ const styles = StyleSheet.create({
     height: layout.controlHeight,
     borderRadius: radii.pill,
     backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.hairlineStrong,
+    borderWidth: 1,
+    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.xxl,
