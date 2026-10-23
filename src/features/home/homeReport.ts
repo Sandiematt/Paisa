@@ -713,6 +713,9 @@ export function buildHomeReport(
   const startBalance = walletParts(
     transactions.filter(row => compareDate(row.transactionDate, period.start, false)),
   ).balance;
+  const previousStartBalance = walletParts(
+    transactions.filter(row => compareDate(row.transactionDate, period.prevStart, false)),
+  ).balance;
   const previousRemaining = walletParts(
     transactions.filter(row =>
       compareDate(row.transactionDate, period.prevEnd, true),
@@ -755,7 +758,13 @@ export function buildHomeReport(
     range === 'month' ? spendSlices(currentRows, categories) : spendSlices(monthRows, categories);
   const health = hasPlan
     ? insight
-    : healthBreakdown(lifetime.balance, current.spent, empty);
+    : healthBreakdown(
+        roundMoney(
+          startBalance + current.opening + current.adjustments + current.income - current.spent,
+        ),
+        current.spent,
+        empty,
+      );
   const previousInsight = planInsight(
     plan,
     previous.spent,
@@ -771,7 +780,9 @@ export function buildHomeReport(
   const previousHealth = hasPlan
     ? previousInsight
     : healthBreakdown(
-        previousRemaining,
+        roundMoney(
+          previousStartBalance + previous.opening + previous.adjustments + previous.income - previous.spent,
+        ),
         previous.spent,
         previousRows.length === 0 && previousRemaining === 0,
       );

@@ -565,6 +565,81 @@ describe('buildHomeReport', () => {
     });
   });
 
+  describe('health score without a budget', () => {
+    function earlier(extra: TransactionRow[]) {
+      return [
+        tx({id: 'in', type: 'income', amount: 1000, categoryId: null, transactionDate: '2026-09-02'}),
+        tx({id: 'out', type: 'expense', amount: 500, categoryId: 'cat-housing', transactionDate: '2026-09-05'}),
+        ...extra,
+      ];
+    }
+
+    it('uses period spending over period income plus start-of-period balance', () => {
+      const rows = earlier([
+        tx({id: 'e1', type: 'income', amount: 400, categoryId: null, transactionDate: '2026-08-10'}),
+        tx({id: 'e2', type: 'expense', amount: 100, categoryId: 'cat-housing', transactionDate: '2026-08-12'}),
+      ]);
+      const report = buildHomeReport(rows, [housing], 'month', now);
+      expect(report.health).toBe(62);
+      expect(report.spendRatio).toBe(38);
+    });
+
+    it('ignores money dated after the period', () => {
+      const rows = earlier([
+        tx({id: 'e1', type: 'income', amount: 300, categoryId: null, transactionDate: '2026-08-10'}),
+        tx({id: 'f1', type: 'income', amount: 5000, categoryId: null, transactionDate: '2026-10-05'}),
+      ]);
+      expect(buildHomeReport(rows, [housing], 'month', now).health).toBe(62);
+    });
+
+    it('does not change when earlier transactions differ but start balance is the same', () => {
+      const a = earlier([
+        tx({id: 'o', type: 'income', amount: 300, categoryId: null, transactionDate: '2026-07-01', kind: 'opening_balance'}),
+      ]);
+      const b = earlier([
+        tx({id: 'e1', type: 'income', amount: 900, categoryId: null, transactionDate: '2026-08-03'}),
+        tx({id: 'e2', type: 'expense', amount: 600, categoryId: 'cat-housing', transactionDate: '2026-08-20'}),
+        tx({id: 'adj', type: 'expense', amount: 0, categoryId: null, transactionDate: '2026-08-21', kind: 'balance_adjustment'}),
+      ]);
+      const ra = buildHomeReport(a, [housing], 'month', now);
+      const rb = buildHomeReport(b, [housing], 'month', now);
+      expect(ra.health).toBe(62);
+      expect(rb.health).toBe(ra.health);
+    });
+
+    it('counts an opening balance dated inside the period as available money', () => {
+      const rows = [
+        tx({id: 'o', type: 'income', amount: 1000, categoryId: null, transactionDate: '2026-09-15', kind: 'opening_balance'}),
+        tx({id: 'out', type: 'expense', amount: 250, categoryId: 'cat-housing', transactionDate: '2026-09-15'}),
+      ];
+      const report = buildHomeReport(rows, [housing], 'month', now);
+      expect(report.health).toBe(75);
+      expect(report.healthLabel).toBe('Good');
+    });
+
+    it('leaves the score at 0 with no NaN when income plus start balance is zero', () => {
+      const rows = [
+        tx({id: 'out', type: 'expense', amount: 50, categoryId: 'cat-housing', transactionDate: '2026-09-05'}),
+      ];
+      const report = buildHomeReport(rows, [housing], 'month', now);
+      expect(report.health).toBe(0);
+      expect(report.healthLabel).toBe('Poor');
+      expect(report.spendRatio).toBe(100);
+      expect(report.healthDelta).not.toBeNaN();
+    });
+
+    it('leaves the score at 0 when income plus start balance is negative', () => {
+      const rows = [
+        tx({id: 'e', type: 'expense', amount: 200, categoryId: 'cat-housing', transactionDate: '2026-08-05'}),
+        tx({id: 'in', type: 'income', amount: 100, categoryId: null, transactionDate: '2026-09-02'}),
+        tx({id: 'out', type: 'expense', amount: 50, categoryId: 'cat-housing', transactionDate: '2026-09-05'}),
+      ];
+      const report = buildHomeReport(rows, [housing], 'month', now);
+      expect(report.health).toBe(0);
+      expect(Number.isNaN(report.spendRatio)).toBe(false);
+    });
+  });
+
   describe('per-day prorated budget', () => {
     const plan = {
       monthlyIncome: 0,
