@@ -39,8 +39,7 @@ export interface TransactionRecord {
   /** Calendar date, `YYYY-MM-DD`. */
   transactionDate: string;
   isRecurring: boolean;
-  /** Ledger marker, e.g. `opening_balance` / `balance_adjustment`, or null. */
-  notes: string | null;
+  kind: 'regular' | 'opening_balance' | 'balance_adjustment';
   category: CategoryRef | null;
 }
 

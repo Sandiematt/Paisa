@@ -427,7 +427,7 @@ export function AddTransactionScreen({
             paymentMethod: existing.paymentMethod,
             isRecurring: existing.isRecurring,
           })
-        : await createTransaction(payload);
+        : await createTransaction({...payload, kind: 'regular'});
       onSaved?.(saved);
       onClose();
     } catch (caught) {

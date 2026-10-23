@@ -71,7 +71,7 @@ type TransactionQueryRow = {
   merchant: string | null;
   description: string | null;
   transaction_date: string;
-  notes: string | null;
+  kind: 'regular' | 'opening_balance' | 'balance_adjustment';
   is_recurring: boolean | null;
   categories: {name: string; slug: string | null} | {name: string; slug: string | null}[] | null;
 };
@@ -92,7 +92,7 @@ function mapTransactionRow(row: TransactionQueryRow): TransactionRecord {
     description: row.description,
     transactionDate: row.transaction_date.slice(0, 10),
     isRecurring: Boolean(row.is_recurring),
-    notes: row.notes,
+    kind: row.kind,
     category: normalizeCategory(row.categories),
   };
 }
@@ -194,7 +194,7 @@ Deno.serve(async req => {
     supabase
       .from('transactions')
       .select(
-        'id, type, amount, merchant, description, transaction_date, notes, is_recurring, categories(name, slug)',
+        'id, type, amount, merchant, description, transaction_date, kind, is_recurring, categories(name, slug)',
       )
       .eq('user_id', user.id)
       .gte('transaction_date', fetchFrom)

@@ -1,4 +1,5 @@
 export type MoneyFlow = 'income' | 'expense';
+export type TransactionKind = 'regular' | 'opening_balance' | 'balance_adjustment';
 
 export type Database = {
   public: {
@@ -93,6 +94,7 @@ export type Database = {
           transaction_date: string;
           payment_method: string | null;
           notes: string | null;
+          kind: TransactionKind;
           is_recurring: boolean;
           created_at: string;
           updated_at: string;
@@ -108,6 +110,7 @@ export type Database = {
           transaction_date?: string;
           payment_method?: string | null;
           notes?: string | null;
+          kind?: TransactionKind;
           is_recurring?: boolean;
           created_at?: string;
           updated_at?: string;
@@ -123,6 +126,7 @@ export type Database = {
           transaction_date?: string;
           payment_method?: string | null;
           notes?: string | null;
+          kind?: TransactionKind;
           is_recurring?: boolean;
           created_at?: string;
           updated_at?: string;

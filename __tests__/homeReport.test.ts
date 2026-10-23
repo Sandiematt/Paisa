@@ -24,7 +24,7 @@ const dining: CategoryRow = {
 
 function tx(
   partial: Pick<TransactionRow, 'id' | 'type' | 'amount' | 'categoryId' | 'transactionDate'> &
-    Partial<Pick<TransactionRow, 'notes'>>,
+    Partial<Pick<TransactionRow, 'notes' | 'kind'>>,
 ): TransactionRow {
   return {
     userId: 'user-1',
@@ -32,6 +32,7 @@ function tx(
     merchant: null,
     paymentMethod: 'Everyday',
     notes: null,
+    kind: 'regular',
     isRecurring: false,
     createdAt: '2026-09-01T00:00:00.000Z',
     updatedAt: '2026-09-01T00:00:00.000Z',
@@ -137,7 +138,7 @@ describe('buildHomeReport', () => {
         amount: 5000,
         categoryId: null,
         transactionDate: '2026-08-01',
-        notes: 'opening_balance',
+        kind: 'opening_balance',
       }),
       tx({
         id: 'pay',
@@ -173,7 +174,7 @@ describe('buildHomeReport', () => {
         amount: 5000,
         categoryId: null,
         transactionDate: '2026-08-01',
-        notes: 'opening_balance',
+        kind: 'opening_balance',
       }),
       tx({
         id: 'adj',
@@ -181,7 +182,7 @@ describe('buildHomeReport', () => {
         amount: 200,
         categoryId: null,
         transactionDate: '2026-09-04',
-        notes: 'balance_adjustment',
+        kind: 'balance_adjustment',
       }),
       tx({
         id: 'pay',
@@ -205,6 +206,40 @@ describe('buildHomeReport', () => {
     expect(report.spent).toBe(300);
   });
 
+  it('counts a regular expense whose note reads opening_balance as spending', () => {
+    const rows = [
+      tx({
+        id: 'open',
+        type: 'income',
+        amount: 5000,
+        categoryId: null,
+        transactionDate: '2026-08-01',
+        kind: 'opening_balance',
+      }),
+      tx({
+        id: 'sneaky',
+        type: 'expense',
+        amount: 400,
+        categoryId: 'cat-housing',
+        transactionDate: '2026-09-03',
+        notes: 'opening_balance',
+      }),
+      tx({
+        id: 'sneaky-adj',
+        type: 'expense',
+        amount: 100,
+        categoryId: 'cat-housing',
+        transactionDate: '2026-09-04',
+        notes: 'balance_adjustment',
+      }),
+    ];
+
+    const report = buildHomeReport(rows, [housing], 'month', now);
+    expect(report.balance).toBe(4500);
+    expect(report.income).toBe(0);
+    expect(report.spent).toBe(500);
+  });
+
   it('flags overspending separately from the savings plan', () => {
     const rows = [
       tx({
@@ -213,7 +248,7 @@ describe('buildHomeReport', () => {
         amount: 10000,
         categoryId: null,
         transactionDate: '2026-08-01',
-        notes: 'opening_balance',
+        kind: 'opening_balance',
       }),
       tx({
         id: 'pay',

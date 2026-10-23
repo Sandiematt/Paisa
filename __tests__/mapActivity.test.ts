@@ -28,6 +28,7 @@ function tx(
     merchant: 'Cafe Mocha',
     paymentMethod: 'Wallet',
     notes: 'Oat latte',
+    kind: 'regular',
     isRecurring: false,
     createdAt: '2026-09-14T10:00:00.000Z',
     updatedAt: '2026-09-14T10:00:00.000Z',
@@ -63,7 +64,7 @@ describe('activity ledger helpers', () => {
         type: 'income',
         amount: 100,
         transactionDate: '2026-09-01',
-        notes: 'opening_balance',
+        kind: 'opening_balance',
       }),
       tx({id: 'coffee', type: 'expense', amount: 6.5, transactionDate: '2026-09-14'}),
     ];
@@ -71,6 +72,22 @@ describe('activity ledger helpers', () => {
     expect(ledger).toHaveLength(1);
     expect(ledger[0].merchant).toBe('Cafe Mocha');
     expect(ledger[0].amount).toBe(-6.5);
+  });
+
+  it('still shows a regular row whose note reads opening_balance', () => {
+    const ledger = ledgerForActivity(
+      [
+        tx({
+          id: 'sneaky',
+          type: 'expense',
+          amount: 9,
+          transactionDate: '2026-09-14',
+          notes: 'opening_balance',
+        }),
+      ],
+      [dining],
+    );
+    expect(ledger).toHaveLength(1);
   });
 
   it('matches search tokens across merchant, note, category, and amount', () => {

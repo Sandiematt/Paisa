@@ -24,11 +24,9 @@ import type {
   UnusualSpendingStats,
 } from './types.ts';
 
-// Ledger markers written by the app for opening balance / manual balance
-// adjustments (see src/lib/transactionsStore.ts). These aren't organic
+// Rows with kind opening_balance / balance_adjustment (see
+// src/lib/transactionsStore.ts). These aren't organic
 // spending or income, so they're excluded from every insight calculation.
-const OPENING_BALANCE_NOTE = 'opening_balance';
-const BALANCE_ADJUSTMENT_NOTE = 'balance_adjustment';
 
 const MIN_CATEGORY_DELTA = 20; // ₹ — ignore noise smaller than this
 const UNUSUAL_CATEGORY_SLUGS = ['dining', 'shopping'];
@@ -199,7 +197,7 @@ function deriveChangeKind(current: number, previous: number): ChangeKind {
 }
 
 function isLedgerEntry(row: TransactionRecord): boolean {
-  return row.notes === OPENING_BALANCE_NOTE || row.notes === BALANCE_ADJUSTMENT_NOTE;
+  return row.kind === 'opening_balance' || row.kind === 'balance_adjustment';
 }
 
 function categoryKeyOf(category: CategoryRef | null): string {

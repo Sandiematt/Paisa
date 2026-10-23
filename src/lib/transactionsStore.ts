@@ -1,7 +1,9 @@
 import {categoryForSlug, loadCategories} from './categoriesStore';
 import {supabase} from './supabase/client';
-import {Database, MoneyFlow} from './supabase/database.types';
+import {Database, MoneyFlow, TransactionKind} from './supabase/database.types';
 import {dataErrorMessage} from './supabase/errors';
+
+export type {TransactionKind};
 
 export type TransactionRow = {
   id: string;
@@ -14,6 +16,7 @@ export type TransactionRow = {
   transactionDate: string;
   paymentMethod: string | null;
   notes: string | null;
+  kind: TransactionKind;
   isRecurring: boolean;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +31,7 @@ export type NewTransaction = {
   transactionDate: string;
   paymentMethod?: string | null;
   notes?: string | null;
+  kind: TransactionKind;
   isRecurring?: boolean;
 };
 
@@ -40,11 +44,9 @@ export type TransactionPatch = {
   transactionDate?: string;
   paymentMethod?: string | null;
   notes?: string | null;
+  kind?: TransactionKind;
   isRecurring?: boolean;
 };
-
-export const OPENING_BALANCE_NOTE = 'opening_balance';
-export const BALANCE_ADJUSTMENT_NOTE = 'balance_adjustment';
 
 function asAmount(value: number | string | null): number {
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -55,15 +57,15 @@ export function roundMoney(value: number): number {
   return Number(value.toFixed(2));
 }
 
-export function isOpeningBalance(row: {notes: string | null}): boolean {
-  return row.notes === OPENING_BALANCE_NOTE;
+export function isOpeningBalance(row: {kind: TransactionKind}): boolean {
+  return row.kind === 'opening_balance';
 }
 
-export function isBalanceAdjustment(row: {notes: string | null}): boolean {
-  return row.notes === BALANCE_ADJUSTMENT_NOTE;
+export function isBalanceAdjustment(row: {kind: TransactionKind}): boolean {
+  return row.kind === 'balance_adjustment';
 }
 
-export function isLedgerSpecial(row: {notes: string | null}): boolean {
+export function isLedgerSpecial(row: {kind: TransactionKind}): boolean {
   return isOpeningBalance(row) || isBalanceAdjustment(row);
 }
 
@@ -86,6 +88,7 @@ function mapRow(row: {
   transaction_date: string;
   payment_method: string | null;
   notes: string | null;
+  kind: TransactionKind;
   is_recurring?: boolean | null;
   created_at: string;
   updated_at: string;
@@ -101,6 +104,7 @@ function mapRow(row: {
     transactionDate: calendarDateISO(row.transaction_date),
     paymentMethod: row.payment_method,
     notes: row.notes,
+    kind: row.kind,
     isRecurring: Boolean(row.is_recurring),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -108,7 +112,7 @@ function mapRow(row: {
 }
 
 const SELECT_COLUMNS =
-  'id, user_id, type, amount, category_id, description, merchant, transaction_date, payment_method, notes, is_recurring, created_at, updated_at';
+  'id, user_id, type, amount, category_id, description, merchant, transaction_date, payment_method, notes, kind, is_recurring, created_at, updated_at';
 
 export async function loadTransactions(): Promise<TransactionRow[]> {
   const {data, error} = await supabase
@@ -145,6 +149,7 @@ export async function createTransaction(
       transaction_date: input.transactionDate,
       payment_method: input.paymentMethod ?? null,
       notes: input.notes ?? null,
+      kind: input.kind,
       is_recurring: input.isRecurring ?? false,
     })
     .select(SELECT_COLUMNS)
@@ -180,7 +185,7 @@ export async function seedOpeningBalance(amount: number): Promise<boolean> {
   const {data: marked, error: markedError} = await supabase
     .from('transactions')
     .select('id')
-    .eq('notes', OPENING_BALANCE_NOTE)
+    .eq('kind', 'opening_balance')
     .limit(1)
     .maybeSingle();
 
@@ -202,7 +207,7 @@ export async function seedOpeningBalance(amount: number): Promise<boolean> {
       merchant: 'Opening balance',
       transactionDate: localDateISO(),
       paymentMethod: 'Wallet',
-      notes: OPENING_BALANCE_NOTE,
+      kind: 'opening_balance',
     });
     return true;
   } catch (caught) {
@@ -235,7 +240,7 @@ export async function applyWalletAdjustment(
     merchant: 'Balance adjustment',
     transactionDate: localDateISO(),
     paymentMethod: 'Wallet',
-    notes: BALANCE_ADJUSTMENT_NOTE,
+    kind: 'balance_adjustment',
   });
   return true;
 }
@@ -268,6 +273,9 @@ export async function updateTransaction(
   }
   if (patch.notes !== undefined) {
     payload.notes = patch.notes;
+  }
+  if (patch.kind !== undefined) {
+    payload.kind = patch.kind;
   }
   if (patch.isRecurring !== undefined) {
     payload.is_recurring = patch.isRecurring;
@@ -306,6 +314,7 @@ export async function duplicateTransaction(
     transactionDate: row.transactionDate,
     paymentMethod: row.paymentMethod,
     notes: row.notes,
+    kind: 'regular',
     isRecurring: row.isRecurring,
   });
 }
