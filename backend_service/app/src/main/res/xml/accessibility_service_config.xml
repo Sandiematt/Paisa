@@ -6,6 +6,10 @@
 
   flagIncludeNotImportantViews: some apps mark their amount/status TextViews as
   "not important for accessibility"; without this flag those nodes are hidden.
+  isAccessibilityTool (Android 14+): apps can mark views "accessibility data sensitive"; those views are
+  hidden from every accessibility service that has not declared itself an accessibility tool. Without this a
+  payment result screen can read as an empty window. Fine for a sideloaded test build; Google Play restricts
+  who may declare it, so revisit before any store release.
   flagRetrieveInteractiveWindows: lets the service find the UPI app's window when
   the active window is a dialog, keyboard or bottom sheet.
 -->
@@ -14,6 +18,7 @@
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
+    android:isAccessibilityTool="true"
     android:description="@string/accessibility_service_description"
     android:notificationTimeout="100"
     android:packageNames="com.google.android.apps.nbu.paisa.user,com.phonepe.app,net.one97.paytm" />

@@ -10,28 +10,109 @@ import io.yestack.upidetector.core.TextNode
 /** Copies the visible text of one app's window into an Android-free [ScreenSnapshot]. Read-only. */
 class SnapshotBuilder(private val service: AccessibilityService) {
 
-    /** Exactly one of [snapshot] and [failure] is set. */
-    class Result(val snapshot: ScreenSnapshot?, val failure: String?)
+    /**
+     * Exactly one of [snapshot] and [failure] is set. [note] explains an empty read (what the window tree looked like)
+     * so the live log can say why nothing was extracted.
+     */
+    class Result(val snapshot: ScreenSnapshot?, val failure: String?, val note: String? = null)
 
-    fun build(packageName: String, screenClass: String?, eventWindowId: Int): Result {
-        val root = findRoot(packageName)
+    private class Walk(val nodes: List<TextNode>, val visited: Int)
+
+    fun build(packageName: String, screenClass: String?, eventWindowId: Int, eventSource: AccessibilityNodeInfo? = null): Result {
+        val root = findRoot(packageName, eventSource)
             ?: return Result(null, "no readable window for $packageName")
         val windowId = try {
             root.windowId.takeIf { it >= 0 } ?: eventWindowId.takeIf { it >= 0 }
         } catch (e: RuntimeException) {
             eventWindowId.takeIf { it >= 0 }
         }
+        val rootClass = try {
+            root.className?.toString()
+        } catch (e: RuntimeException) {
+            null
+        }
+        val rootChildren = try {
+            root.childCount
+        } catch (e: RuntimeException) {
+            -1
+        }
+        val first = collect(root)
+        var nodes = first.nodes
+        var note: String? = null
+        if (nodes.isEmpty()) {
+            // The active window can be a bare shell (Flutter before its semantics tree arrives, or the app's real
+            // content living in a sibling dialog/overlay window). Try the app's other windows before giving up.
+            val others = collectOtherWindows(packageName, windowId)
+            nodes = others.nodes
+            note = "root ${rootClass ?: "?"} childCount=$rootChildren visited=${first.visited}; " +
+                "other windows of the app: ${others.visited} nodes visited, ${others.nodes.size} with text"
+        }
         // An empty node list is still passed on: the parser logs EMPTY_SNAPSHOT and the detector learns the
         // status phrase is gone, which the disappear/reappear rule depends on.
-        return Result(ScreenSnapshot(packageName, screenClass, windowId, collect(root)), null)
+        return Result(ScreenSnapshot(packageName, screenClass, windowId, nodes), null, note.takeIf { nodes.isEmpty() })
     }
 
-    private fun findRoot(packageName: String): AccessibilityNodeInfo? {
+    /** Text of every window of [packageName] except [skipWindowId], top-most window first. */
+    private fun collectOtherWindows(packageName: String, skipWindowId: Int?): Walk {
+        val windows = try {
+            service.windows
+        } catch (e: RuntimeException) {
+            emptyList()
+        }
+        val nodes = ArrayList<TextNode>()
+        var visited = 0
+        for (window in windows) {
+            try {
+                val root = try {
+                    window.root
+                } catch (e: RuntimeException) {
+                    null
+                }
+                if (root == null) continue
+                val sameApp = root.packageName?.toString() == packageName
+                val otherWindow = try {
+                    root.windowId != skipWindowId
+                } catch (e: RuntimeException) {
+                    true
+                }
+                if (sameApp && otherWindow) {
+                    val walk = collect(root)
+                    nodes += walk.nodes
+                    visited += walk.visited
+                } else {
+                    release(root)
+                }
+            } finally {
+                release(window)
+            }
+        }
+        return Walk(nodes, visited)
+    }
+
+    /**
+     * [eventSource] is the node the triggering [android.view.accessibility.AccessibilityEvent] carried, captured by
+     * the service the instant the event fired. By the time a debounced read runs, GPay's payment card is often a
+     * short-lived dialog/bottom-sheet window that [rootInActiveWindow] and [AccessibilityService.getWindows] can
+     * already have moved past (focus returned to the underlying activity, or the window listing hasn't caught up);
+     * climbing from the event's own source to its root is more reliable for exactly that case. Fully consumes
+     * [eventSource]: on every path it is either returned (for the caller to release via [collect]) or released here.
+     */
+    private fun findRoot(packageName: String, eventSource: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         val active = service.rootInActiveWindow
         if (active != null) {
-            if (active.packageName?.toString() == packageName) return active
+            if (active.packageName?.toString() == packageName) {
+                eventSource?.let { release(it) }
+                return active
+            }
             release(active)
         }
+
+        if (eventSource != null) {
+            val fromSource = climbToRoot(eventSource)
+            if (fromSource.packageName?.toString() == packageName) return fromSource
+            release(fromSource)
+        }
+
         // Active window can be a dialog, keyboard or another app's overlay.
         val windows = try {
             service.windows
@@ -55,6 +136,24 @@ class SnapshotBuilder(private val service: AccessibilityService) {
         return found
     }
 
+    /** Walks up to the top-most ancestor reachable from [source], releasing every node it passes (not [source] itself). */
+    private fun climbToRoot(source: AccessibilityNodeInfo): AccessibilityNodeInfo {
+        var node = source
+        try {
+            while (true) {
+                val parent = try {
+                    node.parent
+                } catch (e: RuntimeException) {
+                    null
+                } ?: return node
+                if (node !== source) release(node)
+                node = parent
+            }
+        } catch (e: RuntimeException) {
+            return node
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun release(window: AccessibilityWindowInfo) {
         if (Build.VERSION.SDK_INT < 33) {
@@ -67,7 +166,7 @@ class SnapshotBuilder(private val service: AccessibilityService) {
     }
 
     /** Pre-order walk; consumes (and recycles on old APIs) [root]. */
-    private fun collect(root: AccessibilityNodeInfo): List<TextNode> {
+    private fun collect(root: AccessibilityNodeInfo): Walk {
         val out = ArrayList<TextNode>()
         val stack = ArrayDeque<Pair<AccessibilityNodeInfo, Int>>()
         stack.addLast(root to 0)
@@ -104,7 +203,7 @@ class SnapshotBuilder(private val service: AccessibilityService) {
         } finally {
             stack.forEach { release(it.first) }
         }
-        return out
+        return Walk(out, visited)
     }
 
     @Suppress("DEPRECATION")
