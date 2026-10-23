@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import {loadCategories} from './categoriesStore';
 import {
   isBalanceAdjustment,
+  isLedgerSpecial,
   isOpeningBalance,
   loadTransactions,
   localDateISO,
@@ -57,7 +58,7 @@ export function transactionsToCsv(
 ): string {
   const lines = [HEADERS.join(',')];
   for (const row of rows) {
-    const special = isOpeningBalance(row) || isBalanceAdjustment(row);
+    const special = isLedgerSpecial(row);
     lines.push(
       [
         cell(row.transactionDate),

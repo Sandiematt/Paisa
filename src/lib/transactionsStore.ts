@@ -44,7 +44,6 @@ export type TransactionPatch = {
   transactionDate?: string;
   paymentMethod?: string | null;
   notes?: string | null;
-  kind?: TransactionKind;
   isRecurring?: boolean;
 };
 
@@ -311,9 +310,6 @@ export async function updateTransaction(
   }
   if (patch.notes !== undefined) {
     payload.notes = patch.notes;
-  }
-  if (patch.kind !== undefined) {
-    payload.kind = patch.kind;
   }
   if (patch.isRecurring !== undefined) {
     payload.is_recurring = patch.isRecurring;

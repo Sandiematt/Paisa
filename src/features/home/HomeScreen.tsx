@@ -595,6 +595,27 @@ function SavingsGoalCard({
   }
 
   const saved = Math.max(0, actualSavings);
+  if (periodSavingsTarget <= 0) {
+    return (
+      <MetricCard
+        title="Savings"
+        amount={saved}
+        amountColor={colors.ink}
+        currencySymbol={currencySymbol}
+        progress={0}
+        progressColor={colors.positive}
+        hideProgress
+        footerTone={colors.positive}
+        icon={<TrendingUpIcon color={colors.positive} size={14} />}
+        iconBackground={TINTS.income}
+        iconBorder="#3F7A4E33"
+        accessibilityLabel={`Savings, ${formatMoney(saved, currencySymbol, {
+          decimals: 0,
+        })} saved ${scope}`}
+        onPress={onPress}
+      />
+    );
+  }
   const onTrack = savingsVsTarget >= 0;
   const progress =
     periodSavingsTarget > 0 ? Math.max(0, Math.min(1, saved / periodSavingsTarget)) : saved > 0 ? 1 : 0;
@@ -731,7 +752,6 @@ export function HomeScreen({
   const savedAmount = data.actualSavings;
   const rangeWord = range === 'week' ? 'week' : 'month';
   const showBudget = data.monthlyBudget > 0;
-  const showSavings = data.monthlySavingsGoal > 0;
   return (
     <Screen edges={['top']} backdrop={<HomeAmbient />} bottomInset={navDockHeight}>
       <ScrollView
@@ -873,30 +893,26 @@ export function HomeScreen({
           overBudget={data.overBudget}
         />
 
-        {showBudget || showSavings ? (
-          <View style={styles.metricRow}>
-            {showBudget ? (
-              <BudgetCard
-                budget={data.budget}
-                remainingBudget={data.remainingBudget}
-                currencySymbol={currencySymbol}
-                range={range}
-                onPress={onBudgetPress}
-              />
-            ) : null}
-            {showSavings ? (
-              <SavingsGoalCard
-                actualSavings={data.actualSavings}
-                periodSavingsTarget={data.periodSavingsTarget}
-                savingsVsTarget={data.savingsVsTarget}
-                savingsState={data.savingsState}
-                currencySymbol={currencySymbol}
-                range={range}
-                onPress={onSavingsPress}
-              />
-            ) : null}
-          </View>
-        ) : null}
+        <View style={styles.metricRow}>
+          {showBudget ? (
+            <BudgetCard
+              budget={data.budget}
+              remainingBudget={data.remainingBudget}
+              currencySymbol={currencySymbol}
+              range={range}
+              onPress={onBudgetPress}
+            />
+          ) : null}
+          <SavingsGoalCard
+            actualSavings={data.actualSavings}
+            periodSavingsTarget={data.periodSavingsTarget}
+            savingsVsTarget={data.savingsVsTarget}
+            savingsState={data.savingsState}
+            currencySymbol={currencySymbol}
+            range={range}
+            onPress={onSavingsPress}
+          />
+        </View>
       </ScrollView>
     </Screen>
   );

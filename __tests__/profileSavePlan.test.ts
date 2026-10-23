@@ -16,9 +16,7 @@ const original: OnboardingDraft = {
   monthlySavingsGoal: '5000',
 };
 
-const plan = (
-  overrides: Partial<Parameters<typeof planProfileSave>[0]> = {},
-) =>
+const plan = (overrides: Partial<Parameters<typeof planProfileSave>[0]> = {}) =>
   planProfileSave({
     draft: original,
     original,
@@ -37,37 +35,50 @@ describe('balanceFieldText', () => {
 
 describe('planProfileSave', () => {
   it('has no target balance when the field was not edited, even for a non-integer balance', () => {
-    expect(plan().options).toEqual({});
-    expect(plan({balanceText: '1235'}).options).toEqual({});
+    expect(plan().options.targetWalletBalance).toBeUndefined();
+    expect(
+      plan({balanceText: '1235'}).options.targetWalletBalance,
+    ).toBeUndefined();
   });
 
   it('targets the typed value when edited to a different value', () => {
-    expect(
-      plan({balanceText: '2000.5', balanceEdited: true}).options,
-    ).toEqual({targetWalletBalance: 2000.5});
+    expect(plan({balanceText: '2000.5', balanceEdited: true}).options).toEqual({
+      targetWalletBalance: 2000.5,
+      keepCurrency: true,
+    });
   });
 
   it('has no target when edited back to the same value', () => {
-    expect(plan({balanceEdited: true}).options).toEqual({});
+    expect(
+      plan({balanceEdited: true}).options.targetWalletBalance,
+    ).toBeUndefined();
     expect(
       plan({balanceText: '1234.560', balanceEdited: true}).options,
-    ).toEqual({});
+    ).toEqual({keepCurrency: true});
   });
 
   it('accepts thousands separators in the typed balance', () => {
     expect(
       plan({balanceText: '2,000.50', balanceEdited: true}).options,
-    ).toEqual({targetWalletBalance: 2000.5});
+    ).toEqual({targetWalletBalance: 2000.5, keepCurrency: true});
   });
 
   it('has no target when edited text is blank or invalid', () => {
-    expect(plan({balanceText: '', balanceEdited: true}).options).toEqual({});
-    expect(plan({balanceText: 'abc', balanceEdited: true}).options).toEqual({});
+    expect(
+      plan({balanceText: '', balanceEdited: true}).options.targetWalletBalance,
+    ).toBeUndefined();
+    expect(
+      plan({balanceText: 'abc', balanceEdited: true}).options
+        .targetWalletBalance,
+    ).toBeUndefined();
   });
 
   it('never changes the currency', () => {
-    const result = plan({draft: {...original, currency: 'USD', name: 'Bo'}});
+    const result = plan({
+      draft: {...original, currency: 'USD', name: 'Bo'},
+    });
     expect(result.draft.currency).toBe('INR');
     expect(result.draft.name).toBe('Bo');
+    expect(result.options.keepCurrency).toBe(true);
   });
 });

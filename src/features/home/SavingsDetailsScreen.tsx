@@ -60,6 +60,7 @@ export function SavingsDetailsScreen({
   const yearlyPotential = yearlyFromMonthly(monthlySavingsGoal);
   const periodLabel = rangeWord(range);
   const noIncome = savingsState.kind === 'no-income';
+  const hasGoal = target > 0;
   const overspend =
     savingsState.kind === 'negative'
       ? formatMoney(savingsState.overspend, currencySymbol, {decimals: 0})
@@ -98,47 +99,49 @@ export function SavingsDetailsScreen({
             </View>
           ) : null}
 
-          <View style={styles.card}>
-            <AppText variant="caption" color={colors.inkMuted} style={styles.cardLabel}>
-              {range === 'month'
-                ? 'Monthly savings goal'
-                : `Target ${periodLabel}`}
-            </AppText>
-            <AppText
-              variant="numericHero"
-              style={styles.heroAmount}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.6}>
-              {formatMoney(target, currencySymbol, {decimals: 0})}
-            </AppText>
-
-            <View style={styles.meterWrap}>
-              <ProgressBar
-                progress={progress}
-                color={onTrack ? colors.positive : colors.danger}
-              />
-              <View style={styles.meterFooter}>
-                <AppText variant="caption" color={colors.inkMuted}>
-                  {Math.round(progress * 100)}% of {periodLabel}'s goal
-                </AppText>
-                {noIncome ? null : (
-                  <AppText
-                    variant="caption"
-                    color={onTrack ? colors.positive : colors.danger}>
-                    {onTrack ? 'On track' : 'Off track'}
-                  </AppText>
-                )}
-              </View>
-            </View>
-            {range !== 'month' && periodSavingsTarget > 0 ? (
-              <AppText variant="caption" color={colors.inkMuted} style={styles.derivedNote}>
-                Target {periodLabel} is{' '}
-                {formatMoney(periodSavingsTarget, currencySymbol, {decimals: 0})}{' '}
-                from the monthly goal.
+          {hasGoal ? (
+            <View style={styles.card}>
+              <AppText variant="caption" color={colors.inkMuted} style={styles.cardLabel}>
+                {range === 'month'
+                  ? 'Monthly savings goal'
+                  : `Target ${periodLabel}`}
               </AppText>
-            ) : null}
-          </View>
+              <AppText
+                variant="numericHero"
+                style={styles.heroAmount}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}>
+                {formatMoney(target, currencySymbol, {decimals: 0})}
+              </AppText>
+
+              <View style={styles.meterWrap}>
+                <ProgressBar
+                  progress={progress}
+                  color={onTrack ? colors.positive : colors.danger}
+                />
+                <View style={styles.meterFooter}>
+                  <AppText variant="caption" color={colors.inkMuted}>
+                    {Math.round(progress * 100)}% of {periodLabel}'s goal
+                  </AppText>
+                  {noIncome ? null : (
+                    <AppText
+                      variant="caption"
+                      color={onTrack ? colors.positive : colors.danger}>
+                      {onTrack ? 'On track' : 'Off track'}
+                    </AppText>
+                  )}
+                </View>
+              </View>
+              {range !== 'month' && periodSavingsTarget > 0 ? (
+                <AppText variant="caption" color={colors.inkMuted} style={styles.derivedNote}>
+                  Target {periodLabel} is{' '}
+                  {formatMoney(periodSavingsTarget, currencySymbol, {decimals: 0})}{' '}
+                  from the monthly goal.
+                </AppText>
+              ) : null}
+            </View>
+          ) : null}
 
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
@@ -165,28 +168,32 @@ export function SavingsDetailsScreen({
               </AppText>
             </View>
 
-            <View style={styles.statDivider} />
+            {hasGoal && !noIncome ? (
+              <>
+                <View style={styles.statDivider} />
 
-            <View style={styles.statCard}>
-              <View
-                style={[
-                  styles.statDot,
-                  {backgroundColor: remaining > 0 ? colors.inkMuted : colors.positive},
-                ]}
-              />
-              <AppText variant="caption" color={colors.inkMuted} style={styles.statLabel}>
-                {remaining > 0 ? 'To go' : 'Ahead'}
-              </AppText>
-              <AppText
-                variant="heading"
-                color={remaining > 0 ? colors.ink : colors.positive}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.7}
-                style={styles.statAmount}>
-                {formatMoney(Math.abs(remaining), currencySymbol, {decimals: 0})}
-              </AppText>
-            </View>
+                <View style={styles.statCard}>
+                  <View
+                    style={[
+                      styles.statDot,
+                      {backgroundColor: remaining > 0 ? colors.inkMuted : colors.positive},
+                    ]}
+                  />
+                  <AppText variant="caption" color={colors.inkMuted} style={styles.statLabel}>
+                    {remaining > 0 ? 'To go' : 'Ahead'}
+                  </AppText>
+                  <AppText
+                    variant="heading"
+                    color={remaining > 0 ? colors.ink : colors.positive}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}
+                    style={styles.statAmount}>
+                    {formatMoney(Math.abs(remaining), currencySymbol, {decimals: 0})}
+                  </AppText>
+                </View>
+              </>
+            ) : null}
           </View>
 
           {monthlySavingsGoal > 0 ? (

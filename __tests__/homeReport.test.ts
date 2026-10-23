@@ -617,6 +617,20 @@ describe('buildHomeReport', () => {
       expect(report.healthLabel).toBe('Good');
     });
 
+    it('uses period money when only a savings goal is set', () => {
+      const rows = earlier([
+        tx({id: 'e1', type: 'income', amount: 400, categoryId: null, transactionDate: '2026-08-10'}),
+        tx({id: 'e2', type: 'expense', amount: 100, categoryId: 'cat-housing', transactionDate: '2026-08-12'}),
+      ]);
+      const report = buildHomeReport(rows, [housing], 'month', now, {
+        monthlyIncome: 0,
+        monthlyBudget: 0,
+        monthlySavingsGoal: 5000,
+      });
+      expect(report.health).toBe(62);
+      expect(report.spendRatio).toBe(38);
+    });
+
     it('leaves the score at 0 with no NaN when income plus start balance is zero', () => {
       const rows = [
         tx({id: 'out', type: 'expense', amount: 50, categoryId: 'cat-housing', transactionDate: '2026-09-05'}),

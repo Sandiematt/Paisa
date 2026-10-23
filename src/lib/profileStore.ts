@@ -154,6 +154,7 @@ export async function loadProfile(
 
 export type SaveProfileOptions = {
   targetWalletBalance?: number | null;
+  keepCurrency?: boolean;
 };
 
 export async function saveProfile(
@@ -164,7 +165,13 @@ export async function saveProfile(
   const {password: _password, ...rest} = draft;
   await AsyncStorage.setItem(cacheKey(userId), JSON.stringify(rest));
 
-  const {error} = await supabase.from('profiles').upsert(draftToRow(userId, rest));
+  const row: Omit<ReturnType<typeof draftToRow>, 'currency'> & {
+    currency?: string;
+  } = draftToRow(userId, rest);
+  if (options?.keepCurrency) {
+    delete row.currency;
+  }
+  const {error} = await supabase.from('profiles').upsert(row);
   if (error) {
     throw error;
   }

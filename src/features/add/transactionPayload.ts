@@ -1,4 +1,7 @@
-import {parseAmountInput} from '../../lib/formatMoney';
+import {
+  parseAmountInput,
+  stripThousandsSeparators,
+} from '../../lib/formatMoney';
 import type {
   NewTransaction,
   TransactionPatch,
@@ -28,7 +31,7 @@ export type TransactionPayloadResult =
 const AMOUNT_SHAPE = /^\d*\.?\d{0,2}$/;
 
 function parseAmount(raw: string): number | null {
-  const cleaned = raw.replace(/,/g, '').trim();
+  const cleaned = stripThousandsSeparators(raw);
   if (!AMOUNT_SHAPE.test(cleaned)) {
     return null;
   }

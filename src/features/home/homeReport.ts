@@ -356,16 +356,16 @@ export function rangePlanTitle(
 }
 
 export type SavingsState =
-  | { kind: 'no-income' }
-  | { kind: 'positive'; amount: number }
-  | { kind: 'negative'; overspend: number };
+  | {kind: 'no-income'}
+  | {kind: 'positive'; amount: number}
+  | {kind: 'negative'; overspend: number};
 
 function savingsStateFor(income: number, spent: number): SavingsState {
-  if (income <= 0) return { kind: 'no-income' };
+  if (income <= 0) return {kind: 'no-income'};
   const net = roundMoney(income - spent);
   return net >= 0
-    ? { kind: 'positive', amount: net }
-    : { kind: 'negative', overspend: roundMoney(-net) };
+    ? {kind: 'positive', amount: net}
+    : {kind: 'negative', overspend: roundMoney(-net)};
 }
 
 type PlanInsight = {
@@ -741,7 +741,8 @@ export function buildHomeReport(
           inRange(row.transactionDate, monthPeriod.start, monthPeriod.end),
         );
   const monthParts = range === 'month' ? current : walletParts(monthRows);
-  const hasPlan = plan.monthlyBudget > 0 || plan.monthlySavingsGoal > 0;
+  const hasBudget = plan.monthlyBudget > 0;
+  const hasPlan = hasBudget || plan.monthlySavingsGoal > 0;
   const insight = planInsight(
     plan,
     current.spent,
@@ -756,7 +757,7 @@ export function buildHomeReport(
       : planInsight(plan, monthParts.spent, monthParts.income, 'month', now, empty);
   const monthSlices =
     range === 'month' ? spendSlices(currentRows, categories) : spendSlices(monthRows, categories);
-  const health = hasPlan
+  const health = hasBudget
     ? insight
     : healthBreakdown(
         roundMoney(
@@ -777,7 +778,7 @@ export function buildHomeReport(
     ),
     previousRows.length === 0,
   );
-  const previousHealth = hasPlan
+  const previousHealth = hasBudget
     ? previousInsight
     : healthBreakdown(
         roundMoney(
@@ -833,7 +834,7 @@ export function buildHomeReport(
     planHint: hasPlan ? insight.planHint : health.healthHint,
     planTone: hasPlan ? insight.planTone : health.healthTone,
     savingsRate: health.savingsRate,
-    spendRatio: hasPlan ? insight.spendRatio : health.spendRatio,
+    spendRatio: hasBudget ? insight.spendRatio : health.spendRatio,
     empty,
     periodEmpty,
   };

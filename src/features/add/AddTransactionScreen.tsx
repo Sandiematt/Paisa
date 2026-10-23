@@ -113,7 +113,7 @@ const THUMB_EXPENSE = KIND_META.expense.accent;
 const THUMB_INCOME = KIND_META.income.accent;
 
 function sanitizeAmount(raw: string): string {
-  const cleaned = raw.replace(/,/g, '').replace(/[^0-9.]/g, '');
+  const cleaned = raw.replace(/[^0-9.]/g, '');
   if (cleaned === '' || cleaned === '.') {
     return cleaned === '.' ? '0.' : '0';
   }

@@ -1,3 +1,4 @@
+import {stripThousandsSeparators} from '../../lib/formatMoney';
 import type {OnboardingDraft} from '../onboarding/types';
 
 export type ProfileSaveInput = {
@@ -10,7 +11,7 @@ export type ProfileSaveInput = {
 
 export type ProfileSavePlan = {
   draft: OnboardingDraft;
-  options: {targetWalletBalance?: number};
+  options: {targetWalletBalance?: number; keepCurrency: true};
 };
 
 const toCents = (value: number) => Math.round(value * 100);
@@ -20,7 +21,7 @@ export function balanceFieldText(balance: number): string {
 }
 
 function parseMoney(text: string): number | null {
-  const trimmed = text.replace(/,/g, '').trim();
+  const trimmed = stripThousandsSeparators(text);
   if (!trimmed) {
     return null;
   }
@@ -38,7 +39,10 @@ export function planProfileSave({
   const saved = {...draft, currency: original.currency};
   const typed = balanceEdited ? parseMoney(balanceText) : null;
   if (typed === null || toCents(typed) === toCents(computedBalance)) {
-    return {draft: saved, options: {}};
+    return {draft: saved, options: {keepCurrency: true}};
   }
-  return {draft: saved, options: {targetWalletBalance: typed}};
+  return {
+    draft: saved,
+    options: {targetWalletBalance: typed, keepCurrency: true},
+  };
 }

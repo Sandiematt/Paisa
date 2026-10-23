@@ -33,6 +33,10 @@ export function formatAmountInput(raw: string, symbol: string): string {
   return `${symbol}${grouped}`;
 }
 
+export function stripThousandsSeparators(raw: string): string {
+  return raw.replace(/,/g, '').trim();
+}
+
 export function parseAmountInput(raw: string): number {
   const value = Number.parseFloat(raw);
   if (!Number.isFinite(value)) {
