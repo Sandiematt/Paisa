@@ -177,6 +177,17 @@ async function ledgerCategory(
   );
 }
 
+export function openingBalanceDate(dates: string[], today: string): string {
+  let earliest = calendarDateISO(today);
+  for (const value of dates) {
+    const day = calendarDateISO(value);
+    if (day < earliest) {
+      earliest = day;
+    }
+  }
+  return earliest;
+}
+
 export async function seedOpeningBalance(amount: number): Promise<boolean> {
   if (!Number.isFinite(amount) || amount <= 0) {
     return false;
@@ -184,7 +195,7 @@ export async function seedOpeningBalance(amount: number): Promise<boolean> {
 
   const {data: marked, error: markedError} = await supabase
     .from('transactions')
-    .select('id')
+    .select('id, transaction_date')
     .eq('kind', 'opening_balance')
     .limit(1)
     .maybeSingle();
@@ -192,7 +203,34 @@ export async function seedOpeningBalance(amount: number): Promise<boolean> {
   if (markedError) {
     throw new Error(dataErrorMessage(markedError));
   }
+
+  const {data: earliest, error: earliestError} = await supabase
+    .from('transactions')
+    .select('transaction_date')
+    .neq('kind', 'opening_balance')
+    .order('transaction_date', {ascending: true})
+    .limit(1)
+    .maybeSingle();
+
+  if (earliestError) {
+    throw new Error(dataErrorMessage(earliestError));
+  }
+
+  const target = openingBalanceDate(
+    earliest ? [earliest.transaction_date] : [],
+    localDateISO(),
+  );
+
   if (marked) {
+    if (calendarDateISO(marked.transaction_date) > target) {
+      const {error: moveError} = await supabase
+        .from('transactions')
+        .update({transaction_date: target})
+        .eq('id', marked.id);
+      if (moveError) {
+        throw new Error(dataErrorMessage(moveError));
+      }
+    }
     return false;
   }
 
@@ -205,7 +243,7 @@ export async function seedOpeningBalance(amount: number): Promise<boolean> {
       categoryId: opening?.id ?? null,
       description: 'Opening balance',
       merchant: 'Opening balance',
-      transactionDate: localDateISO(),
+      transactionDate: target,
       paymentMethod: 'Wallet',
       kind: 'opening_balance',
     });

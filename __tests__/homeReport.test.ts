@@ -703,4 +703,27 @@ describe('buildHomeReport', () => {
       expect(budgetForSpan(3000, new Date(2025, 8, 29), new Date(2025, 9, 5))).toBe(683.87);
     });
   });
+
+  describe('opening balance dated before the earliest transaction', () => {
+    const august = new Date(2026, 7, 20);
+
+    it('keeps the running balance non-negative in a period before signup holding a backdated expense', () => {
+      const rows = [
+        tx({id: 'o', type: 'income', amount: 1000, categoryId: null, transactionDate: '2026-08-10', kind: 'opening_balance'}),
+        tx({id: 'out', type: 'expense', amount: 300, categoryId: 'cat-housing', transactionDate: '2026-08-10'}),
+      ];
+      const report = buildHomeReport(rows, [housing], 'month', august);
+      expect(report.series.every(point => point >= 0)).toBe(true);
+      expect(report.balance).toBe(700);
+    });
+
+    it('goes negative when the opening balance is dated after the backdated expense', () => {
+      const rows = [
+        tx({id: 'o', type: 'income', amount: 1000, categoryId: null, transactionDate: '2026-09-01', kind: 'opening_balance'}),
+        tx({id: 'out', type: 'expense', amount: 300, categoryId: 'cat-housing', transactionDate: '2026-08-10'}),
+      ];
+      const report = buildHomeReport(rows, [housing], 'month', august);
+      expect(report.series.some(point => point < 0)).toBe(true);
+    });
+  });
 });
