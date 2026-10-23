@@ -16,14 +16,8 @@ import {
   SelectCard,
 } from '../../components/ui';
 import {colors, layout, radii, spacing} from '../../theme';
-import {
-  CATEGORIES,
-  CURRENCIES,
-  GOALS,
-  MIN_CATEGORIES,
-} from '../onboarding/constants';
+import {CATEGORIES, GOALS, MIN_CATEGORIES} from '../onboarding/constants';
 import {GoalId} from '../onboarding/types';
-import {SettingsRow} from './SettingsRow';
 import {SettingsSection} from './SettingsSection';
 
 type SheetFrameProps = {
@@ -60,46 +54,6 @@ function SheetFrame({visible, title, onClose, children}: SheetFrameProps) {
         </ScrollView>
       </View>
     </Modal>
-  );
-}
-
-type CurrencySheetProps = {
-  visible: boolean;
-  value: string;
-  onSelect: (code: string) => void;
-  onClose: () => void;
-};
-
-export function CurrencySheet({
-  visible,
-  value,
-  onSelect,
-  onClose,
-}: CurrencySheetProps) {
-  return (
-    <SheetFrame visible={visible} title="Primary Currency" onClose={onClose}>
-      <SettingsSection title="Choose a currency">
-        {CURRENCIES.map((item, index) => (
-          <SettingsRow
-            key={item.code}
-            label={`${item.symbol}  ${item.code}`}
-            value={item.label}
-            last={index === CURRENCIES.length - 1}
-            onPress={() => {
-              onSelect(item.code);
-              onClose();
-            }}
-            accessory={
-              value === item.code ? (
-                <AppText variant="label" color={colors.accentPress}>
-                  Selected
-                </AppText>
-              ) : undefined
-            }
-          />
-        ))}
-      </SettingsSection>
-    </SheetFrame>
   );
 }
 

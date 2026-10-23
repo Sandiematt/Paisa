@@ -30,7 +30,7 @@ import {
 } from '../../components/icons/Glyphs';
 import {GlassPanel, PressableScale, Screen, Text} from '../../components/ui';
 import {exportTransactionsCsv} from '../../lib/exportCsv';
-import {SaveProfileOptions, textToMoney} from '../../lib/profileStore';
+import {SaveProfileOptions} from '../../lib/profileStore';
 import {deleteAccount} from '../../lib/supabase/account';
 import {
   loadTransactions,
@@ -46,9 +46,9 @@ import {useBiometricLock} from '../security/BiometricLockProvider';
 import {AvatarPickerModal} from './AvatarPickerModal';
 import {ProfileAmbient} from './ProfileAmbient';
 import {
-  CurrencySheet,
   NotificationsSheet,
 } from './ProfileSheets';
+import {balanceFieldText, planProfileSave} from './profileSavePlan';
 import {SettingsRow} from './SettingsRow';
 import {SettingsSection} from './SettingsSection';
 
@@ -271,7 +271,6 @@ export function ProfileScreen({
 
   const [name, setName] = useState(draft.name);
   const [email, setEmail] = useState(draft.email);
-  const [currency, setCurrency] = useState(draft.currency);
   const [monthlyBudget, setMonthlyBudget] = useState(draft.monthlyBudget);
   const [monthlySavingsGoal, setMonthlySavingsGoal] = useState(
     draft.monthlySavingsGoal,
@@ -286,7 +285,6 @@ export function ProfileScreen({
   const [nameEditing, setNameEditing] = useState(false);
 
   const [avatarOpen, setAvatarOpen] = useState(false);
-  const [currencyOpen, setCurrencyOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const [notifyPrefs, setNotifyPrefs] = useState({
@@ -327,7 +325,6 @@ export function ProfileScreen({
     }
     setName(draft.name);
     setEmail(draft.email);
-    setCurrency(draft.currency);
     setMonthlyBudget(draft.monthlyBudget);
     setMonthlySavingsGoal(draft.monthlySavingsGoal);
     setCurrentBalanceDirty(false);
@@ -350,7 +347,7 @@ export function ProfileScreen({
         }
         const balance = walletBalanceFrom(rows);
         computedBalance.current = balance;
-        setCurrentBalance(balance === 0 ? '' : String(Math.round(balance)));
+        setCurrentBalance(balanceFieldText(balance));
       })
       .catch(() => {
         if (!cancelled) {
@@ -363,7 +360,7 @@ export function ProfileScreen({
     };
   }, [visible]);
 
-  const activeCurrency = useMemo(() => currencyByCode(currency), [currency]);
+  const activeCurrency = useMemo(() => currencyByCode(draft.currency), [draft.currency]);
   const budgetNumber = Number(monthlyBudget) || 0;
   const perDay = budgetNumber > 0 ? Math.round(budgetForDay(budgetNumber, new Date())) : 0;
   const savingsNumber = Number(monthlySavingsGoal) || 0;
@@ -388,16 +385,11 @@ export function ProfileScreen({
       return;
     }
 
-    const typedCurrent = textToMoney(currentBalance);
-    const targetWalletBalance = currentBalanceDirty
-      ? typedCurrent
-      : typedCurrent ?? computedBalance.current;
-
-    onSave(
-      {
+    const plan = planProfileSave({
+      draft: {
         name: name.trim(),
         email: email.trim(),
-        currency,
+        currency: draft.currency,
         startingBalance: draft.startingBalance,
         monthlyIncome: draft.monthlyIncome,
         monthlyBudget,
@@ -406,8 +398,13 @@ export function ProfileScreen({
         categoryIds,
         avatarUrl,
       },
-      {targetWalletBalance},
-    );
+      original: draft,
+      computedBalance: computedBalance.current,
+      balanceText: currentBalance,
+      balanceEdited: currentBalanceDirty,
+    });
+
+    onSave(plan.draft, plan.options);
     showToast();
   };
 
@@ -745,8 +742,7 @@ export function ProfileScreen({
                 label="Primary Currency"
                 subtitle={activeCurrency.label}
                 value={`${activeCurrency.symbol} ${activeCurrency.code}`}
-                kind="nav"
-                onPress={() => setCurrencyOpen(true)}
+                kind="info"
               />
               <SettingsRow
                 icon={<BellGlyph color={ICON} size={16} />}
@@ -917,12 +913,6 @@ export function ProfileScreen({
           currentAvatarUrl={avatarUrl}
           onSelectAvatar={setAvatarUrl}
           onClose={() => setAvatarOpen(false)}
-        />
-        <CurrencySheet
-          visible={currencyOpen}
-          value={currency}
-          onSelect={setCurrency}
-          onClose={() => setCurrencyOpen(false)}
         />
         <NotificationsSheet
           visible={notificationsOpen}
