@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UPI Detector</string>
+    <string name="accessibility_service_label">UPI Detector</string>
+    <string name="accessibility_service_description">Reads the on-screen text of Google Pay, PhonePe and Paytm only, to detect the amount, status and payee of a UPI payment for testing. It does not read any other app, does not perform any action on screen, skips password fields, and keeps everything on this phone.</string>
+
+    <string name="notification_listener_label">UPI Detector notification check</string>
+    <string name="notification_access_on">Notification access: on</string>
+    <string name="notification_access_off">Notification access: off. Used only to cross-check payments; notifications never create records.</string>
+    <string name="open_notification_settings">Open notification access settings</string>
+    <string name="open_accessibility_settings">Open Accessibility settings</string>
+    <string name="restricted_settings_hint">Toggle greyed out? Android blocks Accessibility for sideloaded apps until you allow it: Settings → Apps → UPI Detector → ⋮ (top right) → Allow restricted settings. The same \"Allow restricted settings\" step applies on Android 13+ for Notification access. Then come back here.</string>
+    <string name="tab_transactions">Transactions</string>
+    <string name="tab_log">Live log</string>
+    <string name="raw_capture">Capture raw screen text (memory only)</string>
+    <string name="share_report">Share report</string>
+    <string name="tab_raw">Raw</string>
+    <string name="keep">Keep</string>
+    <string name="merge">Merge</string>
+    <string name="possible_duplicate">POSSIBLE DUPLICATE</string>
+    <string name="merge_confirm_title">Merge as duplicate?</string>
+    <string name="merge_confirm_message">Removes this record as a duplicate of the earlier one. It cannot be undone.</string>
+    <string name="stats_note">Pending, failed, credit and flagged payments are not counted in the total.</string>
+    <string name="memory_note">Everything is kept in memory only: it is lost if the app is force-stopped, the phone restarts or the service is turned off.</string>
+    <string name="empty_raw">No raw screens captured yet. Open GPay, PhonePe or Paytm with the service and raw capture enabled. The last 30 screens are kept in memory only.</string>
+    <string name="share_title">Share report</string>
+    <string name="clear">Clear</string>
+    <string name="empty_transactions">No payments detected yet.\nEnable the service, then make a small UPI payment (₹1) in GPay, PhonePe or Paytm.
+Detections are kept in memory only.</string>
+    <string name="empty_log">Nothing logged yet. Open GPay, PhonePe or Paytm with the service enabled. The log is kept in memory only.</string>
+    <string name="clear_confirm_title">Clear all test data?</string>
+    <string name="clear_confirm_message">Clears every detected transaction, log line and raw capture held in memory. Nothing is stored on disk.</string>
+    <string name="service_on">Service: ON</string>
+    <string name="service_off">Service: OFF. Enable "UPI Detector" in Accessibility settings.</string>
+    <string name="installed">installed</string>
+    <string name="not_installed">not installed</string>
+    <string name="stats_format">Expense total: ₹%1$s (success, debit, not flagged)
+Success %2$d · Failed %3$d · Pending %4$d · Flagged %5$d</string>
+</resources>
