@@ -28,7 +28,6 @@ export type InsightsScreenProps = {
 const PERIODS: {id: InsightsPeriod; label: string}[] = [
   {id: 'week', label: 'Week'},
   {id: 'month', label: 'Month'},
-  {id: 'year', label: 'Year'},
 ];
 
 const TAB_PAD = 5;
@@ -43,7 +42,7 @@ const tabular = {fontVariant: ['tabular-nums'] as const};
  * We intentionally don't use `adjustsFontSizeToFit`: RN re-measures that
  * natively on every text change, and briefly paints at a shrunk scale
  * before settling — visible as a "small, then normal" flash whenever the
- * amount changes (e.g. switching Week/Month/Year, or data finishing load).
+ * amount changes (e.g. switching Week/Month, or data finishing load).
  * Sizing from the string length up front avoids that remeasure entirely.
  */
 function amountFontSize(amountText: string): {fontSize: number; lineHeight: number} {

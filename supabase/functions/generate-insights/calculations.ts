@@ -43,7 +43,6 @@ const MONTH_BASELINE_PERIODS = 3; // trailing 3 months, same-day-range each
 const WEEK_BASELINE_PERIODS = 4; // trailing 4 weeks
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 // ---------------------------------------------------------------------------
 // Date helpers (all dates are plain `YYYY-MM-DD` calendar strings, UTC-based
@@ -98,21 +97,14 @@ function clampToMonthEnd(monthStartIso: string, candidateIso: string): string {
   return `${targetMonth}-${String(daysInMonthUTC(year, month)).padStart(2, '0')}`;
 }
 
-/** Clamps `candidateIso` so it never spills past Dec 31 of `yearStartIso`'s year. */
-function clampToYearEnd(yearStartIso: string, candidateIso: string): string {
-  const targetYear = yearStartIso.slice(0, 4);
-  if (candidateIso.slice(0, 4) === targetYear) return candidateIso;
-  return `${targetYear}-12-31`;
-}
-
 function inRange(dateIso: string, startIso: string, endIso: string): boolean {
   return dateIso >= startIso && dateIso <= endIso;
 }
 
 // ---------------------------------------------------------------------------
 // Period windows — the current/previous/baseline date ranges for whichever
-// period the client asked for. This is the one place "week vs. month vs.
-// year" logic lives; every calculation below just takes plain date ranges.
+// period the client asked for. This is the one place "week vs. month" logic
+// lives; every calculation below just takes plain date ranges.
 // ---------------------------------------------------------------------------
 
 interface PeriodWindows {
@@ -136,32 +128,16 @@ function computePeriodWindows(period: PeriodKind, referenceDate: string): Period
     return {currentStart, currentEnd, previousStart, previousEnd, baselineStart, baselineEnd, baselinePeriods: WEEK_BASELINE_PERIODS};
   }
 
-  if (period === 'month') {
-    const currentStart = monthStartOf(referenceDate);
-    const currentEnd = referenceDate;
-    const elapsedDays = daysBetweenInclusive(currentStart, currentEnd);
-
-    const previousStart = addMonths(currentStart, -1);
-    const previousEnd = clampToMonthEnd(previousStart, addDays(previousStart, elapsedDays - 1));
-
-    const baselineStart = addMonths(currentStart, -(1 + MONTH_BASELINE_PERIODS));
-    const baselineEnd = addDays(previousStart, -1);
-    return {currentStart, currentEnd, previousStart, previousEnd, baselineStart, baselineEnd, baselinePeriods: MONTH_BASELINE_PERIODS};
-  }
-
-  // year
-  const currentYear = Number(referenceDate.slice(0, 4));
-  const currentStart = `${currentYear}-01-01`;
+  const currentStart = monthStartOf(referenceDate);
   const currentEnd = referenceDate;
   const elapsedDays = daysBetweenInclusive(currentStart, currentEnd);
 
-  const previousStart = `${currentYear - 1}-01-01`;
-  const previousEnd = clampToYearEnd(previousStart, addDays(previousStart, elapsedDays - 1));
+  const previousStart = addMonths(currentStart, -1);
+  const previousEnd = clampToMonthEnd(previousStart, addDays(previousStart, elapsedDays - 1));
 
-  // Most users won't have multiple prior years of data, so the baseline for
-  // "unusual spending" / "pattern changes" just reuses the previous year's
-  // same-range window rather than reaching further back.
-  return {currentStart, currentEnd, previousStart, previousEnd, baselineStart: previousStart, baselineEnd: previousEnd, baselinePeriods: 1};
+  const baselineStart = addMonths(currentStart, -(1 + MONTH_BASELINE_PERIODS));
+  const baselineEnd = addDays(previousStart, -1);
+  return {currentStart, currentEnd, previousStart, previousEnd, baselineStart, baselineEnd, baselinePeriods: MONTH_BASELINE_PERIODS};
 }
 
 /** Earliest date the caller needs to fetch to cover every window for this period. */
@@ -173,13 +149,11 @@ export function earliestDateNeeded(period: PeriodKind, referenceDate: string): s
 
 function previousPeriodLabel(period: PeriodKind): string {
   if (period === 'month') return 'last month';
-  if (period === 'year') return 'last year';
   return 'last week';
 }
 
 function periodNoun(period: PeriodKind): string {
   if (period === 'month') return 'month';
-  if (period === 'year') return 'year';
   return 'week';
 }
 
@@ -539,28 +513,14 @@ function buildTrendBuckets(
     return buckets;
   }
 
-  if (period === 'month') {
-    const buckets: TrendBucketStat[] = [];
-    let cursor = currentStart;
-    let index = 1;
-    while (cursor <= currentEnd) {
-      const bucketEnd = addDays(cursor, 6) > currentEnd ? currentEnd : addDays(cursor, 6);
-      buckets.push({date: cursor, amount: bucketAmount(transactions, cursor, bucketEnd), label: `W${index}`});
-      cursor = addDays(bucketEnd, 1);
-      index += 1;
-    }
-    return buckets;
-  }
-
-  // year: one bucket per month, Jan through the current month
   const buckets: TrendBucketStat[] = [];
-  const year = Number(currentStart.slice(0, 4));
-  const currentMonthIndex = Number(currentEnd.slice(5, 7));
-  for (let month = 1; month <= currentMonthIndex; month += 1) {
-    const bucketStart = `${year}-${String(month).padStart(2, '0')}-01`;
-    const fullMonthEnd = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonthUTC(year, month)).padStart(2, '0')}`;
-    const bucketEnd = month === currentMonthIndex ? currentEnd : fullMonthEnd;
-    buckets.push({date: bucketStart, amount: bucketAmount(transactions, bucketStart, bucketEnd), label: MONTH_LABELS[month - 1]});
+  let cursor = currentStart;
+  let index = 1;
+  while (cursor <= currentEnd) {
+    const bucketEnd = addDays(cursor, 6) > currentEnd ? currentEnd : addDays(cursor, 6);
+    buckets.push({date: cursor, amount: bucketAmount(transactions, cursor, bucketEnd), label: `W${index}`});
+    cursor = addDays(bucketEnd, 1);
+    index += 1;
   }
   return buckets;
 }

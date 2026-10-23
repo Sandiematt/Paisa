@@ -40,7 +40,7 @@ import {colors, duration, easing, fonts, radii, shadows} from '../../theme';
 import {
   currencyByCode,
 } from '../onboarding/constants';
-import {scaleMonthly} from '../home/homeReport';
+import {scaleMonthly, yearlyFromMonthly} from '../home/homeReport';
 import {GoalId, OnboardingDraft} from '../onboarding/types';
 import {useBiometricLock} from '../security/BiometricLockProvider';
 import {AvatarPickerModal} from './AvatarPickerModal';
@@ -372,7 +372,7 @@ export function ProfileScreen({
       ? Number(draft.monthlyIncome) - budgetNumber
       : 0;
   const weeklyPace = scaleMonthly(savingsNumber, 'week', new Date());
-  const yearlyPotential = scaleMonthly(savingsNumber, 'year', new Date());
+  const yearlyPotential = yearlyFromMonthly(savingsNumber);
   const emailVerified = EMAIL_PATTERN.test(email.trim());
 
   const notifSubtitle = useMemo(() => {

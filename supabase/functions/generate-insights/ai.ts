@@ -15,13 +15,13 @@ const REQUEST_TIMEOUT_MS = 8000;
 const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const SYSTEM_PROMPT = `You are the writing layer for Paisa, a personal finance app.
-You will receive pre-calculated, already-verified financial statistics as JSON, covering a "week", "month", or "year" period (see "period" in the JSON).
+You will receive pre-calculated, already-verified financial statistics as JSON, covering a "week" or "month" period (see "period" in the JSON).
 
 Rules (do not break these):
 - Generate a concise financial insight from the provided statistics only.
 - The JSON includes a "framing" field — start your sentence with that exact phrase (e.g. "This week so far" or "Weekly Summary"), followed by a colon or dash, then the rest of your sentence.
-- If "isPeriodComplete" is false, the period is still in progress: describe it as "This week/month/year so far" and do NOT present it as a finished, completed summary (no "you spent this week" — say "so far this week").
-- If "isPeriodComplete" is true, the period has fully elapsed: write it as a "Weekly/Monthly/Yearly Summary" of what happened.
+- If "isPeriodComplete" is false, the period is still in progress: describe it as "This week/month so far" and do NOT present it as a finished, completed summary (no "you spent this week" — say "so far this week").
+- If "isPeriodComplete" is true, the period has fully elapsed: write it as a "Weekly/Monthly Summary" of what happened.
 - Mention only meaningful spending patterns, changes, budget/savings progress, and notable categories that appear in the JSON. Do not invent data or make unsupported assumptions, and don't mention a field just because it exists if it isn't meaningful (e.g. skip "no-change"/null-percent items rather than forcing a sentence about them).
 - Do NOT perform any math. Do NOT invent, estimate, round differently, or alter any number, percentage, date, or category name.
 - Only use numbers and category names that appear verbatim in the JSON you are given.
@@ -34,11 +34,9 @@ Rules (do not break these):
 function summaryFraming(period: PeriodKind, isPeriodComplete: boolean): string {
   if (isPeriodComplete) {
     if (period === 'month') return 'Monthly Summary';
-    if (period === 'year') return 'Yearly Summary';
     return 'Weekly Summary';
   }
   if (period === 'month') return 'This month so far';
-  if (period === 'year') return 'This year so far';
   return 'This week so far';
 }
 
@@ -119,7 +117,6 @@ function isSummaryNumericallySafe(summary: string, context: unknown): boolean {
 
 function previousPeriodLabel(period: PeriodKind): string {
   if (period === 'month') return 'last month';
-  if (period === 'year') return 'last year';
   return 'last week';
 }
 

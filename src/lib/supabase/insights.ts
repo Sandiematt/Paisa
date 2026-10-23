@@ -9,7 +9,7 @@ import {dataErrorMessage} from './errors';
 
 export type InsightDirection = 'up' | 'down' | 'flat';
 
-export type InsightPeriod = 'week' | 'month' | 'year';
+export type InsightPeriod = 'week' | 'month';
 
 /**
  * How a current-vs-previous comparison should be displayed:

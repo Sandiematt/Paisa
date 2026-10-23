@@ -373,62 +373,8 @@ describe('buildHomeReport', () => {
     expect(month.compareLabel).toBe('vs August');
   });
 
-  it('compares this year net to last year for the yearly badge', () => {
+  it('computes a distinct change badge for week and month', () => {
     const rows = [
-      tx({
-        id: 'last-year',
-        type: 'income',
-        amount: 2000,
-        categoryId: null,
-        transactionDate: '2025-03-10',
-      }),
-      tx({
-        id: 'last-year-rent',
-        type: 'expense',
-        amount: 500,
-        categoryId: 'cat-housing',
-        transactionDate: '2025-06-01',
-      }),
-      tx({
-        id: 'this-year',
-        type: 'income',
-        amount: 4500,
-        categoryId: null,
-        transactionDate: '2026-02-01',
-      }),
-      tx({
-        id: 'this-year-rent',
-        type: 'expense',
-        amount: 1500,
-        categoryId: 'cat-housing',
-        transactionDate: '2026-04-01',
-      }),
-    ];
-
-    const report = buildHomeReport(rows, [housing], 'year', now);
-
-    expect(report.net).toBe(3000);
-    expect(report.changePct).toBe(100);
-    expect(report.changeAmount).toBe(1500);
-    expect(report.compareLabel).toBe('vs last year');
-  });
-
-  it('computes a distinct change badge for week, month, and year', () => {
-    const rows = [
-      tx({
-        id: 'last-year',
-        type: 'income',
-        amount: 10000,
-        categoryId: null,
-        transactionDate: '2025-04-01',
-      }),
-      tx({
-        id: 'last-year-rent',
-        type: 'expense',
-        amount: 2000,
-        categoryId: 'cat-housing',
-        transactionDate: '2025-08-01',
-      }),
       tx({
         id: 'august',
         type: 'income',
@@ -475,7 +421,6 @@ describe('buildHomeReport', () => {
 
     const week = buildHomeReport(rows, [housing, dining], 'week', now);
     const month = buildHomeReport(rows, [housing, dining], 'month', now);
-    const year = buildHomeReport(rows, [housing, dining], 'year', now);
 
     expect(week.net).toBe(1800);
     expect(week.changePct).toBe(350);
@@ -484,10 +429,6 @@ describe('buildHomeReport', () => {
     expect(month.net).toBe(2200);
     expect(month.changePct).toBe(-27);
     expect(month.compareLabel).toBe('vs August');
-
-    expect(year.net).toBe(5200);
-    expect(year.changePct).toBe(-35);
-    expect(year.compareLabel).toBe('vs last year');
   });
 
   it('evaluates the savings plan monthly even on the week range', () => {

@@ -21,13 +21,11 @@ function slugify(label: string): string {
 
 function periodNounFor(period: InsightsResponse['stats']['period']): string {
   if (period === 'month') return 'this month';
-  if (period === 'year') return 'this year';
   return 'this week';
 }
 
 function comparisonLabelFor(period: InsightsResponse['stats']['period']): string {
   if (period === 'month') return 'than last month';
-  if (period === 'year') return 'than last year';
   return 'than last week';
 }
 

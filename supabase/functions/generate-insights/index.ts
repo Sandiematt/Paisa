@@ -34,7 +34,7 @@ const requestBodySchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/, 'referenceDate must be YYYY-MM-DD')
       .optional(),
     /** Which comparison window to calculate. Defaults to "week". */
-    period: z.enum(['week', 'month', 'year']).optional(),
+    period: z.enum(['week', 'month']).optional(),
   })
   .partial();
 

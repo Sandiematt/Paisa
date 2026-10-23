@@ -52,7 +52,6 @@ type HomeScreenProps = {
 const RANGES: {id: HomeRange; label: string}[] = [
   {id: 'week', label: 'Week'},
   {id: 'month', label: 'Month'},
-  {id: 'year', label: 'Year'},
 ];
 
 const DONUT_SIZE = 104;
@@ -653,7 +652,7 @@ export function HomeScreen({
   const changePct = Math.abs(data.changePct ?? 0);
   const syncLabel = syncCaption(status, refreshing, error, updatedAt, data.empty);
   const savedAmount = data.actualSavings;
-  const rangeWord = range === 'week' ? 'week' : range === 'year' ? 'year' : 'month';
+  const rangeWord = range === 'week' ? 'week' : 'month';
   const showBudget = data.monthlyBudget > 0;
   const showSavings = data.monthlySavingsGoal > 0;
   return (

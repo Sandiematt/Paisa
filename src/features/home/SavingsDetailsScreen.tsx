@@ -11,7 +11,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AppText, BackButton, ProgressBar} from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
 import {colors, layout, radii, spacing} from '../../theme';
-import {HomeRange, scaleMonthly} from './homeReport';
+import {HomeRange, scaleMonthly, yearlyFromMonthly} from './homeReport';
 
 type SavingsDetailsScreenProps = {
   visible: boolean;
@@ -28,9 +28,6 @@ type SavingsDetailsScreenProps = {
 function rangeWord(range: HomeRange): string {
   if (range === 'week') {
     return 'this week';
-  }
-  if (range === 'year') {
-    return 'this year';
   }
   return 'this month';
 }
@@ -53,7 +50,7 @@ export function SavingsDetailsScreen({
   const onTrack = savingsVsTarget >= 0;
   const remaining = target - actualSavings;
   const weeklyPace = scaleMonthly(monthlySavingsGoal, 'week', new Date());
-  const yearlyPotential = scaleMonthly(monthlySavingsGoal, 'year', new Date());
+  const yearlyPotential = yearlyFromMonthly(monthlySavingsGoal);
   const periodLabel = rangeWord(range);
 
   return (

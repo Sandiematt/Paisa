@@ -8,7 +8,7 @@ export type MoneyFlow = 'income' | 'expense';
 
 export type Direction = 'up' | 'down' | 'flat';
 
-export type PeriodKind = 'week' | 'month' | 'year';
+export type PeriodKind = 'week' | 'month';
 
 /**
  * How a current-vs-previous comparison should be displayed. Percentages are
@@ -122,7 +122,7 @@ export interface TrendBucketStat {
   /** Bucket start date, `YYYY-MM-DD`. */
   date: string;
   amount: number;
-  /** Short axis label, e.g. "Mon" (week), "W1" (month), "Jan" (year). */
+  /** Short axis label, e.g. "Mon" (week), "W1" (month). */
   label: string;
 }
 

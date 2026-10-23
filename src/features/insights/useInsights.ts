@@ -7,7 +7,7 @@ export type InsightsFetchStatus = 'loading' | 'ready' | 'error';
 
 /**
  * Fetches the AI-summarized, backend-calculated insight for a given period
- * (week/month/year) from the `generate-insights` Edge Function.
+ * (week/month) from the `generate-insights` Edge Function.
  *
  * Caches the last response per period in memory: switching back to a period
  * that was already loaded shows it instantly (status "ready") while quietly

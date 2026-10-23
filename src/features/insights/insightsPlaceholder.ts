@@ -1,6 +1,6 @@
 import {formatMoney} from '../../lib/formatMoney';
 
-export type InsightsPeriod = 'week' | 'month' | 'year';
+export type InsightsPeriod = 'week' | 'month';
 
 /**
  * How a current-vs-previous comparison should be displayed:
@@ -93,36 +93,6 @@ export function insightsData(currencySymbol: string, period: InsightsPeriod = 'm
     };
   }
 
-  if (period === 'year') {
-    return {
-      periodNoun: 'this year',
-      currentTotal: 34120,
-      previousTotal: 36300,
-      changePct: -6,
-      changeKind: 'decrease',
-      deltaAmount: 2180,
-      comparisonLabel: 'than last year',
-      weeklyBars: [
-        {label: 'Q1', percent: 62, tone: 'sand'},
-        {label: 'Q2', percent: 95, tone: 'accent'},
-        {label: 'Q3', percent: 58, tone: 'sand'},
-        {label: 'Q4', percent: 44, tone: 'positive'},
-      ],
-      aiSummary: `You're spending 6% less than last year — mostly from cutting back on dining and shopping. Housing is still your biggest cost at 88% of expenses. At this pace you'll save about ${money(7400)} more by year end.`,
-      aiHighlights: [
-        {id: '1', tone: 'positive', text: `Dining down ${money(2100)} vs last year`},
-        {id: '2', tone: 'warning', text: `Subscriptions crept up ${money(640)} this year`},
-      ],
-      movements: [
-        {id: 'dining', label: 'Dining', spent: 3120, deltaPct: -18, changeKind: 'decrease'},
-        {id: 'shopping', label: 'Shopping', spent: 1040, deltaPct: -31, changeKind: 'decrease'},
-        {id: 'groceries', label: 'Groceries', spent: 4890, deltaPct: -6, changeKind: 'decrease'},
-        {id: 'subscriptions', label: 'Subscriptions', spent: 2860, deltaPct: 14, changeKind: 'increase'},
-        {id: 'transport', label: 'Transport', spent: 2110, deltaPct: 9, changeKind: 'increase'},
-      ],
-    };
-  }
-
   return {
     periodNoun: 'this month',
     currentTotal: 2961,
@@ -154,6 +124,5 @@ export function insightsData(currencySymbol: string, period: InsightsPeriod = 'm
 
 export function previousPeriodLabel(period: InsightsPeriod): string {
   if (period === 'week') return 'last week';
-  if (period === 'year') return 'last year';
   return monthLabel(-1);
 }

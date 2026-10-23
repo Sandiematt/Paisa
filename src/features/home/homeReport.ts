@@ -8,7 +8,7 @@ import {
   roundMoney,
 } from '../../lib/transactionsStore';
 
-export type HomeRange = 'week' | 'month' | 'year';
+export type HomeRange = 'week' | 'month';
 
 export type SpendSlice = {
   id: string;
@@ -85,10 +85,6 @@ export type HomeReport = {
 };
 
 const WEEK_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const MONTH_ABBREVS = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
 
 const EMPTY_SLICE: SpendSlice = {
   id: 'empty',
@@ -133,14 +129,6 @@ export function periodFor(range: HomeRange, now = new Date()): Period {
     const end = addDays(start, 6);
     const prevStart = addDays(start, -7);
     const prevEnd = addDays(start, -1);
-    return {start, end, prevStart, prevEnd};
-  }
-
-  if (range === 'year') {
-    const start = new Date(today.getFullYear(), 0, 1);
-    const end = new Date(today.getFullYear(), 11, 31);
-    const prevStart = new Date(today.getFullYear() - 1, 0, 1);
-    const prevEnd = new Date(today.getFullYear() - 1, 11, 31);
     return {start, end, prevStart, prevEnd};
   }
 
@@ -321,18 +309,19 @@ export function scaleMonthly(
     const days = daysInMonth(now.getFullYear(), now.getMonth());
     return roundMoney(amount * (7 / Math.max(days, 1)));
   }
-  if (range === 'year') {
-    return roundMoney(amount * 12);
-  }
   return roundMoney(amount);
+}
+
+export function yearlyFromMonthly(amount: number): number {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return 0;
+  }
+  return roundMoney(amount * 12);
 }
 
 export function rangeNoun(range: HomeRange): string {
   if (range === 'week') {
     return 'week';
-  }
-  if (range === 'year') {
-    return 'year';
   }
   return 'month';
 }
@@ -346,7 +335,7 @@ export function rangePlanTitle(
   kind: 'budget' | 'savings',
 ): string {
   const prefix =
-    range === 'week' ? 'Weekly' : range === 'year' ? 'Yearly' : 'Monthly';
+    range === 'week' ? 'Weekly' : 'Monthly';
   return kind === 'budget' ? `${prefix} budget` : `${prefix} savings goal`;
 }
 
@@ -542,9 +531,6 @@ function bucketIndex(
       Math.min(6, Math.round((date.getTime() - periodStart.getTime()) / 86400000)),
     );
   }
-  if (range === 'year') {
-    return date.getMonth();
-  }
   return Math.max(0, date.getDate() - 1);
 }
 
@@ -561,12 +547,6 @@ function seriesPointCount(
       1,
       Math.round((last.getTime() - period.start.getTime()) / 86400000) + 1,
     );
-  }
-  if (range === 'year') {
-    if (today.getFullYear() !== period.start.getFullYear()) {
-      return 12;
-    }
-    return today.getMonth() + 1;
   }
   if (today.getTime() < period.start.getTime()) {
     return 1;
@@ -609,9 +589,6 @@ function highlightStamp(range: HomeRange, index: number): string {
   if (range === 'week') {
     return WEEK_LABELS[index]?.toUpperCase() ?? '';
   }
-  if (range === 'year') {
-    return MONTH_ABBREVS[index]?.toUpperCase() ?? '';
-  }
   return String(index + 1);
 }
 
@@ -619,18 +596,12 @@ function rangeLabel(range: HomeRange, now: Date): string {
   if (range === 'week') {
     return 'THIS WEEK';
   }
-  if (range === 'year') {
-    return String(now.getFullYear());
-  }
   return now.toLocaleDateString('en-US', {month: 'long'}).toUpperCase();
 }
 
 function compareLabel(range: HomeRange, now: Date): string {
   if (range === 'week') {
     return 'vs last week';
-  }
-  if (range === 'year') {
-    return 'vs last year';
   }
   const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   return `vs ${previous.toLocaleDateString('en-US', {month: 'long'})}`;
