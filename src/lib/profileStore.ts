@@ -102,9 +102,14 @@ export function draftFromUser(
   stored?: OnboardingDraft | null,
 ): OnboardingDraft {
   const meta = user.user_metadata ?? {};
+  // Google OAuth returns the display name as `full_name`; some providers use `name`.
+  const metaName =
+    asString(meta.full_name) || asString(meta.name) || asString(meta.display_name);
+  // Google OAuth surfaces the email both on user.email and meta.email.
+  const metaEmail = user.email || asString(meta.email);
   return {
-    name: stored?.name || asString(meta.name) || displayNameFromEmail(user.email),
-    email: stored?.email || user.email || asString(meta.email),
+    name: stored?.name || metaName || displayNameFromEmail(user.email),
+    email: stored?.email || metaEmail,
     currency: stored?.currency || asString(meta.currency, 'INR'),
     startingBalance: stored?.startingBalance ?? asString(meta.startingBalance),
     monthlyIncome: stored?.monthlyIncome ?? asString(meta.monthlyIncome),
@@ -113,9 +118,14 @@ export function draftFromUser(
       stored?.monthlySavingsGoal ?? asString(meta.monthlySavingsGoal),
     goal: stored?.goal ?? asGoal(meta.goal),
     categoryIds: stored?.categoryIds ?? asCategories(meta.categoryIds),
-    avatarUrl: stored?.avatarUrl || asString(meta.avatarUrl) || undefined,
+    avatarUrl:
+      stored?.avatarUrl ||
+      asString(meta.avatar_url) ||
+      asString(meta.avatarUrl) ||
+      undefined,
   };
 }
+
 
 export function profilePayload(draft: OnboardingDraft) {
   return {

@@ -82,7 +82,7 @@ export function OnboardingFlow({
         style={styles.fill}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <OnboardingHeader
-          stepIndex={flow.stepIndex}
+          stepIndex={flow.visibleStepIndex}
           stepCount={flow.stepCount}
           progress={flow.progress}
           canGoBack={flow.canGoBack}

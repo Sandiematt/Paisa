@@ -64,8 +64,11 @@ export function RootNavigator() {
       }
       // Email sign-ups finish onboarding before the account exists; OAuth
       // sign-ups get an account first and still owe a profile.
+      // A profile row can exist but be incomplete (e.g. from a previous
+      // failed attempt) — check that the required `goal` field was set.
       const provider = user.app_metadata?.provider;
-      setNeedsSetup(!stored && !!provider && provider !== 'email');
+      const profileIncomplete = !stored || !stored.goal;
+      setNeedsSetup(profileIncomplete && !!provider && provider !== 'email');
       setDraft(draftFromUser(user, stored));
       setProfileReady(true);
     });

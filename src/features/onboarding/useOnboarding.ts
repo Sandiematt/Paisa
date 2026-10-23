@@ -1,5 +1,6 @@
 import {useCallback, useMemo, useState} from 'react';
 
+import {useAuth} from '../auth/AuthProvider';
 import {DEFAULT_CATEGORY_IDS, MIN_CATEGORIES} from './constants';
 import {OnboardingDraft, STEP_KEYS, StepKey, StepValidity} from './types';
 
@@ -25,15 +26,69 @@ export type OnboardingOptions = {
   passwordless?: boolean;
 };
 
+/**
+ * Pull name, email, and avatar straight from the Supabase auth user metadata.
+ * Google OAuth stores the display name as `full_name` and the photo as
+ * `avatar_url` or `picture`.
+ */
+function draftFromAuthUser(
+  user: {email?: string; user_metadata?: Record<string, unknown>} | null,
+): Partial<OnboardingDraft> {
+  if (!user) {
+    return {};
+  }
+  const meta = user.user_metadata ?? {};
+  const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+  const name =
+    str(meta.full_name) ||
+    str(meta.name) ||
+    str(meta.display_name) ||
+    displayNameFromEmail(user.email);
+  const email = user.email || str(meta.email);
+  const avatarUrl = str(meta.avatar_url) || str(meta.picture) || undefined;
+
+  return {name, email, avatarUrl};
+}
+
+function displayNameFromEmail(email?: string): string {
+  if (!email) {
+    return '';
+  }
+  const local = email.split('@')[0]?.replace(/[._-]+/g, ' ').trim();
+  if (!local) {
+    return '';
+  }
+  return local.replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
 export function useOnboarding(
   onComplete: (draft: OnboardingDraft) => void | Promise<void>,
   {initialDraft, passwordless = false}: OnboardingOptions = {},
 ) {
-  const [draft, setDraft] = useState<OnboardingDraft>(() => ({
-    ...INITIAL_DRAFT,
-    ...initialDraft,
-  }));
-  const [stepIndex, setStepIndex] = useState(0);
+  // Read the auth user directly from context so we always have the latest
+  // Google metadata, regardless of prop-drilling timing.
+  const {user} = useAuth();
+
+  const [draft, setDraft] = useState<OnboardingDraft>(() => {
+    const base = {...INITIAL_DRAFT, ...initialDraft};
+    if (passwordless && user) {
+      // Merge Google metadata on top, but don't overwrite anything already
+      // provided by initialDraft.
+      const fromAuth = draftFromAuthUser(user);
+      return {
+        ...base,
+        name: base.name || fromAuth.name || '',
+        email: base.email || fromAuth.email || '',
+        avatarUrl: base.avatarUrl || fromAuth.avatarUrl,
+      };
+    }
+    return base;
+  });
+
+  // For OAuth (passwordless) users, name/email come from Google — skip basics.
+  const firstStep = passwordless ? 1 : 0;
+  const [stepIndex, setStepIndex] = useState(firstStep);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [showErrors, setShowErrors] = useState(false);
 
@@ -128,8 +183,8 @@ export function useOnboarding(
   const goBack = useCallback(() => {
     setDirection(-1);
     setShowErrors(false);
-    setStepIndex(index => Math.max(0, index - 1));
-  }, []);
+    setStepIndex(index => Math.max(firstStep, index - 1));
+  }, [firstStep]);
 
   const skip = useCallback(() => {
     if (isLastStep) {
@@ -146,14 +201,15 @@ export function useOnboarding(
     toggleCategory,
     stepKey,
     stepIndex,
-    stepCount: STEP_KEYS.length,
+    visibleStepIndex: stepIndex - firstStep,
+    stepCount: STEP_KEYS.length - firstStep,
     direction,
-    progress: (stepIndex + 1) / STEP_KEYS.length,
+    progress: (stepIndex - firstStep + 1) / (STEP_KEYS.length - firstStep),
     canContinue: current.canContinue,
     skippable: current.skippable,
     isLastStep,
     errors: showErrors ? errors : {},
-    canGoBack: stepIndex > 0,
+    canGoBack: stepIndex > firstStep,
     goNext,
     goBack,
     skip,

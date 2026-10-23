@@ -2,6 +2,8 @@ import React, {useEffect, useRef} from 'react';
 import {Animated, Pressable, StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
+import {House, ListBullets, ChartLineUp, User} from 'phosphor-react-native';
+
 import {
   FLOATING_NAV_GAP,
   FLOATING_NAV_ITEM_HEIGHT,
@@ -9,13 +11,6 @@ import {
   useFloatingNavClearance,
   useFloatingNavVisible,
 } from './FloatingNavScroll';
-import {
-  ActivityGlyph,
-  CloseGlyph,
-  HomeGlyph,
-  InsightsGlyph,
-  ProfileGlyph,
-} from '../../components/icons/Glyphs';
 import {GlassPanel, PressableScale} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {
@@ -73,8 +68,6 @@ function AddPlusMark({
   );
 }
 
-void CloseGlyph;
-
 function TabGlyph({
   id,
   color,
@@ -85,13 +78,14 @@ function TabGlyph({
   active: boolean;
 }) {
   const size = layout.navIcon;
+  const weight = active ? 'fill' : 'regular';
   switch (id) {
     case 'home':
-      return <HomeGlyph color={color} size={size} active={active} />;
+      return <House color={color} size={size} weight={weight} />;
     case 'activity':
-      return <ActivityGlyph color={color} size={size} active={active} />;
+      return <ListBullets color={color} size={size} weight={weight} />;
     case 'insights':
-      return <InsightsGlyph color={color} size={size} active={active} />;
+      return <ChartLineUp color={color} size={size} weight={weight} />;
   }
 }
 
@@ -219,9 +213,10 @@ export function NavBar({
             accessibilityLabel="Open profile"
             containerStyle={styles.slot}
             style={styles.hit}>
-            <ProfileGlyph
+            <User
               color={colors.inkMuted}
               size={layout.navIcon}
+              weight="regular"
             />
           </PressableScale>
         </View>
