@@ -1,7 +1,7 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
 
-import {GlassPanel, Text} from '../../components/ui';
+import {Text} from '../../components/ui';
 import {colors, fonts, radii, shadows} from '../../theme';
 
 type SettingsSectionProps = {
@@ -66,14 +66,15 @@ export function SettingsSection({
         style={styles.title}>
         {title}
       </Text>
-      <GlassPanel
-        style={shadows.card}
-        radius={radii.cardHero - 4}
-        intensity="xl"
-        overlayColor={colors.glass}
-        contentStyle={padded ? styles.paddedInner : styles.rowInner}>
+      <View
+        style={[
+          styles.card,
+          shadows.card,
+          {borderRadius: radii.cardHero - 4},
+          padded ? styles.paddedInner : styles.rowInner,
+        ]}>
         {children}
-      </GlassPanel>
+      </View>
       {footer ? (
         <Text
           fontFamily={fonts.interMedium}
@@ -95,6 +96,11 @@ const styles = StyleSheet.create({
   },
   title: {
     paddingHorizontal: 4,
+  },
+  card: {
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.hairlineStrong,
   },
   paddedInner: {
     padding: 20,

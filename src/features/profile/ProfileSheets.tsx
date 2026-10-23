@@ -3,7 +3,6 @@ import {
   Modal,
   ScrollView,
   StyleSheet,
-  Switch,
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
@@ -18,16 +17,23 @@ import {
 import {colors, layout, radii, spacing} from '../../theme';
 import {CATEGORIES, GOALS, MIN_CATEGORIES} from '../onboarding/constants';
 import {GoalId} from '../onboarding/types';
-import {SettingsSection} from './SettingsSection';
 
 type SheetFrameProps = {
   visible: boolean;
   title: string;
   onClose: () => void;
+  /** Sits where the header's right edge would otherwise be empty. */
+  trailing?: React.ReactNode;
   children: React.ReactNode;
 };
 
-function SheetFrame({visible, title, onClose, children}: SheetFrameProps) {
+export function SheetFrame({
+  visible,
+  title,
+  onClose,
+  trailing,
+  children,
+}: SheetFrameProps) {
   const insets = useSafeAreaInsets();
   return (
     <Modal
@@ -41,7 +47,7 @@ function SheetFrame({visible, title, onClose, children}: SheetFrameProps) {
           <AppText variant="heading" style={styles.headerTitle}>
             {title}
           </AppText>
-          <View style={styles.headerSpacer} />
+          {trailing ?? <View style={styles.headerSpacer} />}
         </View>
         <ScrollView
           style={styles.scroll}
@@ -166,92 +172,6 @@ export function CategoriesSheet({
   );
 }
 
-type ToggleItem = {
-  id: string;
-  label: string;
-  caption: string;
-};
-
-type ToggleSheetProps = {
-  visible: boolean;
-  title: string;
-  intro: string;
-  items: ToggleItem[];
-  values: Record<string, boolean>;
-  onChange: (id: string, value: boolean) => void;
-  onClose: () => void;
-};
-
-function ToggleSheet({
-  visible,
-  title,
-  intro,
-  items,
-  values,
-  onChange,
-  onClose,
-}: ToggleSheetProps) {
-  return (
-    <SheetFrame visible={visible} title={title} onClose={onClose}>
-      <AppText variant="body" color={colors.inkSecondary} style={styles.lead}>
-        {intro}
-      </AppText>
-      <SettingsSection title="Options">
-        {items.map((item, index) => (
-          <View
-            key={item.id}
-            style={[
-              styles.toggleRow,
-              index < items.length - 1 && styles.toggleDivider,
-            ]}>
-            <View style={styles.toggleCopy}>
-              <AppText variant="body">{item.label}</AppText>
-              <AppText variant="caption" color={colors.inkMuted}>
-                {item.caption}
-              </AppText>
-            </View>
-            <Switch
-              value={values[item.id] ?? false}
-              onValueChange={next => onChange(item.id, next)}
-              trackColor={{false: colors.canvasSunk, true: colors.accent}}
-              thumbColor={colors.surface}
-            />
-          </View>
-        ))}
-      </SettingsSection>
-    </SheetFrame>
-  );
-}
-
-type NotificationsSheetProps = {
-  visible: boolean;
-  values: Record<string, boolean>;
-  onChange: (id: string, value: boolean) => void;
-  onClose: () => void;
-};
-
-export function NotificationsSheet(props: NotificationsSheetProps) {
-  return (
-    <ToggleSheet
-      {...props}
-      title="Notifications"
-      intro="Choose what Paisa should tap you about. Delivery wiring comes next."
-      items={[
-        {
-          id: 'spend',
-          label: 'Spending alerts',
-          caption: 'When a day or category runs hot.',
-        },
-        {
-          id: 'monthly',
-          label: 'Monthly summary',
-          caption: 'A recap when the month closes.',
-        },
-      ]}
-    />
-  );
-}
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -302,18 +222,5 @@ const styles = StyleSheet.create({
   },
   doneBtnDisabled: {
     backgroundColor: colors.canvasSunk,
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-  },
-  toggleDivider: {
-    borderBottomWidth: layout.hairlineWidth,
-    borderBottomColor: colors.hairline,
-  },
-  toggleCopy: {
-    flex: 1,
-    marginRight: spacing.md,
   },
 });

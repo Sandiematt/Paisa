@@ -21,7 +21,8 @@
           "faceIDPermission": "Paisa uses Face ID to keep your finances locked."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications"
     ]
   }
 }

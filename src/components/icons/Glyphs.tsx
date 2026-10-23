@@ -2,6 +2,7 @@
 /* eslint-disable react-native/no-inline-styles */
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
+import Svg, {Circle, Line, Path, Polyline} from 'react-native-svg';
 
 import {colors, radii} from '../../theme';
 
@@ -486,135 +487,51 @@ export function LedgerGlyph({color, size = 18}: GlyphProps) {
   );
 }
 
-function FlowTray({
-  color,
-  size,
-  stroke,
-}: {
-  color: string;
-  size: number;
-  stroke: number;
-}) {
-  return (
-    <View
-      style={{
-        width: size * 0.84,
-        height: size * 0.3,
-        borderWidth: stroke,
-        borderTopWidth: 0,
-        borderColor: color,
-        borderBottomLeftRadius: Math.max(3, size * 0.18),
-        borderBottomRightRadius: Math.max(3, size * 0.18),
-      }}
-    />
-  );
-}
-
-function ArrowHead({
-  color,
-  size,
-  direction,
-}: {
-  color: string;
-  size: number;
-  direction: 'up' | 'down';
-}) {
-  const w = size * 0.22;
-  const h = size * 0.2;
-  return (
-    <View
-      style={{
-        width: 0,
-        height: 0,
-        borderLeftWidth: w,
-        borderRightWidth: w,
-        borderLeftColor: 'transparent',
-        borderRightColor: 'transparent',
-        ...(direction === 'down'
-          ? {borderTopWidth: h, borderTopColor: color}
-          : {borderBottomWidth: h, borderBottomColor: color}),
-      }}
-    />
-  );
-}
-
-/**
- * Shared money-flow mark. The tray stays on the baseline.
- * Income drops into it. Expense lifts out of it.
- */
-export function MoneyFlowGlyph({
-  color,
-  size = 18,
-  direction,
-}: GlyphProps & {direction: 'in' | 'out'}) {
-  const stroke = Math.max(1.8, size * 0.12);
-  const incoming = direction === 'in';
-  const shaftH = size * 0.28;
-
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: size * 0.04,
-      }}>
-      <View
-        style={{
-          alignItems: 'center',
-          justifyContent: incoming ? 'flex-start' : 'flex-end',
-          height: size * 0.58,
-        }}>
-        {incoming ? null : <ArrowHead color={color} size={size} direction="up" />}
-        <View
-          style={{
-            width: stroke,
-            height: shaftH,
-            borderRadius: radii.pill,
-            backgroundColor: color,
-            marginVertical: -size * 0.04,
-          }}
-        />
-        {incoming ? <ArrowHead color={color} size={size} direction="down" /> : null}
-      </View>
-      <FlowTray color={color} size={size} stroke={stroke} />
-    </View>
-  );
-}
-
 export function MoneyInGlyph({color, size = 18}: GlyphProps) {
-  return <MoneyFlowGlyph color={color} size={size} direction="in" />;
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <Path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /><Line x1="12" y1="3" x2="12" y2="14" /><Polyline points="8 10 12 14 16 10" />
+    </Svg>
+  );
 }
 
 export function MoneyOutGlyph({color, size = 18}: GlyphProps) {
-  return <MoneyFlowGlyph color={color} size={size} direction="out" />;
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <Path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /><Line x1="12" y1="14" x2="12" y2="3" /><Polyline points="8 7 12 3 16 7" />
+    </Svg>
+  );
 }
 
-/** Coin resting in the same tray — money kept, not flowing. */
 export function SavedGlyph({color, size = 18}: GlyphProps) {
-  const stroke = Math.max(1.8, size * 0.12);
-  const coin = size * 0.42;
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: size * 0.06,
-      }}>
-      <View
-        style={{
-          width: coin,
-          height: coin,
-          borderRadius: coin / 2,
-          borderWidth: stroke,
-          borderColor: color,
-        }}
-      />
-      <FlowTray color={color} size={size} stroke={stroke} />
-    </View>
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <Path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" /><Circle cx="12" cy="9" r="4" />
+    </Svg>
   );
 }
 
@@ -816,33 +733,17 @@ export function BellGlyph({color, size = 20}: GlyphProps) {
 
 export function RefreshGlyph({color, size = 14}: GlyphProps) {
   return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        borderWidth: 1.6,
-        borderColor: color,
-        borderTopColor: 'transparent',
-        transform: [{rotate: '-20deg'}],
-      }}>
-      <View
-        style={{
-          position: 'absolute',
-          top: -2,
-          right: 1,
-          width: 0,
-          height: 0,
-          borderLeftWidth: 3.5,
-          borderRightWidth: 3.5,
-          borderBottomWidth: 5,
-          borderLeftColor: 'transparent',
-          borderRightColor: 'transparent',
-          borderBottomColor: color,
-          transform: [{rotate: '110deg'}],
-        }}
-      />
-    </View>
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round">
+      <Polyline points="23 4 23 10 17 10" /><Path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </Svg>
   );
 }
 

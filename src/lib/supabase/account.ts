@@ -1,4 +1,5 @@
 import {clearBiometricPref} from '../biometricLock';
+import {clearNotificationData} from '../notifications/notificationStorage';
 import {clearProfileCache} from '../profileStore';
 import {supabase} from './client';
 import {dataErrorMessage} from './errors';
@@ -34,6 +35,7 @@ export async function deleteAccount(): Promise<void> {
   await Promise.allSettled([
     clearProfileCache(userId),
     clearBiometricPref(userId),
+    clearNotificationData(userId),
   ]);
   await supabase.auth.signOut({scope: 'local'});
 }

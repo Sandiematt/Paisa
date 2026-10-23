@@ -1,4 +1,10 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {StyleSheet, View} from 'react-native';
 
 import {ActivityScreen} from '../activity/ActivityScreen';
@@ -17,7 +23,11 @@ import {OnboardingDraft} from '../onboarding/types';
 import {SaveProfileOptions} from '../../lib/profileStore';
 import {TransactionRow} from '../../lib/transactionsStore';
 import {InsightsScreen} from '../insights/InsightsScreen';
+import {useNotifications} from '../notifications/NotificationsProvider';
 import {ProfileScreen} from '../profile/ProfileScreen';
+
+// Lets a closing modal finish dismissing before the next one is presented.
+const MODAL_HANDOFF_MS = 350;
 
 type MainTabsProps = {
   draft: OnboardingDraft;
@@ -76,6 +86,94 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     Number(profileDraft.startingBalance) || 0,
     moneyPlan,
   );
+
+  const {setSnapshot, pendingTarget, consumeTarget} = useNotifications();
+  const handoffTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Budget alerts and reminders are decided from the same ledger the
+  // dashboard shows, so every change here is re-checked there.
+  useEffect(() => {
+    if (status !== 'ready') {
+      return;
+    }
+    setSnapshot({
+      transactions,
+      monthlyBudget: moneyPlan.monthlyBudget,
+      currencySymbol: currency.symbol,
+    });
+  }, [
+    currency.symbol,
+    moneyPlan.monthlyBudget,
+    setSnapshot,
+    status,
+    transactions,
+  ]);
+
+  useEffect(
+    () => () => {
+      setSnapshot(null);
+      if (handoffTimer.current) {
+        clearTimeout(handoffTimer.current);
+      }
+    },
+    [setSnapshot],
+  );
+
+  // A tapped notification (or history row) lands on the screen it is about.
+  useEffect(() => {
+    if (!pendingTarget) {
+      return;
+    }
+    const target = pendingTarget;
+    consumeTarget();
+
+    // Already composing a new expense: keep the user's input.
+    if (target === 'expense' && addKind !== null && editRow === null) {
+      return;
+    }
+
+    const overlayOpen =
+      profileOpen || budgetOpen || savingsOpen || addKind !== null;
+    setProfileOpen(false);
+    setBudgetOpen(false);
+    setSavingsOpen(false);
+    setSheetOpen(false);
+    setAddKind(null);
+    setEditRow(null);
+
+    const open = () => {
+      if (target === 'expense') {
+        setAddKind('expense');
+        return;
+      }
+      // Alerts are about the month, so show the month.
+      setTab('home');
+      setRange('month');
+      if (target === 'budget') {
+        setBudgetOpen(true);
+      } else {
+        setSavingsOpen(true);
+      }
+    };
+
+    if (handoffTimer.current) {
+      clearTimeout(handoffTimer.current);
+    }
+    if (overlayOpen) {
+      handoffTimer.current = setTimeout(open, MODAL_HANDOFF_MS);
+    } else {
+      open();
+    }
+  }, [
+    addKind,
+    budgetOpen,
+    consumeTarget,
+    editRow,
+    pendingTarget,
+    profileOpen,
+    savingsOpen,
+    setRange,
+  ]);
 
   const openComposer = useCallback((kind: AddKind) => {
     setSheetOpen(false);

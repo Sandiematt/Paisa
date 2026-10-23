@@ -191,6 +191,18 @@ function walletParts(rows: TransactionRow[]) {
   };
 }
 
+/** Spending in the calendar month containing `now`, ledger adjustments excluded. */
+export function monthlySpentFor(
+  transactions: TransactionRow[],
+  now = new Date(),
+): number {
+  const period = periodFor('month', now);
+  const rows = transactions.filter(row =>
+    inRange(row.transactionDate, period.start, period.end),
+  );
+  return roundMoney(walletParts(rows).spent);
+}
+
 function changePercent(current: number, previous: number): number | null {
   if (Math.abs(previous) < 0.005) {
     return Math.abs(current) < 0.005 ? 0 : null;

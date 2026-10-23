@@ -6,6 +6,31 @@ jest.mock('expo-dev-client', () => ({}));
 
 jest.mock('react-native-url-polyfill/auto', () => ({}));
 
+jest.mock('expo-notifications', () => ({
+  AndroidImportance: {DEFAULT: 3, HIGH: 4},
+  SchedulableTriggerInputTypes: {DATE: 'date'},
+  DEFAULT_ACTION_IDENTIFIER: 'expo.modules.notifications.actions.DEFAULT',
+  setNotificationHandler: () => {},
+  setNotificationChannelAsync: async () => null,
+  getPermissionsAsync: async () => ({
+    granted: false,
+    status: 'undetermined',
+    canAskAgain: true,
+  }),
+  requestPermissionsAsync: async () => ({
+    granted: false,
+    status: 'denied',
+    canAskAgain: false,
+  }),
+  scheduleNotificationAsync: async () => 'id',
+  getAllScheduledNotificationsAsync: async () => [],
+  cancelScheduledNotificationAsync: async () => {},
+  getPresentedNotificationsAsync: async () => [],
+  getLastNotificationResponseAsync: async () => null,
+  addNotificationReceivedListener: () => ({remove: () => {}}),
+  addNotificationResponseReceivedListener: () => ({remove: () => {}}),
+}));
+
 jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map();
   return {

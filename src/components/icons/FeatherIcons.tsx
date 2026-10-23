@@ -1,10 +1,19 @@
 import React from 'react';
 import {Image, View} from 'react-native';
+import Svg, {Line, Polyline, Rect} from 'react-native-svg';
 
 type IconProps = {
   color: string;
   size?: number;
 };
+
+const STROKE = (color: string) => ({
+  fill: 'none' as const,
+  stroke: color,
+  strokeWidth: 2,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+});
 
 function Stroke({
   color,
@@ -38,70 +47,50 @@ function Stroke({
 }
 
 export function ArrowUpRightIcon({color, size = 15}: IconProps) {
-  const s = Math.max(1.4, size * 0.12);
   return (
-    <View style={{width: size, height: size}}>
-      <Stroke color={color} width={size * 0.62} height={s} left={size * 0.22} top={size * 0.28} rotate="-45deg" />
-      <Stroke color={color} width={s} height={size * 0.42} left={size * 0.58} top={size * 0.18} />
-      <Stroke color={color} width={size * 0.42} height={s} left={size * 0.38} top={size * 0.18} />
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...STROKE(color)}>
+      <Line x1="7" y1="17" x2="17" y2="7" /><Polyline points="7 7 17 7 17 17" />
+    </Svg>
   );
 }
 
 export function ArrowDownRightIcon({color, size = 15}: IconProps) {
-  const s = Math.max(1.4, size * 0.12);
   return (
-    <View style={{width: size, height: size}}>
-      <Stroke color={color} width={size * 0.62} height={s} left={size * 0.22} top={size * 0.58} rotate="45deg" />
-      <Stroke color={color} width={s} height={size * 0.42} left={size * 0.58} top={size * 0.4} />
-      <Stroke color={color} width={size * 0.42} height={s} left={size * 0.38} top={size * 0.72} />
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...STROKE(color)}>
+      <Line x1="7" y1="7" x2="17" y2="17" /><Polyline points="17 7 17 17 7 17" />
+    </Svg>
   );
 }
 
 export function ArrowDownLeftIcon({color, size = 15}: IconProps) {
-  const s = Math.max(1.4, size * 0.12);
   return (
-    <View style={{width: size, height: size}}>
-      <Stroke color={color} width={size * 0.62} height={s} left={size * 0.16} top={size * 0.58} rotate="-45deg" />
-      <Stroke color={color} width={s} height={size * 0.42} left={size * 0.18} top={size * 0.4} />
-      <Stroke color={color} width={size * 0.42} height={s} left={size * 0.18} top={size * 0.72} />
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...STROKE(color)}>
+      <Line x1="17" y1="7" x2="7" y2="17" /><Polyline points="17 17 7 17 7 7" />
+    </Svg>
   );
 }
 
 export function TrendingUpIcon({color, size = 15}: IconProps) {
-  const s = Math.max(1.4, size * 0.12);
   return (
-    <View style={{width: size, height: size}}>
-      <Stroke color={color} width={size * 0.38} height={s} left={size * 0.08} top={size * 0.62} rotate="-28deg" />
-      <Stroke color={color} width={size * 0.42} height={s} left={size * 0.38} top={size * 0.38} rotate="-38deg" />
-      <Stroke color={color} width={s} height={size * 0.28} left={size * 0.68} top={size * 0.16} />
-      <Stroke color={color} width={size * 0.28} height={s} left={size * 0.56} top={size * 0.16} />
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...STROKE(color)}>
+      <Polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><Polyline points="17 6 23 6 23 12" />
+    </Svg>
   );
 }
 
-/** Mirror of TrendingUpIcon — a line descending to a bottom-right arrowhead. */
 export function TrendingDownIcon({color, size = 15}: IconProps) {
-  const s = Math.max(1.4, size * 0.12);
   return (
-    <View style={{width: size, height: size}}>
-      <Stroke color={color} width={size * 0.38} height={s} left={size * 0.08} top={size * 0.28} rotate="28deg" />
-      <Stroke color={color} width={size * 0.42} height={s} left={size * 0.38} top={size * 0.52} rotate="38deg" />
-      <Stroke color={color} width={s} height={size * 0.28} left={size * 0.68} top={size * 0.56} />
-      <Stroke color={color} width={size * 0.28} height={s} left={size * 0.56} top={size * 0.68} />
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...STROKE(color)}>
+      <Polyline points="23 18 13.5 8.5 8.5 13.5 1 6" /><Polyline points="17 18 23 18 23 12" />
+    </Svg>
   );
 }
 
 export function ChevronRightIcon({color, size = 16}: IconProps) {
-  const s = Math.max(1.4, size * 0.12);
   return (
-    <View style={{width: size, height: size}}>
-      <Stroke color={color} width={size * 0.42} height={s} left={size * 0.32} top={size * 0.28} rotate="45deg" />
-      <Stroke color={color} width={size * 0.42} height={s} left={size * 0.32} top={size * 0.62} rotate="-45deg" />
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...STROKE(color)}>
+      <Polyline points="9 18 15 12 9 6" />
+    </Svg>
   );
 }
 
@@ -226,29 +215,10 @@ export function ArrowDownLongIcon({color, size = 12}: IconProps) {
 }
 
 export function CreditCardIcon({color, size = 14}: IconProps) {
-  const stroke = Math.max(1.5, size * 0.12);
   return (
-    <View style={{width: size, height: size, justifyContent: 'center'}}>
-      <View
-        style={{
-          width: size,
-          height: size * 0.72,
-          borderWidth: stroke,
-          borderColor: color,
-          borderRadius: 2.5,
-        }}>
-        <View
-          style={{
-            position: 'absolute',
-            top: size * 0.2,
-            left: 0,
-            right: 0,
-            height: stroke,
-            backgroundColor: color,
-          }}
-        />
-      </View>
-    </View>
+    <Svg width={size} height={size} viewBox="0 0 24 24" {...STROKE(color)}>
+      <Rect x="1" y="4" width="22" height="16" rx="2" /><Line x1="1" y1="10" x2="23" y2="10" />
+    </Svg>
   );
 }
 

@@ -4,6 +4,7 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 import {RootNavigator} from './src/app/RootNavigator';
 import {AuthProvider} from './src/features/auth/AuthProvider';
+import {NotificationsProvider} from './src/features/notifications/NotificationsProvider';
 import {BiometricLockProvider} from './src/features/security/BiometricLockProvider';
 import {colors, useAppFonts} from './src/theme';
 
@@ -15,7 +16,9 @@ export default function App() {
       {fontsReady ? (
         <AuthProvider>
           <BiometricLockProvider>
-            <RootNavigator />
+            <NotificationsProvider>
+              <RootNavigator />
+            </NotificationsProvider>
           </BiometricLockProvider>
         </AuthProvider>
       ) : (

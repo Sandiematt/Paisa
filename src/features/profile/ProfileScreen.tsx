@@ -22,7 +22,6 @@ import {
   LogOutIcon,
 } from '../../components/icons/FeatherIcons';
 import {
-  BellGlyph,
   CameraGlyph,
   CheckGlyph,
   PencilGlyph,
@@ -45,9 +44,7 @@ import {GoalId, OnboardingDraft} from '../onboarding/types';
 import {useBiometricLock} from '../security/BiometricLockProvider';
 import {AvatarPickerModal} from './AvatarPickerModal';
 import {ProfileAmbient} from './ProfileAmbient';
-import {
-  NotificationsSheet,
-} from './ProfileSheets';
+import {NotificationsSettingsSection} from './NotificationsSettingsSection';
 import {balanceFieldText, planProfileSave} from './profileSavePlan';
 import {SettingsRow} from './SettingsRow';
 import {SettingsSection} from './SettingsSection';
@@ -285,12 +282,6 @@ export function ProfileScreen({
   const [nameEditing, setNameEditing] = useState(false);
 
   const [avatarOpen, setAvatarOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-
-  const [notifyPrefs, setNotifyPrefs] = useState({
-    spend: true,
-    monthly: true,
-  });
   const biometricLock = useBiometricLock();
   const [biometricBusy, setBiometricBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -371,12 +362,6 @@ export function ProfileScreen({
   const weeklyPace = scaleMonthly(savingsNumber, 'week', new Date());
   const yearlyPotential = yearlyFromMonthly(savingsNumber);
   const emailVerified = EMAIL_PATTERN.test(email.trim());
-
-  const notifSubtitle = useMemo(() => {
-    const enabledCount = Object.values(notifyPrefs).filter(Boolean).length;
-    const total = Object.keys(notifyPrefs).length;
-    return `${enabledCount} of ${total} enabled`;
-  }, [notifyPrefs]);
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -743,16 +728,11 @@ export function ProfileScreen({
                 subtitle={activeCurrency.label}
                 value={`${activeCurrency.symbol} ${activeCurrency.code}`}
                 kind="info"
-              />
-              <SettingsRow
-                icon={<BellGlyph color={ICON} size={16} />}
-                label="Notifications"
-                subtitle={notifSubtitle}
-                kind="nav"
                 last
-                onPress={() => setNotificationsOpen(true)}
               />
             </SettingsSection>
+
+            <NotificationsSettingsSection />
 
             <SettingsSection title="Financial Profile" padded>
               <MoneyField
@@ -913,14 +893,6 @@ export function ProfileScreen({
           currentAvatarUrl={avatarUrl}
           onSelectAvatar={setAvatarUrl}
           onClose={() => setAvatarOpen(false)}
-        />
-        <NotificationsSheet
-          visible={notificationsOpen}
-          values={notifyPrefs}
-          onChange={(id, value) =>
-            setNotifyPrefs(current => ({...current, [id]: value}))
-          }
-          onClose={() => setNotificationsOpen(false)}
         />
       </Screen>
     </Modal>
