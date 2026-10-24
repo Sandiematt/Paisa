@@ -43,6 +43,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Paisa uses the camera so you can take a profile picture.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Paisa uses your photos so you can set a profile picture.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Paisa uses Face ID to keep your finances locked.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>

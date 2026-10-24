@@ -3,7 +3,9 @@ import {
   daysToGoLabel,
   dayMonthLabel,
   greetingForHour,
+  recentTransactions,
   relatedTransactions,
+  savingsSeries,
   shortDateLabel,
   weeklySpendNudge,
 } from '../src/features/home/homeInsights';
@@ -222,5 +224,28 @@ describe('home report balance change', () => {
     expect(report.balance).toBe(1300);
     expect(report.balanceChange).toBe(300);
     expect(report.periodStart).toEqual({day: 1, monthIndex: 9});
+  });
+});
+
+describe('recentTransactions', () => {
+  it('returns the newest transactions first, capped at the limit', () => {
+    const rows = [
+      tx({id: 'a', type: 'expense', amount: 5, transactionDate: '2026-10-01'}),
+      tx({id: 'b', type: 'income', amount: 50, transactionDate: '2026-10-20'}),
+      tx({id: 'c', type: 'expense', amount: 9, transactionDate: '2026-10-10'}),
+    ];
+    expect(recentTransactions(rows, 2).map(row => row.id)).toEqual(['b', 'c']);
+  });
+});
+
+describe('savingsSeries', () => {
+  it('keeps a running income minus spending total up to today', () => {
+    const now = new Date(2026, 9, 4, 12);
+    const rows = [
+      tx({id: 'i', type: 'income', amount: 100, transactionDate: '2026-10-02'}),
+      tx({id: 'e', type: 'expense', amount: 30, transactionDate: '2026-10-03'}),
+      tx({id: 'later', type: 'expense', amount: 99, transactionDate: '2026-10-20'}),
+    ];
+    expect(savingsSeries(rows, 'month', now)).toEqual([0, 100, 70, 70]);
   });
 });

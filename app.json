@@ -25,7 +25,16 @@
         }
       ],
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Paisa uses your photos so you can set a profile picture.",
+          "cameraPermission": "Paisa uses the camera so you can take a profile picture.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-document-picker"
     ]
   }
 }

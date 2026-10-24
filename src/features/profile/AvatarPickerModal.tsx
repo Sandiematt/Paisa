@@ -1,9 +1,10 @@
 import React, {useEffect, useState} from 'react';
-import {Image, StyleSheet, View} from 'react-native';
+import {Alert, Image, Linking, StyleSheet, View} from 'react-native';
 
 import {CheckGlyph} from '../../components/icons/Glyphs';
 import {AppText, PressableScale, SecondaryButton} from '../../components/ui';
 import {colors, radii, spacing} from '../../theme';
+import {AvatarSource, pickAvatar} from './avatarImage';
 import {AVATAR_PRESETS, AvatarPreset} from './avatarPresets';
 import {SheetFrame} from './ProfileSheets';
 
@@ -32,6 +33,40 @@ export function AvatarPickerModal({
     }
   }, [currentAvatarUrl, visible]);
 
+  const [busy, setBusy] = useState(false);
+
+  const handlePick = async (source: AvatarSource) => {
+    if (busy) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await pickAvatar(source);
+      if (result.status === 'selected') {
+        setSelectedUrl(result.uri);
+        onSelectAvatar(result.uri);
+        onClose();
+      } else if (result.status === 'denied') {
+        const what = source === 'camera' ? 'camera' : 'photos';
+        Alert.alert(
+          `Allow ${what} access`,
+          `Paisa needs ${what} access to set your profile photo. You can turn it on in Settings.`,
+          [
+            {text: 'Not now', style: 'cancel'},
+            {text: 'Open Settings', onPress: () => Linking.openSettings()},
+          ],
+        );
+      }
+    } catch {
+      Alert.alert(
+        'Could not set photo',
+        'Something went wrong while loading that image. Please try another one.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleSelectPreset = (preset: AvatarPreset) => {
     setSelectedUrl(preset.url);
     onSelectAvatar(preset.url);
@@ -46,8 +81,28 @@ export function AvatarPickerModal({
 
   return (
     <SheetFrame visible={visible} title="Profile photo" onClose={onClose}>
+      <View style={styles.actions}>
+        <SecondaryButton
+          label="Choose from library"
+          onPress={() => handlePick('library')}
+          accessibilityHint="Pick a photo from your photo library"
+        />
+        <SecondaryButton
+          label="Choose from files"
+          onPress={() => handlePick('files')}
+          accessibilityHint="Pick an image from your files"
+          style={styles.actionGap}
+        />
+        <SecondaryButton
+          label="Take a photo"
+          onPress={() => handlePick('camera')}
+          accessibilityHint="Open the camera to take a new photo"
+          style={styles.actionGap}
+        />
+      </View>
+
       <AppText variant="label" color={colors.muted} style={styles.sectionLabel}>
-        Choose from presets
+        Or choose a preset
       </AppText>
       <View style={styles.grid}>
         {AVATAR_PRESETS.map(preset => {
@@ -103,6 +158,12 @@ export function AvatarPickerModal({
 }
 
 const styles = StyleSheet.create({
+  actions: {
+    marginBottom: spacing.xl,
+  },
+  actionGap: {
+    marginTop: spacing.sm,
+  },
   sectionLabel: {
     marginBottom: spacing.lg,
   },

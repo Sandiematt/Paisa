@@ -148,6 +148,14 @@ export function ActivityScreen({
     [filtered, normalizedQuery, selectedISO],
   );
 
+  const daySummaries = useMemo(() => {
+    const totals: Record<string, number> = {};
+    filtered.forEach(item => {
+      totals[item.date] = (totals[item.date] ?? 0) + item.amount;
+    });
+    return totals;
+  }, [filtered]);
+
   const listed = searching ? matches : dayItems;
 
   const groups = useMemo(() => {
@@ -310,6 +318,8 @@ export function ActivityScreen({
         onSelect={setSelectedDate}
         dayItems={dayItems}
         currencySymbol={currencySymbol}
+        daySummaries={daySummaries}
+        searching={searching}
       />
 
       <ScrollView

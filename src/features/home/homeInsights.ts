@@ -198,3 +198,57 @@ export function relatedTransactions(
     })
     .slice(0, limit);
 }
+
+/** Latest transactions across all time, newest first, ledger specials left out. */
+export function recentTransactions(
+  transactions: TransactionRow[],
+  limit: number,
+): TransactionRow[] {
+  return transactions
+    .filter(row => !isLedgerSpecial(row) && row.amount > 0)
+    .sort((a, b) => {
+      const byDay =
+        parseCalendarDate(b.transactionDate).getTime() -
+        parseCalendarDate(a.transactionDate).getTime();
+      if (byDay !== 0) {
+        return byDay;
+      }
+      return a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0;
+    })
+    .slice(0, limit);
+}
+
+/**
+ * Running savings (income minus spending) at the end of each day of the
+ * period, from its first day up to today. Starts at zero on day one so the
+ * line shows how savings built up, or ate into, this week or month.
+ */
+export function savingsSeries(
+  transactions: TransactionRow[],
+  range: HomeRange,
+  now = new Date(),
+): number[] {
+  const period = periodFor(range, now);
+  const today = startOfDay(now);
+  const last = today.getTime() < period.end.getTime() ? today : period.end;
+  const days = Math.round((last.getTime() - period.start.getTime()) / 86400000) + 1;
+  const net = new Array<number>(Math.max(days, 1)).fill(0);
+
+  for (const row of transactions) {
+    if (isLedgerSpecial(row) || row.amount <= 0) {
+      continue;
+    }
+    const day = parseCalendarDate(row.transactionDate).getTime();
+    if (Number.isNaN(day) || day < period.start.getTime() || day > last.getTime()) {
+      continue;
+    }
+    const index = Math.round((day - period.start.getTime()) / 86400000);
+    net[index] += row.type === 'income' ? row.amount : -row.amount;
+  }
+
+  let running = 0;
+  return net.map(value => {
+    running = roundMoney(running + value);
+    return running;
+  });
+}

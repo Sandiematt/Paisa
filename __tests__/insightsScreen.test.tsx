@@ -100,7 +100,14 @@ describe('InsightsScreen', () => {
 
   it('shows the skeleton while the first fetch is in flight', async () => {
     mockUseInsights.mockReturnValue({data: null, status: 'loading', error: null, reload: noop, refresh: noop});
+    jest.useFakeTimers();
     const tree = await render(<InsightsScreen currencySymbol="₹" />);
+    // Not shown immediately: fast loads must not flash a skeleton.
+    expect(textOf(tree)).not.toContain('Loading insights');
+    await act(async () => {
+      jest.advanceTimersByTime(300);
+    });
+    jest.useRealTimers();
     const json = textOf(tree);
     expect(json).toContain('Loading insights');
     expect(json).not.toContain('Where it went');

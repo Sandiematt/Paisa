@@ -26,6 +26,7 @@ import {InsightsScreen} from '../insights/InsightsScreen';
 import {NotificationHistorySheet} from '../notifications/NotificationHistorySheet';
 import {useNotifications} from '../notifications/NotificationsProvider';
 import {ProfileScreen} from '../profile/ProfileScreen';
+import {MoneySheet} from '../profile/ProfileSheets';
 import {profileCompleteness} from '../profile/profileCompleteness';
 
 // Lets a closing modal finish dismissing before the next one is presented.
@@ -49,6 +50,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   const [editRow, setEditRow] = useState<TransactionRow | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
+  const [budgetEditOpen, setBudgetEditOpen] = useState(false);
   const [savingsOpen, setSavingsOpen] = useState(false);
   const [ledgerFocus, setLedgerFocus] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -143,6 +145,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     const overlayOpen =
       profileOpen ||
       budgetOpen ||
+      budgetEditOpen ||
       savingsOpen ||
       addKind !== null ||
       notificationsOpen ||
@@ -150,6 +153,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     setNotificationsOpen(false);
     setProfileOpen(false);
     setBudgetOpen(false);
+    setBudgetEditOpen(false);
     setSavingsOpen(false);
     setSheetOpen(false);
     setAddKind(null);
@@ -180,6 +184,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     }
   }, [
     addKind,
+    budgetEditOpen,
     budgetOpen,
     consumeTarget,
     editRow,
@@ -222,11 +227,10 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
         profileProgress={profileCompleteness(profileDraft, MIN_CATEGORIES).ratio}
         onBudgetPress={() => setBudgetOpen(true)}
         onSavingsPress={() => setSavingsOpen(true)}
-        onSetupBudgetPress={() => setProfileOpen(true)}
+        onEditBudgetPress={() => setBudgetEditOpen(true)}
         onProfilePress={() => setProfileOpen(true)}
         onNotificationsPress={() => setNotificationsOpen(true)}
-        onComposePress={openComposer}
-        onHistoryPress={() => {
+        onSeeAllPress={() => {
           setSheetOpen(false);
           setTab('activity');
         }}
@@ -275,7 +279,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
 
   return (
     <FloatingNavScrollProvider
-          resetKey={`${tab}:${profileOpen}:${budgetOpen}:${savingsOpen}:${notificationsOpen}:${sheetOpen}:${addKind ?? ''}:${editRow?.id ?? ''}`}>
+          resetKey={`${tab}:${profileOpen}:${budgetOpen}:${budgetEditOpen}:${savingsOpen}:${notificationsOpen}:${sheetOpen}:${addKind ?? ''}:${editRow?.id ?? ''}`}>
       <View style={styles.root} collapsable={false}>
         <View style={styles.stage} collapsable={false}>
           {page}
@@ -288,10 +292,6 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
             setTab(next);
           }}
           onAddPress={onAddPress}
-          onProfilePress={() => {
-            setSheetOpen(false);
-            setProfileOpen(true);
-          }}
           addOpen={sheetOpen && addKind === null}
         />
 
@@ -334,6 +334,25 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           range={report.range ?? 'month'}
           transactions={transactions}
           categories={categories}
+        />
+
+        <MoneySheet
+          visible={budgetEditOpen}
+          title={moneyPlan.monthlyBudget > 0 ? 'Edit budget' : 'Add budget'}
+          label="Monthly spending budget"
+          symbol={currency.symbol}
+          value={profileDraft.monthlyBudget}
+          lead="The most you plan to spend each month. Week and day limits follow from it."
+          onDone={value => {
+            if (value === profileDraft.monthlyBudget) {
+              return;
+            }
+            const updated = {...profileDraft, monthlyBudget: value};
+            setProfileDraft(updated);
+            onProfileSave(updated, {keepCurrency: true});
+            setRefreshNonce(n => n + 1);
+          }}
+          onClose={() => setBudgetEditOpen(false)}
         />
 
         <SavingsDetailsScreen

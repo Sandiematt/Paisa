@@ -18,19 +18,35 @@ export function useInsights(period: InsightPeriod) {
   const {user} = useAuth();
   const cacheRef = useRef<Map<InsightPeriod, InsightsResponse>>(new Map());
 
-  const [data, setData] = useState<InsightsResponse | null>(() => cacheRef.current.get(period) ?? null);
-  const [status, setStatus] = useState<InsightsFetchStatus>(cacheRef.current.has(period) ? 'ready' : 'loading');
+  const periodRef = useRef<InsightPeriod>(period);
+  periodRef.current = period;
+  // Whatever is on screen. Deliberately NOT cleared on a period change: the old
+  // numbers stay visible until the new ones arrive, so the screen never blanks
+  // out into a skeleton and back.
+  const dataRef = useRef<InsightsResponse | null>(null);
+
+  const [data, setDataState] = useState<InsightsResponse | null>(null);
+  const [status, setStatus] = useState<InsightsFetchStatus>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [isFetching, setIsFetching] = useState(true);
+
+  const setData = useCallback((next: InsightsResponse | null) => {
+    dataRef.current = next;
+    setDataState(next);
+  }, []);
 
   const load = useCallback(
     async (targetPeriod: InsightPeriod, options: {background?: boolean} = {}) => {
       if (!user) {
         setData(null);
         setStatus('ready');
+        setIsFetching(false);
         return;
       }
+      setIsFetching(true);
       if (!options.background) {
-        setStatus('loading');
+        // Only a true first load (nothing to show yet) is a "loading" state.
+        if (dataRef.current === null) setStatus('loading');
         setError(null);
       }
       try {
@@ -41,19 +57,25 @@ export function useInsights(period: InsightPeriod) {
           throw new Error('This view needs the latest server update.');
         }
         cacheRef.current.set(targetPeriod, response);
+        // Ignore responses for a period the user has already moved away from.
+        if (periodRef.current !== targetPeriod) return;
         setData(response);
         setStatus('ready');
         setError(null);
+        setIsFetching(false);
       } catch (caught) {
+        if (periodRef.current !== targetPeriod) return;
+        setIsFetching(false);
         // If we already have cached data for this period, keep showing it
         // rather than replacing it with an error state on a background refresh.
         if (!cacheRef.current.has(targetPeriod)) {
+          setData(null);
           setError(caught instanceof Error ? caught.message : 'Could not load insights.');
           setStatus('error');
         }
       }
     },
-    [user],
+    [user, setData],
   );
 
   useEffect(() => {
@@ -63,7 +85,7 @@ export function useInsights(period: InsightPeriod) {
       setStatus('ready');
       load(period, {background: true});
     } else {
-      setData(null);
+      // Keep the previous period's data on screen while this one loads.
       load(period);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,5 +96,5 @@ export function useInsights(period: InsightPeriod) {
   /** Pull-to-refresh: keeps whatever is on screen and swaps data in when it arrives. */
   const refresh = useCallback(() => load(period, {background: true}), [load, period]);
 
-  return {data, status, error, reload, refresh};
+  return {data, status, error, isFetching, reload, refresh};
 }

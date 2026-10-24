@@ -54,6 +54,7 @@ import {InsightsData, InsightsPeriod, insightsData} from './insightsPlaceholder'
 import type {ChangeKind} from './insightsTypes';
 import {buildInsightsDataFromResponse} from './mapInsights';
 import {SpendingBars} from './SpendingBars';
+import {useLoadingGate} from './loadingGate';
 import {useInsights} from './useInsights';
 
 export type InsightsScreenProps = {
@@ -432,6 +433,22 @@ function useSkeletonPulse(reducedMotion: boolean): Animated.Value {
   return opacity;
 }
 
+/** Fades its children in once on mount; stays put (no re-fade) across re-renders. */
+function FadeIn({children}: {children: React.ReactNode}) {
+  const reducedMotion = useReducedMotion();
+  const opacity = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
+  useEffect(() => {
+    if (reducedMotion) {
+      opacity.setValue(1);
+      return;
+    }
+    const animation = Animated.timing(opacity, {toValue: 1, duration: 220, useNativeDriver: true});
+    animation.start();
+    return () => animation.stop();
+  }, [opacity, reducedMotion]);
+  return <Animated.View style={{opacity}}>{children}</Animated.View>;
+}
+
 function SkeletonBlock({opacity, style}: {opacity: Animated.Value; style?: object}) {
   return <Animated.View style={[styles.skeletonBlock, style, {opacity}]} />;
 }
@@ -471,6 +488,12 @@ function InsightsSkeleton() {
           </View>
         ))}
       </Card>
+
+      <View style={[styles.aiCard, styles.sectionGap, styles.skeletonAi]}>
+        <SkeletonBlock opacity={opacity} style={styles.skeletonLabel} />
+        <SkeletonBlock opacity={opacity} style={styles.skeletonCompare} />
+        <SkeletonBlock opacity={opacity} style={styles.skeletonCompare} />
+      </View>
     </View>
   );
 }
@@ -483,7 +506,14 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
 
   const insights = useInsights(period);
   const isLive = insights.status === 'ready' && insights.data !== null;
-  const showSkeleton = insights.status === 'loading' && !isLive;
+  // "Loading" only means a true first load with nothing to show. Period switches
+  // and refreshes keep the previous data on screen (see useInsights).
+  const loading = insights.status === 'loading' && !isLive;
+  // The skeleton appears only if loading outlasts a short delay, then holds for a
+  // minimum time, so fast loads never flash it. Until then, reserve the space.
+  const skeletonVisible = useLoadingGate(loading);
+  const showSkeleton = skeletonVisible;
+  const showPending = loading && !skeletonVisible;
   const hasError = insights.status === 'error';
 
   const data = useMemo<InsightsData>(() => {
@@ -549,9 +579,13 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
         ) : null}
 
         {showSkeleton ? (
-          <InsightsSkeleton />
+          <FadeIn key="skeleton">
+            <InsightsSkeleton />
+          </FadeIn>
+        ) : showPending ? (
+          <View style={styles.pendingSpace} />
         ) : (
-          <>
+          <FadeIn key="content">
             <SummaryCard data={data} labels={labels} currencySymbol={currencySymbol} />
             {hasSpending ? (
               <>
@@ -567,7 +601,7 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
               currencySymbol={currencySymbol}
               caption={previousPeriodLabel(data.period, data.referenceDate)}
             />
-          </>
+          </FadeIn>
         )}
       </ScrollView>
     </Screen>
@@ -935,9 +969,18 @@ const styles = StyleSheet.create({
   skeletonBlock: {
     backgroundColor: colors.surfaceRaised,
   },
+  pendingSpace: {
+    minHeight: 640,
+  },
   skeletonSummary: {
     marginTop: 18,
     gap: 14,
+    minHeight: 306,
+  },
+  skeletonAi: {
+    minHeight: 190,
+    gap: 14,
+    backgroundColor: colors.surface,
   },
   skeletonLabel: {
     width: 120,
@@ -961,12 +1004,13 @@ const styles = StyleSheet.create({
   },
   skeletonBarsCard: {
     marginTop: 14,
+    minHeight: 220,
   },
   skeletonBarsRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    height: 100,
+    height: 120,
   },
   skeletonBar: {
     width: '21%',

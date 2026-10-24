@@ -2,7 +2,7 @@ import React, {useEffect, useRef} from 'react';
 import {Animated, Pressable, StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {ChartBar, House, Plus, Receipt, User} from 'phosphor-react-native';
+import {ChartBar, House, Plus, Receipt} from 'phosphor-react-native';
 
 import {
   FLOATING_NAV_GAP,
@@ -34,7 +34,6 @@ type NavBarProps = {
   activeTab: TabId;
   onTabPress: (tab: TabId) => void;
   onAddPress: () => void;
-  onProfilePress: () => void;
   addOpen?: boolean;
 };
 
@@ -109,7 +108,6 @@ export function NavBar({
   activeTab,
   onTabPress,
   onAddPress,
-  onProfilePress,
   addOpen = false,
 }: NavBarProps) {
   const insets = useSafeAreaInsets();
@@ -191,14 +189,6 @@ export function NavBar({
               </NavSlot>
             );
           })}
-          <NavSlot
-            label="Profile"
-            active={false}
-            onPress={onProfilePress}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile">
-            <User color={colors.muted} size={layout.navIcon} weight="regular" />
-          </NavSlot>
         </GlassPanel>
 
         <Pressable
@@ -268,8 +258,9 @@ const styles = StyleSheet.create({
     gap: 2,
   },
 
+  // Opaque so the glass blur behind the bar cannot show through unevenly.
   itemActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: colors.surfaceRaised,
   },
 
   label: {

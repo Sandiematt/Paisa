@@ -1,7 +1,7 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
 
-import {AppText, Card} from '../../components/ui';
+import {AppText, Card, PressableScale} from '../../components/ui';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
@@ -14,6 +14,8 @@ type RelatedTransactionsProps = {
   categories: CategoryRow[];
   currencySymbol: string;
   emptyText: string;
+  /** Adds a "See all" link in the header. */
+  onSeeAll?: () => void;
 };
 
 /** Short list of the transactions behind a Budget or Savings figure. */
@@ -23,12 +25,27 @@ export function RelatedTransactions({
   categories,
   currencySymbol,
   emptyText,
+  onSeeAll,
 }: RelatedTransactionsProps) {
   return (
     <Card style={styles.card}>
-      <AppText variant="heading" accessibilityRole="header">
-        {title}
-      </AppText>
+      <View style={styles.header}>
+        <AppText variant="heading" accessibilityRole="header" style={styles.title}>
+          {title}
+        </AppText>
+        {onSeeAll ? (
+          <PressableScale
+            onPress={onSeeAll}
+            scaleTo={0.94}
+            hitSlop={10}
+            accessibilityRole="button"
+            accessibilityLabel="See all transactions">
+            <AppText variant="label" color={colors.lavender}>
+              See all
+            </AppText>
+          </PressableScale>
+        ) : null}
+      </View>
       {rows.length === 0 ? (
         <AppText variant="label" color={colors.muted} style={styles.empty}>
           {emptyText}
@@ -89,6 +106,15 @@ export function RelatedTransactions({
 const styles = StyleSheet.create({
   card: {
     gap: 4,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  title: {
+    flexShrink: 1,
   },
   empty: {
     marginTop: 8,

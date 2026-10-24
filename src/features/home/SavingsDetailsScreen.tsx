@@ -8,7 +8,8 @@ import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
 import {colors} from '../../theme';
 import {DetailsFrame, HeroCard, StatCard, StatRow, detailsStyles} from './DetailsParts';
-import {relatedTransactions} from './homeInsights';
+import {AreaChart} from './charts';
+import {relatedTransactions, savingsSeries} from './homeInsights';
 import {
   HomeRange,
   SavingsState,
@@ -64,6 +65,12 @@ export function SavingsDetailsScreen({
     () => (visible ? relatedTransactions(transactions, range, 'all', 8) : EMPTY_ROWS),
     [range, transactions, visible],
   );
+
+  const series = useMemo(
+    () => (visible ? savingsSeries(transactions, range) : [0]),
+    [range, transactions, visible],
+  );
+  const hasActivity = series.some(value => value !== 0);
 
   const savedColor =
     savingsState.kind === 'negative'
@@ -128,6 +135,30 @@ export function SavingsDetailsScreen({
           />
         ) : null}
       </StatRow>
+
+      <Card style={detailsStyles.gap}>
+        <AppText variant="heading" accessibilityRole="header" style={detailsStyles.cardTitle}>
+          {`Savings ${periodLabel}`}
+        </AppText>
+        {hasActivity ? (
+          <>
+            <AreaChart
+              values={series}
+              height={120}
+              accessibilityLabel={`Savings trend ${periodLabel}, ${money(
+                series[series.length - 1] ?? 0,
+              )} so far`}
+            />
+            <AppText variant="caption" color={colors.muted}>
+              Running income minus spending, day by day.
+            </AppText>
+          </>
+        ) : (
+          <AppText variant="body" color={colors.muted}>
+            Add income and expenses and your savings trend will draw here.
+          </AppText>
+        )}
+      </Card>
 
       {monthlySavingsGoal > 0 ? (
         <Card style={detailsStyles.gap}>

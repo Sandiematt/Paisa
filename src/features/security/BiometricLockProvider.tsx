@@ -41,8 +41,11 @@ const BiometricLockContext = createContext<BiometricLockValue | null>(null);
 
 export function BiometricLockProvider({
   children,
+  suspended = false,
 }: {
   children: React.ReactNode;
+  /** Hold the lock screen (and its prompt) back, e.g. while the launch splash plays. */
+  suspended?: boolean;
 }) {
   const {user, signOut} = useAuth();
   const userId = user?.id ?? null;
@@ -120,7 +123,7 @@ export function BiometricLockProvider({
     <BiometricLockContext.Provider value={value}>
       {children}
       <LockScreen
-        visible={locked && !!userId}
+        visible={locked && !!userId && !suspended}
         onUnlocked={() => setLocked(false)}
         onSignOut={signOut}
       />

@@ -40,11 +40,12 @@ export const shadows = {
     ios: iosShadow(0.5, 15, 12),
     default: {elevation: 8, shadowColor: black},
   })!,
-  /** Violet FAB glow: rgba(109,74,255,0.55) 0 10 26. */
-  add: Platform.select<ViewStyle>({
-    ios: iosShadow(0.55, 13, 10, violetGlow),
-    default: {elevation: 8, shadowColor: violetGlow},
-  })!,
+  /**
+   * Violet FAB glow: rgba(109,74,255,0.55) 0 10 26. `boxShadow` follows the
+   * round outline on both platforms; Android `elevation` cannot tint the
+   * shadow and draws it unevenly under a gradient background.
+   */
+  add: {boxShadow: '0px 10px 26px rgba(109, 74, 255, 0.55)'} as ViewStyle,
   /** Gradient icon square glow: rgba(109,74,255,0.45) 0 6 16. */
   iconGlow: Platform.select<ViewStyle>({
     ios: iosShadow(0.45, 8, 6, violetGlow),

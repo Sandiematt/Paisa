@@ -15,8 +15,8 @@ import {
   Bell,
   CaretRight,
   ChartBar,
-  ClockCounterClockwise,
   PiggyBank,
+  Plus,
   Wallet,
   Warning,
   X,
@@ -38,8 +38,8 @@ import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
 import {colors, fonts, layout, radii, withAlpha} from '../../theme';
-import {AddKind} from '../add/types';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
+import {isLocalAvatarUri} from '../profile/avatarImage';
 import {useNotifications} from '../notifications/NotificationsProvider';
 import {AreaChart} from './charts';
 import {
@@ -47,9 +47,13 @@ import {
   daysToGo,
   daysToGoLabel,
   greetingForHour,
+  recentTransactions,
   weeklySpendNudge,
 } from './homeInsights';
 import {HomeRange, HomeReport, SavingsState, rangeNoun, rangeScopeLabel} from './homeReport';
+import {RelatedTransactions} from './RelatedTransactions';
+
+const RECENT_LIMIT = 5;
 
 type DashboardStatus = 'loading' | 'ready' | 'error';
 
@@ -62,11 +66,12 @@ type HomeScreenProps = {
   onBudgetPress?: () => void;
   onSavingsPress?: () => void;
   /** Opens where the budget is set when there is none yet. */
-  onSetupBudgetPress?: () => void;
+  /** Opens the budget editor: sets a first budget or changes the current one. */
+  onEditBudgetPress?: () => void;
   onProfilePress?: () => void;
   onNotificationsPress?: () => void;
-  onComposePress?: (kind: AddKind) => void;
-  onHistoryPress?: () => void;
+  /** Jumps to the Activity tab. */
+  onSeeAllPress?: () => void;
   report: HomeReport;
   transactions: TransactionRow[];
   categories: CategoryRow[];
@@ -97,6 +102,10 @@ const tabular = {fontVariant: ['tabular-nums'] as const};
 function isSafeAvatarUrl(url: string | undefined): url is string {
   if (!url) {
     return false;
+  }
+  // A photo the user picked is copied into the app's own folder.
+  if (isLocalAvatarUri(url)) {
+    return true;
   }
   try {
     return new URL(url).protocol === 'https:';
@@ -156,29 +165,36 @@ function syncCaption(
   return `Updated ${minutes} min ago`;
 }
 
-type QuickTileProps = {
+type StatTileProps = {
   label: string;
+  amount: string;
   icon: React.ReactNode;
-  onPress?: () => void;
   accessibilityLabel: string;
 };
 
-function QuickTile({label, icon, onPress, accessibilityLabel}: QuickTileProps) {
+function StatTile({label, amount, icon, accessibilityLabel}: StatTileProps) {
   return (
-    <PressableScale
-      onPress={onPress}
-      scaleTo={0.96}
-      accessibilityRole="button"
+    <View
+      accessible
       accessibilityLabel={accessibilityLabel}
-      containerStyle={styles.tileWrap}
-      style={styles.tile}>
+      style={[styles.tileWrap, styles.tile]}>
       <GradientIconSquare size={38} glow>
         {icon}
       </GradientIconSquare>
-      <AppText variant="bodyStrong" style={styles.tileLabel}>
-        {label}
-      </AppText>
-    </PressableScale>
+      <View style={styles.tileText}>
+        <AppText variant="caption" color={colors.muted}>
+          {label}
+        </AppText>
+        <AppText
+          variant="bodyStrong"
+          style={[styles.tileAmount, tabular]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}>
+          {amount}
+        </AppText>
+      </View>
+    </View>
   );
 }
 
@@ -194,6 +210,9 @@ type GoalCardProps = {
   valueTone?: string;
   accessibilityLabel: string;
   onPress?: () => void;
+  /** Swaps the caret for a + button with its own action. */
+  onAddPress?: () => void;
+  addLabel?: string;
 };
 
 function GoalCard({
@@ -208,6 +227,8 @@ function GoalCard({
   valueTone = colors.muted,
   accessibilityLabel,
   onPress,
+  onAddPress,
+  addLabel,
 }: GoalCardProps) {
   return (
     <PressableScale
@@ -222,7 +243,19 @@ function GoalCard({
         <GradientIconSquare size={34} gradient={iconGradient}>
           {icon}
         </GradientIconSquare>
-        <CaretRight size={18} color={colors.muted} weight="bold" />
+        {onAddPress ? (
+          <PressableScale
+            onPress={onAddPress}
+            scaleTo={0.88}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={addLabel}
+            style={styles.goalAdd}>
+            <Plus size={16} color={colors.text} weight="bold" />
+          </PressableScale>
+        ) : (
+          <CaretRight size={18} color={colors.muted} weight="bold" />
+        )}
       </View>
       <ProgressRing
         size={112}
@@ -268,7 +301,7 @@ function BudgetGoalCard({
   range,
   showBudget,
   onPress,
-  onSetupPress,
+  onEditPress,
 }: {
   budget: number;
   remainingBudget: number;
@@ -276,7 +309,7 @@ function BudgetGoalCard({
   range: HomeRange;
   showBudget: boolean;
   onPress?: () => void;
-  onSetupPress?: () => void;
+  onEditPress?: () => void;
 }) {
   const icon = <Wallet size={17} weight="fill" color={colors.text} />;
   const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
@@ -290,9 +323,11 @@ function BudgetGoalCard({
         ringGradient="primary"
         centerTop={<RingPercent text="Set up" color={colors.lavender} />}
         title="Budget"
-        value="No budget yet"
-        accessibilityLabel="Budget, not set. Opens your profile to set one"
-        onPress={onSetupPress}
+        value="Add a budget"
+        accessibilityLabel="Budget, not set. Add a budget"
+        onPress={onEditPress}
+        onAddPress={onEditPress}
+        addLabel="Add budget"
       />
     );
   }
@@ -328,6 +363,8 @@ function BudgetGoalCard({
         over ? `over ${scope}` : `left ${scope}`
       }, ${usedPct} percent used`}
       onPress={onPress}
+      onAddPress={onEditPress}
+      addLabel="Edit budget"
     />
   );
 }
@@ -445,11 +482,10 @@ export function HomeScreen({
   profileProgress,
   onBudgetPress,
   onSavingsPress,
-  onSetupBudgetPress,
+  onEditBudgetPress,
   onProfilePress,
   onNotificationsPress,
-  onComposePress,
-  onHistoryPress,
+  onSeeAllPress,
   report: data,
   transactions,
   categories,
@@ -477,6 +513,11 @@ export function HomeScreen({
   const firstName = useMemo(
     () => (name.trim() || 'there').split(/\s+/)[0],
     [name],
+  );
+
+  const recent = useMemo(
+    () => recentTransactions(transactions, RECENT_LIMIT),
+    [transactions],
   );
 
   const nudge = useMemo(
@@ -687,38 +728,22 @@ export function HomeScreen({
               </View>
             </View>
 
-            {showBudget && !data.empty && onBudgetPress ? (
-              <PressableScale
-                onPress={onBudgetPress}
-                scaleTo={0.99}
-                accessibilityRole="button"
-                accessibilityLabel={`${stripText}. Opens budget details`}>
-                {strip}
-              </PressableScale>
-            ) : (
-              strip
-            )}
+            {strip}
           </GradientView>
         </View>
 
         <View style={styles.tiles}>
-          <QuickTile
+          <StatTile
             label="Expense"
-            accessibilityLabel="Add an expense"
+            amount={money(data.spent)}
             icon={<ArrowUpRight size={18} weight="bold" color={colors.text} />}
-            onPress={onComposePress ? () => onComposePress('expense') : undefined}
+            accessibilityLabel={`Expense this ${noun}, ${money(data.spent)}`}
           />
-          <QuickTile
+          <StatTile
             label="Income"
-            accessibilityLabel="Add income"
+            amount={money(data.income)}
             icon={<ArrowDownLeft size={18} weight="bold" color={colors.text} />}
-            onPress={onComposePress ? () => onComposePress('income') : undefined}
-          />
-          <QuickTile
-            label="History"
-            accessibilityLabel="Open transaction history"
-            icon={<ClockCounterClockwise size={18} weight="bold" color={colors.text} />}
-            onPress={onHistoryPress}
+            accessibilityLabel={`Income this ${noun}, ${money(data.income)}`}
           />
         </View>
 
@@ -758,7 +783,7 @@ export function HomeScreen({
             range={range}
             showBudget={showBudget}
             onPress={onBudgetPress}
-            onSetupPress={onSetupBudgetPress}
+            onEditPress={onEditBudgetPress}
           />
           <SavingsGoalCard
             actualSavings={data.actualSavings}
@@ -768,6 +793,17 @@ export function HomeScreen({
             currencySymbol={currencySymbol}
             range={range}
             onPress={onSavingsPress}
+          />
+        </View>
+
+        <View style={styles.recent}>
+          <RelatedTransactions
+            title="Recent transactions"
+            rows={recent}
+            categories={categories}
+            currencySymbol={currencySymbol}
+            emptyText="Nothing yet. Tap + to add your first transaction."
+            onSeeAll={recent.length > 0 ? onSeeAllPress : undefined}
           />
         </View>
       </ScrollView>
@@ -945,20 +981,23 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   tile: {
-    height: 96,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 14,
-    gap: 8,
+    padding: 14,
+    gap: 12,
     borderRadius: radii.tile,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.surface,
   },
-  tileLabel: {
-    fontFamily: fonts.jakartaSemiBold,
-    fontSize: 14,
-    lineHeight: 20,
+  tileText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tileAmount: {
+    fontFamily: fonts.jakartaBold,
+    fontSize: 17,
+    lineHeight: 22,
   },
   nudge: {
     marginTop: 14,
@@ -990,6 +1029,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.surface,
+  },
+  goalAdd: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  recent: {
+    marginTop: 26,
   },
   goalHead: {
     flexDirection: 'row',
