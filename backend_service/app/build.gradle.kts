@@ -12,7 +12,12 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        // Platform runner (android.test), not AndroidX: the device test keeps the framework-only setup.
+        testInstrumentationRunner = "android.test.InstrumentationTestRunner"
     }
+
+    useLibrary("android.test.runner")
+    useLibrary("android.test.base")
 
     buildTypes {
         release {

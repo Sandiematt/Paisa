@@ -81,6 +81,13 @@
         android:textColor="@color/text_primary"
         android:textSize="14sp" />
 
+    <Button
+        android:id="@+id/setLimit"
+        style="?android:attr/borderlessButtonStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/set_daily_limit" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

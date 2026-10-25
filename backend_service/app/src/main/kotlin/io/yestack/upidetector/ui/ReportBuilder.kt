@@ -88,6 +88,7 @@ object ReportBuilder {
                 .append(" flag=").append(t.flag ?: "-")
             if (t.flagReason != null) append(" reason=").append(t.flagReason!!.flat())
             if (t.possibleDuplicateOfId != null) append(" duplicateOf=#").append(t.possibleDuplicateOfId)
+            if (t.note != null) append(" note=").append(t.note!!.flat())
             append('\n')
         }
         append("Expense total (SUCCESS + DEBIT, not flagged): ").append(total.toPlainString()).append("\n\n")
@@ -106,7 +107,8 @@ object ReportBuilder {
             append("-- ").append(SupportedApps.displayName(c.snapshot.packageName))
                 .append(' ').append(c.snapshot.screenClass ?: "?")
                 .append(" at ").append(full.format(Date(c.timeMillis)))
-                .append(", ").append(c.snapshot.nodes.size).append(" nodes, verdict: ").append(c.verdict).append('\n')
+                .append(", ").append(c.snapshot.nodes.size).append(" nodes, verdict: ").append(c.verdict.flat()).append('\n')
+            if (c.detail != null) append("   ").append(c.detail.flat()).append('\n')
             append(formatNodes(c)).append('\n')
         }
     }

@@ -12,13 +12,17 @@
   who may declare it, so revisit before any store release.
   flagRetrieveInteractiveWindows: lets the service find the UPI app's window when
   the active window is a dialog, keyboard or bottom sheet.
+  notificationTimeout 50 ms: the daily-limit check runs on events directly, so a shorter delay gets the warning up
+  sooner; windows are read on the event and only the payment decision is debounced in the service.
+  typeWindowsChanged: a window added or removed (PhonePe's processing/result window over the chat, or the app being
+  covered) can come with no content event of its own.
 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
     android:isAccessibilityTool="true"
     android:description="@string/accessibility_service_description"
-    android:notificationTimeout="100"
+    android:notificationTimeout="50"
     android:packageNames="com.google.android.apps.nbu.paisa.user,com.phonepe.app,net.one97.paytm" />

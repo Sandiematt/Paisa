@@ -10,6 +10,7 @@ import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.text.TextUtils
 import android.view.LayoutInflater
 import android.view.View
@@ -18,6 +19,8 @@ import android.view.accessibility.AccessibilityManager
 import android.widget.BaseAdapter
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ScrollView
@@ -58,6 +61,7 @@ class MainActivity : Activity(), AppStore.Listener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppStore.init(applicationContext)
         setContentView(R.layout.activity_main)
         serviceStatus = findViewById(R.id.serviceStatus)
         notificationStatus = findViewById(R.id.notificationStatus)
@@ -85,6 +89,7 @@ class MainActivity : Activity(), AppStore.Listener {
         }
         rawCheck.isChecked = AppStore.rawCaptureEnabled
         rawCheck.setOnCheckedChangeListener { _, checked -> AppStore.rawCaptureEnabled = checked }
+        findViewById<Button>(R.id.setLimit).setOnClickListener { editDailyLimit() }
         findViewById<Button>(R.id.share).setOnClickListener { shareReport() }
         findViewById<Button>(R.id.clear).setOnClickListener { confirmClear() }
 
@@ -189,7 +194,11 @@ class MainActivity : Activity(), AppStore.Listener {
         val txns = AppStore.transactions
         val total = AppStore.expenseTotal()
         val flagged = txns.count { it.flag != null }
-        stats.text = getString(
+        val today = AppStore.todaySpent(System.currentTimeMillis()).toPlainString()
+        val limit = AppStore.dailyLimit
+        val todayLine = if (limit == null) getString(R.string.today_no_limit, today)
+        else getString(R.string.today_format, today, limit.toPlainString())
+        stats.text = todayLine + "\n" + getString(
             R.string.stats_format,
             total.toPlainString(),
             txns.count { it.status == TxnStatus.SUCCESS },
@@ -227,6 +236,35 @@ class MainActivity : Activity(), AppStore.Listener {
             .setPositiveButton(R.string.clear) { _, _ -> AppStore.clear() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+    }
+
+    private fun editDailyLimit() {
+        val input = EditText(this).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setHint(R.string.daily_limit_hint)
+            AppStore.dailyLimit?.let { setText(it.toPlainString()) }
+        }
+        val box = FrameLayout(this).apply {
+            setPadding(dp(20), dp(4), dp(20), 0)
+            addView(input)
+        }
+        val builder = AlertDialog.Builder(this)
+            .setTitle(R.string.daily_limit_title)
+            .setMessage(R.string.daily_limit_message)
+            .setView(box)
+            .setPositiveButton(R.string.save) { _, _ ->
+                val value = input.text.toString().trim().toBigDecimalOrNull()
+                if (value == null || value.signum() <= 0 || value.stripTrailingZeros().scale() > 2) {
+                    Toast.makeText(this, R.string.daily_limit_invalid, Toast.LENGTH_LONG).show()
+                } else {
+                    AppStore.updateDailyLimit(value)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+        if (AppStore.dailyLimit != null) {
+            builder.setNeutralButton(R.string.daily_limit_remove) { _, _ -> AppStore.updateDailyLimit(null) }
+        }
+        builder.show()
     }
 
     private fun confirmMerge(t: Transaction) {
@@ -313,7 +351,8 @@ class MainActivity : Activity(), AppStore.Listener {
                     ),
                 )
             }
-            v.findViewById<TextView>(R.id.merchant).text = t.merchant ?: "(no merchant)"
+            v.findViewById<TextView>(R.id.merchant).text = (t.merchant ?: "(no merchant)") +
+                (t.note?.let { " · " + getString(R.string.note_label, it) } ?: "")
             v.findViewById<TextView>(R.id.meta).text =
                 "Ref ${t.upiRef ?: "-"} · ${timeFormat.format(Date(t.detectedAtMillis))}" +
                     if (t.updatedAtMillis != t.detectedAtMillis) " (updated ${timeFormat.format(Date(t.updatedAtMillis))})" else ""

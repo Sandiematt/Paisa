@@ -25,6 +25,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Post-payment "what was this for?" dialog, started by the accessibility service over the UPI app. -->
+        <activity
+            android:name=".ui.NoteActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/Theme.UpiDetector.Note"
+            android:windowSoftInputMode="stateVisible|adjustResize" />
+
         <service
             android:name=".service.UpiAccessibilityService"
             android:exported="true"
