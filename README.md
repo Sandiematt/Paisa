@@ -1,3 +1,7 @@
+
+
+
+
 <p align="center">
   <img src="assets/logo/logo.png" alt="Paisa logo" width="180">
 </p>
@@ -5,8 +9,7 @@
 # Paisa
 
 ## Demo
-
-[Watch the demo video](docs/paisa-demo.mp4)
+https://github.com/user-attachments/assets/a9deb1eb-1c2c-44d8-b31f-6bc5b67e8107
 
 This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
