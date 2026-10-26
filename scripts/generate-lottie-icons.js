@@ -402,10 +402,51 @@ function bell() {
   return composition('tile-bell', 30, [clapper, dome]);
 }
 
+function receipt() {
+  // A scan line sweeps down the slip, then its printed lines write in.
+  const zigzag = [];
+  for (let i = 0; i <= 6; i += 1) {
+    zigzag.push([34 - i * (20 / 6), i % 2 === 0 ? 40 : 37.5]);
+  }
+  const paper = group(
+    'paper',
+    [polygon([[14, 8], [34, 8], ...zigzag, [14, 8]], true), round(1.5), stroke(LIGHT, 3)],
+    tr({
+      a: pt(24, 24),
+      p: pt(24, 24),
+      s: anim([
+        [0, [100, 100]],
+        [4, [94, 94]],
+        [12, [104, 104]],
+        [20, [100, 100]],
+      ]),
+    }),
+  );
+  const line = (nm, x2, y, start) =>
+    group(nm, [
+      polygon([[19, y], [x2, y]], false),
+      stroke(LIGHT, 2.5),
+      trim(anim([[start, 0], [start + 8, 100]])),
+    ]);
+  const beam = group(
+    'beam',
+    [rect(24, 0, 26, 2.5, 1.25), fill(LAVENDER, anim([[0, 0], [3, 100], [20, 100], [24, 0]]))],
+    tr({p: anim([[0, pt(0, 10)], [22, pt(0, 37)]], LINEAR)}),
+  );
+  return composition('tile-receipt', 40, [
+    beam,
+    line('line-1', 29, 16, 10),
+    line('line-2', 29, 22, 15),
+    line('line-3', 25, 28, 20),
+    paper,
+  ]);
+}
+
 const icons = {
   'tile-wallet': wallet(),
   'tile-piggy': piggy(),
   'tile-bell': bell(),
+  'tile-receipt': receipt(),
   'nav-home': home(),
   'nav-activity': activity(),
   'nav-insights': insights(),

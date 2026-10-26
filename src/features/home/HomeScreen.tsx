@@ -38,6 +38,7 @@ import {colors, dataReveal, fonts, layout, radii, withAlpha} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {isLocalAvatarUri} from '../profile/avatarImage';
 import {useNotifications} from '../notifications/NotificationsProvider';
+import {useTutorialTarget} from '../tutorial/TutorialProvider';
 import {AreaChart} from './charts';
 import {
   dayMonthLabel,
@@ -610,6 +611,11 @@ export function HomeScreen({
   const notificationsLabel =
     unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications';
 
+  const profileTarget = useTutorialTarget('home.profile');
+  const notificationsTarget = useTutorialTarget('home.notifications');
+  const balanceTarget = useTutorialTarget('home.balance');
+  const totalsTarget = useTutorialTarget('home.totals');
+
   return (
     <Screen edges={['top']} glow={300} bottomInset={navDockHeight}>
       <ScrollView
@@ -631,30 +637,32 @@ export function HomeScreen({
         }
         showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <PressableScale
-            onPress={onProfilePress}
-            disabled={!onProfilePress}
-            scaleTo={0.94}
-            accessibilityRole="button"
-            accessibilityLabel={`Open profile, ${progressPct} percent complete`}>
-            <ProgressRing
-              size={AVATAR_RING}
-              stroke={3}
-              progress={profileProgress}
-              style={styles.avatarRing}>
-              <View style={styles.avatarFace}>
-                {hasAvatar ? (
-                  <Image
-                    source={{uri: avatarUrl}}
-                    style={styles.avatarPhoto}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <AppText style={styles.avatarInitials}>{initialsFrom(name)}</AppText>
-                )}
-              </View>
-            </ProgressRing>
-          </PressableScale>
+          <View ref={profileTarget} collapsable={false}>
+            <PressableScale
+              onPress={onProfilePress}
+              disabled={!onProfilePress}
+              scaleTo={0.94}
+              accessibilityRole="button"
+              accessibilityLabel={`Open profile, ${progressPct} percent complete`}>
+              <ProgressRing
+                size={AVATAR_RING}
+                stroke={3}
+                progress={profileProgress}
+                style={styles.avatarRing}>
+                <View style={styles.avatarFace}>
+                  {hasAvatar ? (
+                    <Image
+                      source={{uri: avatarUrl}}
+                      style={styles.avatarPhoto}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <AppText style={styles.avatarInitials}>{initialsFrom(name)}</AppText>
+                  )}
+                </View>
+              </ProgressRing>
+            </PressableScale>
+          </View>
 
           <GlassPanel
             style={styles.greetingPill}
@@ -668,17 +676,19 @@ export function HomeScreen({
               accessibilityRole="header">
               {`${greetingForHour(new Date().getHours())} ${firstName}`}
             </AppText>
-            <PressableScale
-              onPress={onNotificationsPress}
-              disabled={!onNotificationsPress}
-              scaleTo={0.9}
-              hitSlop={10}
-              accessibilityRole="button"
-              accessibilityLabel={notificationsLabel}
-              style={styles.bell}>
-              <RingingBell unreadCount={unreadCount} />
-              {unreadCount > 0 ? <View style={styles.unreadDot} /> : null}
-            </PressableScale>
+            <View ref={notificationsTarget} collapsable={false}>
+              <PressableScale
+                onPress={onNotificationsPress}
+                disabled={!onNotificationsPress}
+                scaleTo={0.9}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={notificationsLabel}
+                style={styles.bell}>
+                <RingingBell unreadCount={unreadCount} />
+                {unreadCount > 0 ? <View style={styles.unreadDot} /> : null}
+              </PressableScale>
+            </View>
           </GlassPanel>
         </View>
 
@@ -686,7 +696,7 @@ export function HomeScreen({
           {`This ${noun} at a glance`}
         </AppText>
 
-        <View style={styles.spotlight}>
+        <View ref={balanceTarget} collapsable={false} style={styles.spotlight}>
           <GradientView
             gradient={CARD_GRADIENT}
             angle={160}
@@ -773,7 +783,7 @@ export function HomeScreen({
           </GradientView>
         </View>
 
-        <View style={styles.tiles}>
+        <View ref={totalsTarget} collapsable={false} style={styles.tiles}>
           <StatTile
             label="Expense"
             amount={money(data.spent)}

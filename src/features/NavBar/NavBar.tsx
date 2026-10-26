@@ -14,6 +14,7 @@ import {
 } from './FloatingNavScroll';
 import {AppText, GlassPanel, NavLottieIcon, PressableScale} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
+import {useTutorialTarget} from '../tutorial/TutorialProvider';
 import {
   colors,
   duration,
@@ -128,6 +129,7 @@ export function NavBar({
   const activeIndex = Math.max(0, TABS.indexOf(activeTab));
   const indicatorX = useRef(new Animated.Value(0)).current;
   const indicatorPlaced = useRef(false);
+  const addTarget = useTutorialTarget('nav.add');
 
   // The active fill glides between tabs instead of jumping. It snaps on the
   // first measure so the bar never animates in from the wrong slot.
@@ -236,20 +238,22 @@ export function NavBar({
           })}
         </GlassPanel>
 
-        <PressableScale
-          onPress={onAddPress}
-          scaleTo={0.9}
-          accessibilityRole="button"
-          accessibilityLabel="Add transaction"
-          accessibilityHint="Adds an expense or income"
-          containerStyle={styles.addHit}
-          style={[styles.addFace, shadows.add]}>
-          <Animated.View
-            pointerEvents="none"
-            style={{transform: [{rotate: spin}]}}>
-            <Plus color={colors.text} size={24} weight="bold" />
-          </Animated.View>
-        </PressableScale>
+        <View ref={addTarget} collapsable={false}>
+          <PressableScale
+            onPress={onAddPress}
+            scaleTo={0.9}
+            accessibilityRole="button"
+            accessibilityLabel="Add transaction"
+            accessibilityHint="Adds an expense or income"
+            containerStyle={styles.addHit}
+            style={[styles.addFace, shadows.add]}>
+            <Animated.View
+              pointerEvents="none"
+              style={{transform: [{rotate: spin}]}}>
+              <Plus color={colors.text} size={24} weight="bold" />
+            </Animated.View>
+          </PressableScale>
+        </View>
       </View>
     </Animated.View>
   );

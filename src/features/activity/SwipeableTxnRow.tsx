@@ -1,5 +1,12 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {Animated, LayoutChangeEvent, PanResponder, StyleSheet, View} from 'react-native';
+import {
+  Animated,
+  LayoutChangeEvent,
+  PanResponder,
+  StyleSheet,
+  Text as NativeText,
+  View,
+} from 'react-native';
 import {
   ArrowsClockwise,
   Copy,
@@ -14,6 +21,7 @@ import {formatMoney} from '../../lib/formatMoney';
 import {localDateISO} from '../../lib/transactionsStore';
 import {colors, duration, easing, fonts, typography, withAlpha} from '../../theme';
 import {CategoryIconSquare} from '../add/categoryIcons';
+import {highlightParts} from './mapActivity';
 import {ActivityTransaction} from './types';
 
 const ACTION_W = 62;
@@ -36,7 +44,28 @@ type SwipeableTxnRowProps = {
   onDelete: () => void;
   onToggleRecurring: () => void;
   onDuplicate: () => void;
+  /** Search words to highlight in the name and note. */
+  highlight?: string[];
 };
+
+const NO_HIGHLIGHT: string[] = [];
+
+/** Text with the search words picked out, so a result shows why it matched. */
+function Highlighted({text, tokens}: {text: string; tokens: string[]}) {
+  return (
+    <>
+      {highlightParts(text, tokens).map((part, index) =>
+        part.match ? (
+          <NativeText key={index} style={styles.match}>
+            {part.text}
+          </NativeText>
+        ) : (
+          part.text
+        ),
+      )}
+    </>
+  );
+}
 
 /**
  * "9:41 AM" when the entry was logged on the day it belongs to, otherwise
@@ -68,6 +97,7 @@ export function SwipeableTxnRow({
   onDelete,
   onToggleRecurring,
   onDuplicate,
+  highlight = NO_HIGHLIGHT,
 }: SwipeableTxnRowProps) {
   const reducedMotion = useReducedMotion();
   const x = useRef(new Animated.Value(REST)).current;
@@ -175,7 +205,11 @@ export function SwipeableTxnRow({
             color={colors.text}
             numberOfLines={1}
             style={styles.name}>
-            {item.merchant}
+            {highlight.length > 0 ? (
+              <Highlighted text={item.merchant} tokens={highlight} />
+            ) : (
+              item.merchant
+            )}
           </Text>
           {item.recurring ? (
             <View style={styles.repeats}>
@@ -207,9 +241,13 @@ export function SwipeableTxnRow({
               fontSize={12}
               lineHeight={17}
               color={colors.inkSecondary}
-              numberOfLines={1}
+              numberOfLines={highlight.length > 0 ? 2 : 1}
               style={styles.noteText}>
-              {note}
+              {highlight.length > 0 ? (
+                <Highlighted text={note} tokens={highlight} />
+              ) : (
+                note
+              )}
             </Text>
           </View>
         ) : null}
@@ -390,6 +428,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  match: {
+    color: colors.lavender,
+    fontFamily: fonts.jakartaBold,
   },
   noteText: {
     flexShrink: 1,

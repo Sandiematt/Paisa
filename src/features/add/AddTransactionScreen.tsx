@@ -13,12 +13,11 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {CalendarBlank, CaretDown, Receipt} from 'phosphor-react-native';
+import {CalendarBlank, CaretDown} from 'phosphor-react-native';
 
 import {
   AppText,
   BackButton,
-  DividerLabel,
   GradientView,
   PressableScale,
   PrimaryButton,
@@ -52,6 +51,11 @@ import {
 } from '../../theme';
 import {CATEGORIES, CURRENCIES, categoryById} from '../onboarding/constants';
 import {CategoryIconSquare} from './categoryIcons';
+import {
+  EXPENSE_GRID,
+  INCOME_CATEGORIES,
+  OTHER_CATEGORY,
+} from './categoryOptions';
 import {DatePickerSheet} from './DatePickerSheet';
 import {AddKind} from './types';
 
@@ -64,30 +68,6 @@ type AddTransactionScreenProps = {
   onClose: () => void;
   onSaved?: (row: TransactionRow) => void;
 };
-
-const OTHER_CATEGORY = {id: 'other', label: 'Other'};
-
-const EXPENSE_GRID = [
-  {id: 'housing', label: 'Housing'},
-  {id: 'dining', label: 'Dining'},
-  {id: 'groceries', label: 'Groceries'},
-  {id: 'transport', label: 'Transport'},
-  {id: 'health', label: 'Health'},
-  {id: 'shopping', label: 'Shopping'},
-  {id: 'entertainment', label: 'Entertainment'},
-  {id: 'bills', label: 'Bills'},
-  {id: 'personal', label: 'Personal'},
-  {id: 'education', label: 'Education'},
-  {id: 'travel', label: 'Travel'},
-  OTHER_CATEGORY,
-];
-
-const INCOME_CATEGORIES = [
-  {id: 'salary', label: 'Salary'},
-  {id: 'freelance', label: 'Freelance'},
-  {id: 'refund', label: 'Refund'},
-  OTHER_CATEGORY,
-];
 
 const NOTE_LIMIT = 100;
 
@@ -425,23 +405,8 @@ export function AddTransactionScreen({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
             <View style={styles.amountBlock}>
-              <PressableScale
-                onPress={() => {}}
-                scaleTo={0.98}
-                accessibilityRole="button"
-                accessibilityLabel="Scan receipt"
-                accessibilityHint="Coming soon"
-                style={styles.scanBtn}>
-                <Receipt size={20} color={colors.lavender} weight="bold" />
-                <AppText variant="bodyStrong" color={colors.text}>
-                  Scan receipt
-                </AppText>
-              </PressableScale>
-
-              <DividerLabel label="or" style={styles.orRule} />
-
               <AppText variant="label" color={colors.muted}>
-                Enter manually
+                Amount
               </AppText>
               <View style={styles.amountRow}>
                 <AppText
@@ -690,21 +655,6 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  orRule: {
-    marginVertical: spacing.sm,
-  },
-  scanBtn: {
-    height: layout.controlHeight,
-    width: '100%',
-    borderRadius: radii.pill,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
   },
   sectionHead: {
     marginTop: spacing.xxl,

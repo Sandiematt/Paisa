@@ -8,10 +8,25 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {CaretLeft, CaretRight} from 'phosphor-react-native';
+import {CaretDown, CaretLeft, CaretRight, CaretUp} from 'phosphor-react-native';
 
-import {AppText, PrimaryButton} from '../../components/ui';
+import {AppText, PressableScale, PrimaryButton} from '../../components/ui';
 import {colors, layout, radii, spacing} from '../../theme';
+import {
+  isAfterDay,
+  longDateLabel,
+  monthHasPastDays,
+  MONTHS,
+  monthWeeks,
+  quickPicks,
+  relativeDayLabel,
+  sameDay,
+  shiftMonth,
+  shortDateLabel,
+  startOfDay,
+  startOfMonth,
+  WEEKDAYS,
+} from './datePickerModel';
 
 type DatePickerSheetProps = {
   visible: boolean;
@@ -20,67 +35,13 @@ type DatePickerSheetProps = {
   onChange: (date: Date) => void;
 };
 
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+const MAX_CELL = 44;
 
-function startOfDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function sameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
-}
-
-function shiftMonth(date: Date, delta: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + delta, 1);
-}
-
-function clampDay(year: number, monthIndex: number, day: number): Date {
-  const last = new Date(year, monthIndex + 1, 0).getDate();
-  return new Date(year, monthIndex, Math.min(day, last));
-}
-
-function monthWeeks(month: Date): (Date | null)[][] {
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const lastDate = new Date(
-    month.getFullYear(),
-    month.getMonth() + 1,
-    0,
-  ).getDate();
-  const cells: (Date | null)[] = Array.from(
-    {length: first.getDay()},
-    () => null,
-  );
-  for (let day = 1; day <= lastDate; day += 1) {
-    cells.push(new Date(month.getFullYear(), month.getMonth(), day));
-  }
-  while (cells.length % 7 !== 0) {
-    cells.push(null);
-  }
-  const weeks: (Date | null)[][] = [];
-  for (let index = 0; index < cells.length; index += 7) {
-    weeks.push(cells.slice(index, index + 7));
-  }
-  return weeks;
-}
-
+/**
+ * Picks the day a transaction happened. The header always says which day is
+ * chosen; browsing months never changes it; future days cannot be picked.
+ * Tapping the month name switches to a month-and-year grid for big jumps.
+ */
 export function DatePickerSheet({
   visible,
   value,
@@ -89,25 +50,32 @@ export function DatePickerSheet({
 }: DatePickerSheetProps) {
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
-  const [month, setMonth] = useState(() => startOfDay(value));
+  const today = startOfDay(new Date());
+  const [month, setMonth] = useState(() => startOfMonth(value));
   const [draft, setDraft] = useState(() => startOfDay(value));
+  const [choosingMonth, setChoosingMonth] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       return;
     }
-    setMonth(startOfDay(value));
+    setMonth(startOfMonth(value));
     setDraft(startOfDay(value));
+    setChoosingMonth(false);
   }, [value, visible]);
 
   const weeks = useMemo(() => monthWeeks(month), [month]);
-  const today = startOfDay(new Date());
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-
-  const cellSize = Math.floor(
-    (width - layout.screenPadding * 2 - spacing.sm * 6) / 7,
+  const canGoForward = monthHasPastDays(shiftMonth(month, 1), today);
+  const cellSize = Math.min(
+    MAX_CELL,
+    Math.floor((width - layout.screenPadding * 2) / 7),
   );
+  const relative = relativeDayLabel(draft, today);
+
+  const pick = (date: Date) => {
+    setDraft(startOfDay(date));
+    setMonth(startOfMonth(date));
+  };
 
   return (
     <Modal
@@ -116,173 +84,225 @@ export function DatePickerSheet({
       animationType="fade"
       onRequestClose={onClose}>
       <View style={styles.layer}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close date picker"
+        />
         <View
           style={[
             styles.sheet,
             {paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.md},
           ]}>
           <View style={styles.handle} />
-          <AppText variant="title">Date</AppText>
+
+          <View style={styles.header} accessibilityLiveRegion="polite">
+            <AppText variant="caption" color={colors.muted}>
+              {relative ? `Date · ${relative}` : 'Date'}
+            </AppText>
+            <AppText
+              variant="title"
+              color={colors.text}
+              accessibilityRole="header">
+              {longDateLabel(draft, today)}
+            </AppText>
+          </View>
 
           <View style={styles.quick}>
-            <Pressable
-              onPress={() => {
-                setDraft(today);
-                setMonth(today);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Today"
-              style={[
-                styles.quickChip,
-                sameDay(draft, today) && styles.quickChipOn,
-              ]}>
-              <AppText
-                variant="bodyStrong"
-                color={sameDay(draft, today) ? colors.ground : colors.text}>
-                Today
-              </AppText>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setDraft(yesterday);
-                setMonth(yesterday);
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Yesterday"
-              style={[
-                styles.quickChip,
-                sameDay(draft, yesterday) && styles.quickChipOn,
-              ]}>
-              <AppText
-                variant="bodyStrong"
-                color={sameDay(draft, yesterday) ? colors.ground : colors.text}>
-                Yesterday
-              </AppText>
-            </Pressable>
+            {quickPicks(today).map(option => {
+              const on = sameDay(draft, option.date);
+              return (
+                <PressableScale
+                  key={option.label}
+                  onPress={() => pick(option.date)}
+                  scaleTo={0.96}
+                  accessibilityRole="radio"
+                  accessibilityState={{selected: on}}
+                  accessibilityLabel={option.label}
+                  style={[styles.quickChip, on && styles.quickChipOn]}>
+                  <AppText
+                    variant="label"
+                    color={on ? colors.text : colors.inkSecondary}>
+                    {option.label}
+                  </AppText>
+                </PressableScale>
+              );
+            })}
           </View>
 
           <View style={styles.monthRow}>
-            <Pressable
-              onPress={() => {
-                const next = shiftMonth(month, -1);
-                setMonth(next);
-                setDraft(current =>
-                  clampDay(next.getFullYear(), next.getMonth(), current.getDate()),
-                );
-              }}
+            <PressableScale
+              onPress={() =>
+                choosingMonth
+                  ? setMonth(current => shiftMonth(current, -12))
+                  : setMonth(current => shiftMonth(current, -1))
+              }
+              scaleTo={0.92}
+              hitSlop={6}
               accessibilityRole="button"
-              accessibilityLabel="Previous month"
-              style={styles.monthBtn}>
-              <CaretLeft size={18} color={colors.text} weight="bold" />
-            </Pressable>
-            <AppText variant="bodyStrong" color={colors.text}>
-              {MONTHS[month.getMonth()]}
-            </AppText>
-            <Pressable
-              onPress={() => {
-                const next = shiftMonth(month, 1);
-                setMonth(next);
-                setDraft(current =>
-                  clampDay(next.getFullYear(), next.getMonth(), current.getDate()),
-                );
-              }}
+              accessibilityLabel={
+                choosingMonth ? 'Previous year' : 'Previous month'
+              }
+              style={styles.navBtn}>
+              <CaretLeft size={16} color={colors.text} weight="bold" />
+            </PressableScale>
+
+            <PressableScale
+              onPress={() => setChoosingMonth(current => !current)}
+              scaleTo={0.97}
               accessibilityRole="button"
-              accessibilityLabel="Next month"
-              style={styles.monthBtn}>
-              <CaretRight size={18} color={colors.text} weight="bold" />
-            </Pressable>
+              accessibilityState={{expanded: choosingMonth}}
+              accessibilityLabel={
+                choosingMonth
+                  ? `Showing months of ${month.getFullYear()}. Back to days`
+                  : `${
+                      MONTHS[month.getMonth()]
+                    } ${month.getFullYear()}. Choose month and year`
+              }
+              style={styles.monthTitle}>
+              <AppText variant="bodyStrong" color={colors.text}>
+                {choosingMonth
+                  ? String(month.getFullYear())
+                  : `${MONTHS[month.getMonth()]} ${month.getFullYear()}`}
+              </AppText>
+              {choosingMonth ? (
+                <CaretUp size={12} color={colors.lavender} weight="bold" />
+              ) : (
+                <CaretDown size={12} color={colors.lavender} weight="bold" />
+              )}
+            </PressableScale>
+
+            <PressableScale
+              onPress={() =>
+                choosingMonth
+                  ? setMonth(current => shiftMonth(current, 12))
+                  : setMonth(current => shiftMonth(current, 1))
+              }
+              disabled={
+                choosingMonth
+                  ? month.getFullYear() >= today.getFullYear()
+                  : !canGoForward
+              }
+              scaleTo={0.92}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={choosingMonth ? 'Next year' : 'Next month'}
+              style={[
+                styles.navBtn,
+                (choosingMonth
+                  ? month.getFullYear() >= today.getFullYear()
+                  : !canGoForward) && styles.navBtnOff,
+              ]}>
+              <CaretRight size={16} color={colors.text} weight="bold" />
+            </PressableScale>
           </View>
 
-          <View style={styles.monthRow}>
-            <Pressable
-              onPress={() => {
-                const year = month.getFullYear() - 1;
-                setMonth(current => new Date(year, current.getMonth(), 1));
-                setDraft(current =>
-                  clampDay(year, current.getMonth(), current.getDate()),
-                );
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Previous year"
-              style={styles.monthBtn}>
-              <CaretLeft size={18} color={colors.text} weight="bold" />
-            </Pressable>
-            <AppText variant="bodyStrong" color={colors.text}>
-              {String(month.getFullYear())}
-            </AppText>
-            <Pressable
-              onPress={() => {
-                const year = month.getFullYear() + 1;
-                setMonth(current => new Date(year, current.getMonth(), 1));
-                setDraft(current =>
-                  clampDay(year, current.getMonth(), current.getDate()),
-                );
-              }}
-              accessibilityRole="button"
-              accessibilityLabel="Next year"
-              style={styles.monthBtn}>
-              <CaretRight size={18} color={colors.text} weight="bold" />
-            </Pressable>
-          </View>
-
-          <View style={styles.weekRow}>
-            {WEEKDAYS.map((day, index) => (
-              <View
-                key={`${day}-${index}`}
-                style={[styles.cell, {width: cellSize, height: 28}]}>
-                <AppText variant="caption" color={colors.muted} align="center">
-                  {day}
-                </AppText>
-              </View>
-            ))}
-          </View>
-
-          {weeks.map((week, weekIndex) => (
-            <View key={`week-${weekIndex}`} style={styles.weekRow}>
-              {week.map((cell, dayIndex) => {
-                if (!cell) {
-                  return (
-                    <View
-                      key={`empty-${weekIndex}-${dayIndex}`}
-                      style={[styles.cell, {width: cellSize, height: cellSize}]}
-                    />
-                  );
-                }
-                const selected = sameDay(cell, draft);
-                const isToday = sameDay(cell, today);
+          {choosingMonth ? (
+            <View style={styles.monthGrid}>
+              {MONTHS.map((name, index) => {
+                const candidate = new Date(month.getFullYear(), index, 1);
+                const future = !monthHasPastDays(candidate, today);
+                const current = index === month.getMonth();
                 return (
-                  <Pressable
-                    key={cell.toISOString()}
-                    onPress={() => setDraft(cell)}
+                  <PressableScale
+                    key={name}
+                    onPress={() => {
+                      setMonth(candidate);
+                      setChoosingMonth(false);
+                    }}
+                    disabled={future}
+                    scaleTo={0.96}
                     accessibilityRole="button"
-                    accessibilityState={{selected}}
-                    accessibilityLabel={cell.toDateString()}
+                    accessibilityState={{disabled: future, selected: current}}
+                    accessibilityLabel={`${name} ${month.getFullYear()}`}
+                    containerStyle={styles.monthCell}
                     style={[
-                      styles.cell,
-                      {
-                        width: cellSize,
-                        height: cellSize,
-                        borderRadius: cellSize / 2,
-                      },
-                      selected && styles.cellOn,
-                      !selected && isToday && styles.cellToday,
+                      styles.monthChip,
+                      current && styles.monthChipOn,
+                      future && styles.dayOff,
                     ]}>
                     <AppText
-                      variant="bodyStrong"
-                      color={selected ? colors.ground : colors.text}
-                      align="center">
-                      {String(cell.getDate())}
+                      variant="label"
+                      color={current ? colors.text : colors.inkSecondary}>
+                      {name.slice(0, 3)}
                     </AppText>
-                  </Pressable>
+                  </PressableScale>
                 );
               })}
             </View>
-          ))}
+          ) : (
+            <View>
+              <View style={styles.weekRow}>
+                {WEEKDAYS.map(day => (
+                  <View key={day} style={[styles.cell, {width: cellSize}]}>
+                    <AppText
+                      variant="caption"
+                      color={colors.muted}
+                      align="center">
+                      {day.slice(0, 1)}
+                    </AppText>
+                  </View>
+                ))}
+              </View>
+              {weeks.map((week, weekIndex) => (
+                <View key={`week-${weekIndex}`} style={styles.weekRow}>
+                  {week.map((cell, dayIndex) => {
+                    if (!cell) {
+                      return (
+                        <View
+                          key={`empty-${weekIndex}-${dayIndex}`}
+                          style={{width: cellSize, height: cellSize}}
+                        />
+                      );
+                    }
+                    const selected = sameDay(cell, draft);
+                    const isToday = sameDay(cell, today);
+                    const future = isAfterDay(cell, today);
+                    return (
+                      <Pressable
+                        key={cell.toISOString()}
+                        onPress={() => setDraft(cell)}
+                        disabled={future}
+                        accessibilityRole="button"
+                        accessibilityState={{selected, disabled: future}}
+                        accessibilityLabel={`${longDateLabel(cell, today)}${
+                          isToday ? ', today' : ''
+                        }`}
+                        style={[
+                          styles.cell,
+                          {
+                            width: cellSize,
+                            height: cellSize,
+                            borderRadius: cellSize / 2,
+                          },
+                          selected && styles.dayOn,
+                          !selected && isToday && styles.dayToday,
+                          future && styles.dayOff,
+                        ]}>
+                        <AppText
+                          variant="bodyStrong"
+                          color={
+                            selected
+                              ? colors.text
+                              : isToday
+                              ? colors.lavender
+                              : colors.text
+                          }
+                          align="center">
+                          {String(cell.getDate())}
+                        </AppText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          )}
 
           <View style={styles.confirm}>
             <PrimaryButton
-              label="Use this date"
+              label={`Use ${shortDateLabel(draft, today)}`}
               style={styles.confirmButton}
               onPress={() => {
                 onChange(draft);
@@ -319,6 +339,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.hairlineStrong,
     marginBottom: spacing.lg,
   },
+  header: {
+    gap: 2,
+  },
   quick: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -326,7 +349,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   quickChip: {
-    paddingVertical: spacing.sm,
+    minHeight: 36,
+    justifyContent: 'center',
     paddingHorizontal: spacing.lg,
     borderRadius: radii.pill,
     borderWidth: 1,
@@ -334,8 +358,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   quickChipOn: {
-    backgroundColor: colors.text,
-    borderColor: colors.text,
+    backgroundColor: colors.violet,
+    borderColor: colors.violet,
   },
   monthRow: {
     flexDirection: 'row',
@@ -343,9 +367,17 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
-  monthBtn: {
-    width: 40,
-    height: 40,
+  monthTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.pill,
+  },
+  navBtn: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.pill,
@@ -353,21 +385,49 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
   },
+  navBtnOff: {
+    opacity: 0.35,
+  },
   weekRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: spacing.xs,
+    marginBottom: 2,
   },
   cell: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cellOn: {
-    backgroundColor: colors.text,
+  dayOn: {
+    backgroundColor: colors.violet,
   },
-  cellToday: {
+  dayToday: {
     borderWidth: 1,
     borderColor: colors.lavender,
+  },
+  dayOff: {
+    opacity: 0.3,
+  },
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -spacing.xs,
+  },
+  monthCell: {
+    width: '33.333%',
+    padding: spacing.xs,
+  },
+  monthChip: {
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.tile,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  monthChipOn: {
+    backgroundColor: colors.violet,
+    borderColor: colors.violet,
   },
   confirm: {
     marginTop: spacing.xl,

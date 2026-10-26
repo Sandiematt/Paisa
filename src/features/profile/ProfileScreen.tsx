@@ -12,6 +12,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   ArrowRight,
   CaretRight,
+  Compass,
   Coins,
   CurrencyInr,
   DownloadSimple,
@@ -92,6 +93,8 @@ type ProfileScreenProps = {
   onSignOut?: () => void | Promise<void>;
   /** Opens the UPI auto-tracking dashboard. The row shows only on Android. */
   onOpenAutoTracking?: () => void;
+  /** Closes Profile and plays the app tour again. */
+  onReplayTutorial?: () => void;
   onClose: () => void;
 };
 
@@ -215,6 +218,7 @@ export function ProfileScreen({
   onSave,
   onSignOut,
   onOpenAutoTracking,
+  onReplayTutorial,
   onClose,
 }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
@@ -781,6 +785,16 @@ export function ProfileScreen({
                 onPress={onOpenAutoTracking}
                 accessibilityLabel="Auto-tracking"
                 accessibilityHint="Opens UPI auto-tracking settings"
+              />
+            ) : null}
+            {onReplayTutorial ? (
+              <SettingsRow
+                key="replayTour"
+                icon={<Compass size={ICON_SIZE} color={colors.text} />}
+                label="Replay app tour"
+                onPress={onReplayTutorial}
+                accessibilityLabel="Replay app tour"
+                accessibilityHint="Shows the guided tour of Paisa again"
               />
             ) : null}
             <SettingsRow

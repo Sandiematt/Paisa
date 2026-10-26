@@ -67,8 +67,9 @@ export function LoginScreen({
     setBusy(true);
     setError(undefined);
     const message = await onSubmit(email, password);
-    setBusy(false);
+    // On success this screen stays up, still busy, until Home slides in.
     if (message) {
+      setBusy(false);
       setError(message);
     }
   };

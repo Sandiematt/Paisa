@@ -12,7 +12,12 @@ import {ActivityFilter} from '../activity/types';
 import {AddActionSheet} from '../add/AddActionSheet';
 import {AddTransactionScreen} from '../add/AddTransactionScreen';
 import {SavedEvent, SavedToast} from '../add/SavedToast';
-import {AddKind} from '../add/types';
+import {AddChoice, AddKind} from '../add/types';
+import {ReceiptReviewScreen} from '../receipts/ReceiptReviewScreen';
+import {useReceiptScanner} from '../receipts/useReceiptScanner';
+import {useAuth} from '../auth/AuthProvider';
+import {TutorialProvider} from '../tutorial/TutorialProvider';
+import {TutorialStep} from '../tutorial/tutorialSteps';
 import {BudgetDetailsScreen} from '../home/BudgetDetailsScreen';
 import {HomeScreen} from '../home/HomeScreen';
 import {SavingsDetailsScreen} from '../home/SavingsDetailsScreen';
@@ -65,6 +70,9 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   // Week key of the Home spending nudge closed during this session.
   const [dismissedNudgeKey, setDismissedNudgeKey] = useState<string | null>(null);
+  const {user} = useAuth();
+  const [tutorialStepId, setTutorialStepId] = useState<string | null>(null);
+  const [tutorialRestart, setTutorialRestart] = useState(0);
 
   useEffect(() => {
     setProfileDraft(draft);
@@ -251,6 +259,39 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     setAddKind(kind);
   }, []);
 
+  const receiptScanner = useReceiptScanner();
+  const onAddChoice = useCallback(
+    (choice: AddChoice) => {
+      if (choice === 'scan') {
+        setSheetOpen(false);
+        receiptScanner.start();
+        return;
+      }
+      openComposer(choice);
+    },
+    [openComposer, receiptScanner],
+  );
+
+  const showSaved = useCallback(
+    (row: TransactionRow, updated: boolean) => {
+      const kindLabel = row.type === 'income' ? 'Income' : 'Expense';
+      setSavedEvent(previous => ({
+        key: (previous?.key ?? 0) + 1,
+        title: updated ? `${kindLabel} updated` : `${kindLabel} added`,
+        detail: formatMoney(
+          row.type === 'income' ? row.amount : -row.amount,
+          currency.symbol,
+          {signed: true, decimals: Number.isInteger(row.amount) ? 0 : 2},
+        ),
+        tone: row.type === 'income' ? 'income' : 'expense',
+      }));
+      upsertLocal(row);
+      setLedgerFocus(row.transactionDate);
+      setRefreshNonce(value => value + 1);
+    },
+    [currency.symbol, upsertLocal],
+  );
+
   const onAddPress = useCallback(() => {
     if (sheetOpen) {
       setSheetOpen(false);
@@ -266,6 +307,25 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     }
     setSheetOpen(true);
   }, [activityFilter, openComposer, sheetOpen, tab]);
+
+  // Tips cover the current screen only; the + menu closes so they can show.
+  const onTutorialStep = useCallback((step: TutorialStep | null) => {
+    setTutorialStepId(step?.id ?? null);
+    if (step) {
+      setSheetOpen(false);
+    }
+  }, []);
+  // A screen's tips wait until nothing is open on top of it.
+  const overlayOpen =
+    sheetOpen ||
+    addKind !== null ||
+    receiptScanner.image !== null ||
+    profileOpen ||
+    autoTrackOpen ||
+    budgetOpen ||
+    budgetEditOpen ||
+    savingsOpen ||
+    notificationsOpen;
 
   let page = null;
   if (tab === 'home') {
@@ -328,153 +388,162 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   }
 
   return (
-    <FloatingNavScrollProvider
-          resetKey={`${tab}:${profileOpen}:${autoTrackOpen}:${budgetOpen}:${budgetEditOpen}:${savingsOpen}:${notificationsOpen}:${sheetOpen}:${addKind ?? ''}:${editRow?.id ?? ''}`}>
-      <View style={styles.root} collapsable={false}>
-        <TabStage tab={tab} style={styles.stage}>
-          {page}
-        </TabStage>
+    <TutorialProvider
+      userId={user?.id ?? null}
+      userMetadata={user?.user_metadata}
+      tab={tab}
+      ready={status === 'ready'}
+      blocked={overlayOpen}
+      onStepChange={onTutorialStep}
+      restartKey={tutorialRestart}>
+      <FloatingNavScrollProvider
+            resetKey={`${tutorialStepId ?? ''}:${tab}:${profileOpen}:${autoTrackOpen}:${budgetOpen}:${budgetEditOpen}:${savingsOpen}:${notificationsOpen}:${sheetOpen}:${addKind ?? ''}:${editRow?.id ?? ''}`}>
+        <View style={styles.root} collapsable={false}>
+          <TabStage tab={tab} style={styles.stage}>
+            {page}
+          </TabStage>
 
-        <NavBar
-          activeTab={tab}
-          onTabPress={next => {
-            setSheetOpen(false);
-            setTab(next);
-          }}
-          onAddPress={onAddPress}
-          addOpen={sheetOpen && addKind === null}
-        />
+          <NavBar
+            activeTab={tab}
+            onTabPress={next => {
+              setSheetOpen(false);
+              setTab(next);
+            }}
+            onAddPress={onAddPress}
+            addOpen={sheetOpen && addKind === null}
+          />
 
-        <AddActionSheet
-          visible={sheetOpen && addKind === null}
-          onClose={() => setSheetOpen(false)}
-          onSelect={openComposer}
-        />
+          <AddActionSheet
+            visible={sheetOpen && addKind === null}
+            onClose={() => setSheetOpen(false)}
+            onSelect={onAddChoice}
+          />
 
-        <AddTransactionScreen
-          visible={addKind !== null}
-          initialKind={addKind ?? 'expense'}
-          currencySymbol={currency.symbol}
-          categoryIds={profileDraft.categoryIds}
-          existing={editRow}
-          onClose={() => {
-            setAddKind(null);
-            setEditRow(null);
-          }}
-          onSaved={row => {
-            const kindLabel = row.type === 'income' ? 'Income' : 'Expense';
-            setSavedEvent(previous => ({
-              key: (previous?.key ?? 0) + 1,
-              title: editRow ? `${kindLabel} updated` : `${kindLabel} added`,
-              detail: formatMoney(
-                row.type === 'income' ? row.amount : -row.amount,
-                currency.symbol,
-                {signed: true, decimals: Number.isInteger(row.amount) ? 0 : 2},
-              ),
-              tone: row.type === 'income' ? 'income' : 'expense',
-            }));
-            upsertLocal(row);
-            setLedgerFocus(row.transactionDate);
-            setRefreshNonce(value => value + 1);
-          }}
-        />
+          <AddTransactionScreen
+            visible={addKind !== null}
+            initialKind={addKind ?? 'expense'}
+            currencySymbol={currency.symbol}
+            categoryIds={profileDraft.categoryIds}
+            existing={editRow}
+            onClose={() => {
+              setAddKind(null);
+              setEditRow(null);
+            }}
+            onSaved={row => showSaved(row, Boolean(editRow))}
+          />
 
-        {/* Budget Details — opens from the Budget card on the dashboard */}
-        <BudgetDetailsScreen
-          visible={budgetOpen}
-          onClose={() => setBudgetOpen(false)}
-          currencySymbol={currency.symbol}
-          budget={report.budget ?? moneyPlan.monthlyBudget}
-          spent={report.spent ?? 0}
-          remainingBudget={
-            report.remainingBudget ?? moneyPlan.monthlyBudget
-          }
-          spendRatio={report.spendRatio ?? 0}
-          overBudget={report.overBudget ?? false}
-          slices={report.slices ?? []}
-          range={report.range ?? 'month'}
-          transactions={transactions}
-          categories={categories}
-          monthlyBudget={moneyPlan.monthlyBudget}
-          extraSpendByDate={unsyncedSpend}
-        />
+          <ReceiptReviewScreen
+            image={receiptScanner.image}
+            currencySymbol={currency.symbol}
+            transactions={transactions}
+            onClose={receiptScanner.clear}
+            onSaved={(row, merged) => {
+              receiptScanner.clear();
+              showSaved(row, merged);
+            }}
+          />
 
-        <MoneySheet
-          visible={budgetEditOpen}
-          title={moneyPlan.monthlyBudget > 0 ? 'Edit budget' : 'Add budget'}
-          label="Monthly spending budget"
-          symbol={currency.symbol}
-          value={profileDraft.monthlyBudget}
-          lead="The most you plan to spend each month. Week and day limits follow from it."
-          onDone={value => {
-            if (value === profileDraft.monthlyBudget) {
-              return;
+          {/* Budget Details — opens from the Budget card on the dashboard */}
+          <BudgetDetailsScreen
+            visible={budgetOpen}
+            onClose={() => setBudgetOpen(false)}
+            currencySymbol={currency.symbol}
+            budget={report.budget ?? moneyPlan.monthlyBudget}
+            spent={report.spent ?? 0}
+            remainingBudget={
+              report.remainingBudget ?? moneyPlan.monthlyBudget
             }
-            const updated = {...profileDraft, monthlyBudget: value};
-            setProfileDraft(updated);
-            onProfileSave(updated, {keepCurrency: true});
-            setRefreshNonce(n => n + 1);
-          }}
-          onClose={() => setBudgetEditOpen(false)}
-        />
+            spendRatio={report.spendRatio ?? 0}
+            overBudget={report.overBudget ?? false}
+            slices={report.slices ?? []}
+            range={report.range ?? 'month'}
+            transactions={transactions}
+            categories={categories}
+            monthlyBudget={moneyPlan.monthlyBudget}
+            extraSpendByDate={unsyncedSpend}
+          />
 
-        <SavingsDetailsScreen
-          visible={savingsOpen}
-          onClose={() => setSavingsOpen(false)}
-          currencySymbol={currency.symbol}
-          monthlySavingsGoal={
-            report.monthlySavingsGoal ?? moneyPlan.monthlySavingsGoal
-          }
-          periodSavingsTarget={report.periodSavingsTarget ?? 0}
-          actualSavings={report.actualSavings ?? 0}
-          savingsVsTarget={report.savingsVsTarget ?? 0}
-          savingsState={report.savingsState ?? {kind: 'no-income'}}
-          range={report.range ?? 'month'}
-          transactions={transactions}
-          categories={categories}
-        />
+          <MoneySheet
+            visible={budgetEditOpen}
+            title={moneyPlan.monthlyBudget > 0 ? 'Edit budget' : 'Add budget'}
+            label="Monthly spending budget"
+            symbol={currency.symbol}
+            value={profileDraft.monthlyBudget}
+            lead="The most you plan to spend each month. Week and day limits follow from it."
+            onDone={value => {
+              if (value === profileDraft.monthlyBudget) {
+                return;
+              }
+              const updated = {...profileDraft, monthlyBudget: value};
+              setProfileDraft(updated);
+              onProfileSave(updated, {keepCurrency: true});
+              setRefreshNonce(n => n + 1);
+            }}
+            onClose={() => setBudgetEditOpen(false)}
+          />
 
-        <NotificationHistorySheet
-          visible={notificationsOpen}
-          onClose={() => {
-            historyClosedAt.current = Date.now();
-            setNotificationsOpen(false);
-          }}
-        />
+          <SavingsDetailsScreen
+            visible={savingsOpen}
+            onClose={() => setSavingsOpen(false)}
+            currencySymbol={currency.symbol}
+            monthlySavingsGoal={
+              report.monthlySavingsGoal ?? moneyPlan.monthlySavingsGoal
+            }
+            periodSavingsTarget={report.periodSavingsTarget ?? 0}
+            actualSavings={report.actualSavings ?? 0}
+            savingsVsTarget={report.savingsVsTarget ?? 0}
+            savingsState={report.savingsState ?? {kind: 'no-income'}}
+            range={report.range ?? 'month'}
+            transactions={transactions}
+            categories={categories}
+          />
 
-        <ProfileScreen
-          visible={profileOpen}
-          draft={profileDraft}
-          onSave={(updated, options) => {
-            setProfileDraft(updated);
-            onProfileSave(updated, options);
-            setRefreshNonce(value => value + 1);
-          }}
-          onSignOut={onSignOut}
-          onOpenAutoTracking={() => {
-            setProfileOpen(false);
-            openAfterHandoff(() => setAutoTrackOpen(true));
-          }}
-          onClose={() => setProfileOpen(false)}
-        />
+          <NotificationHistorySheet
+            visible={notificationsOpen}
+            onClose={() => {
+              historyClosedAt.current = Date.now();
+              setNotificationsOpen(false);
+            }}
+          />
 
-        <SavedToast event={savedEvent} />
+          <ProfileScreen
+            visible={profileOpen}
+            draft={profileDraft}
+            onSave={(updated, options) => {
+              setProfileDraft(updated);
+              onProfileSave(updated, options);
+              setRefreshNonce(value => value + 1);
+            }}
+            onSignOut={onSignOut}
+            onOpenAutoTracking={() => {
+              setProfileOpen(false);
+              openAfterHandoff(() => setAutoTrackOpen(true));
+            }}
+            onReplayTutorial={() => {
+              setProfileOpen(false);
+              openAfterHandoff(() => setTutorialRestart(value => value + 1));
+            }}
+            onClose={() => setProfileOpen(false)}
+          />
 
-        <AutoTrackingScreen
-          visible={autoTrackOpen}
-          currencySymbol={currency.symbol}
-          // Back returns to Profile, where the dashboard was opened from.
-          onClose={() => {
-            setAutoTrackOpen(false);
-            openAfterHandoff(() => setProfileOpen(true));
-          }}
-          onOpenBudget={() => {
-            setAutoTrackOpen(false);
-            openAfterHandoff(() => setBudgetEditOpen(true));
-          }}
-        />
-      </View>
-    </FloatingNavScrollProvider>
+          <SavedToast event={savedEvent} />
+
+          <AutoTrackingScreen
+            visible={autoTrackOpen}
+            currencySymbol={currency.symbol}
+            // Back returns to Profile, where the dashboard was opened from.
+            onClose={() => {
+              setAutoTrackOpen(false);
+              openAfterHandoff(() => setProfileOpen(true));
+            }}
+            onOpenBudget={() => {
+              setAutoTrackOpen(false);
+              openAfterHandoff(() => setBudgetEditOpen(true));
+            }}
+          />
+        </View>
+      </FloatingNavScrollProvider>
+    </TutorialProvider>
   );
 }
 

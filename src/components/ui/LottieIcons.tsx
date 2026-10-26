@@ -21,6 +21,7 @@ const TILE_SOURCES = {
   wallet: require('../../../assets/animations/tile-wallet.json'),
   piggy: require('../../../assets/animations/tile-piggy.json'),
   bell: require('../../../assets/animations/tile-bell.json'),
+  receipt: require('../../../assets/animations/tile-receipt.json'),
 } as const;
 
 export type NavIconId = keyof typeof NAV_SOURCES;

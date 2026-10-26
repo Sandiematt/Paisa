@@ -11,7 +11,8 @@
     "test": "jest",
     "functions:serve": "npx supabase functions serve --env-file .env",
     "functions:secrets": "npx supabase secrets set --env-file .env --project-ref ygmvrltpasoxltgqsjpv",
-    "functions:deploy": "npx supabase functions deploy generate-insights --project-ref ygmvrltpasoxltgqsjpv"
+    "functions:deploy": "npx supabase functions deploy generate-insights --project-ref ygmvrltpasoxltgqsjpv",
+    "functions:deploy:scan": "npx supabase functions deploy scan-receipt --project-ref ygmvrltpasoxltgqsjpv"
   },
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",

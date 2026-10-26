@@ -24,9 +24,9 @@ export type TransactionRow = {
   notes: string | null;
   kind: TransactionKind;
   isRecurring: boolean;
-  /** 'upi_auto' for payments saved by the UPI detector. Absent means manual. */
+  /** 'upi_auto' for payments saved by the UPI detector, 'receipt_scan' for scanned receipts. Absent means manual. */
   source?: TransactionSource;
-  /** Detector dedupe key; null for manual rows. */
+  /** Dedupe key from the UPI detector or a receipt scan; null for manual rows. */
   externalRef?: string | null;
   upiRef?: string | null;
   createdAt: string;

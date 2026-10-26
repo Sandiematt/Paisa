@@ -30,7 +30,7 @@ export type TransactionPayloadResult =
 
 const AMOUNT_SHAPE = /^\d*\.?\d{0,2}$/;
 
-function parseAmount(raw: string): number | null {
+export function parseAmount(raw: string): number | null {
   const cleaned = stripThousandsSeparators(raw);
   if (!AMOUNT_SHAPE.test(cleaned)) {
     return null;

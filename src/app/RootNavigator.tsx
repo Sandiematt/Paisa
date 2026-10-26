@@ -19,6 +19,7 @@ import {
 } from '../lib/profileStore';
 import {travel} from '../theme';
 import {RouteName} from './routes';
+import {HOME_KEY, LOADING_KEY, SETUP_KEY, swapKeyFor} from './swapKey';
 import {useRouter} from './useRouter';
 
 export function RootNavigator() {
@@ -214,36 +215,29 @@ export function RootNavigator() {
     [user?.id],
   );
 
+  // Each swap layer draws the screen its key names, so the screen sliding out
+  // stays itself instead of turning into the one sliding in.
   const renderRoute = useCallback(
     (name: string) => {
-      const waitingOnAuth = !ready || (session && !profileReady);
-      if (waitingOnAuth) {
-        return (
-          <SplashScreen
-            ready={false}
-            onGetStarted={() => {}}
-          />
-        );
-      }
-
-      if (session && draft && needsSetup) {
-        return (
-          <OnboardingFlow
-            initialDraft={draft}
-            passwordless
-            onComplete={handleOAuthSetup}
-          />
-        );
-      }
-
-      if (session && draft) {
-        return (
-          <MainTabs
-            draft={draft}
-            onProfileSave={handleProfileSave}
-            onSignOut={signOut}
-          />
-        );
+      switch (name) {
+        case LOADING_KEY:
+          return <SplashScreen ready={false} onGetStarted={() => {}} />;
+        case SETUP_KEY:
+          return draft ? (
+            <OnboardingFlow
+              initialDraft={draft}
+              passwordless
+              onComplete={handleOAuthSetup}
+            />
+          ) : null;
+        case HOME_KEY:
+          return draft ? (
+            <MainTabs
+              draft={draft}
+              onProfileSave={handleProfileSave}
+              onSignOut={signOut}
+            />
+          ) : null;
       }
 
       switch (name as RouteName) {
@@ -302,20 +296,21 @@ export function RootNavigator() {
       handleOAuthSetup,
       handleProfileSave,
       handleSignIn,
-      needsSetup,
-      profileReady,
-      ready,
       router,
-      session,
       signOut,
     ],
   );
 
   return (
     <SlideSwap
-      swapKey={
-        session && draft ? (needsSetup ? 'setup' : 'home') : router.route
-      }
+      swapKey={swapKeyFor({
+        ready,
+        signedIn: Boolean(session),
+        profileReady,
+        hasDraft: Boolean(draft),
+        needsSetup,
+        route: router.route,
+      })}
       direction={router.direction}
       distance={travel.screen}
       render={renderRoute}

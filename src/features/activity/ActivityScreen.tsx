@@ -30,10 +30,16 @@ import {colors, fonts, layout, radii} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {ActivitySkeleton} from './ActivitySkeleton';
 import {FloatingReceipt} from './FloatingReceipt';
-import {ledgerForActivity, matchesFilter, matchesQuery} from './mapActivity';
+import {
+  ledgerForActivity,
+  matchesFilter,
+  matchesQuery,
+  searchTokens,
+} from './mapActivity';
 import {SwipeableTxnRow} from './SwipeableTxnRow';
 import {ActivityFilter, ActivityTransaction} from './types';
 import {WeekDatePicker} from './WeekDatePicker';
+import {useTutorialTarget} from '../tutorial/TutorialProvider';
 
 const FILTERS: {id: ActivityFilter; label: string}[] = [
   {id: 'all', label: 'All'},
@@ -108,6 +114,7 @@ export function ActivityScreen({
 }: ActivityScreenProps) {
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
+  const searchTarget = useTutorialTarget('activity.search');
   const [openRowId, setOpenRowId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const navClearance = useFloatingNavClearance();
@@ -123,6 +130,7 @@ export function ActivityScreen({
 
   const normalizedQuery = query.trim().toLowerCase();
   const searching = normalizedQuery.length > 0;
+  const highlight = useMemo(() => searchTokens(query), [query]);
   const ledger = useMemo(
     () => ledgerForActivity(transactions, categories),
     [categories, transactions],
@@ -254,6 +262,8 @@ export function ActivityScreen({
       </View>
 
       <View
+        ref={searchTarget}
+        collapsable={false}
         style={[styles.searchWrap, searchFocused && styles.searchWrapFocused]}>
         <MagnifyingGlass size={18} color={colors.muted} weight="bold" />
         <TextInput
@@ -410,6 +420,7 @@ export function ActivityScreen({
                 <SwipeableTxnRow
                   key={item.id}
                   item={item}
+                  highlight={highlight}
                   currencySymbol={currencySymbol}
                   open={openRowId === item.id}
                   onOpen={() => setOpenRowId(item.id)}

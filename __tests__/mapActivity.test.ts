@@ -1,4 +1,9 @@
-import {ledgerForActivity, matchesQuery} from '../src/features/activity/mapActivity';
+import {
+  highlightParts,
+  ledgerForActivity,
+  matchesQuery,
+  searchTokens,
+} from '../src/features/activity/mapActivity';
 import {CategoryRow} from '../src/lib/categoriesStore';
 import {
   TransactionRow,
@@ -111,5 +116,35 @@ describe('activity ledger helpers', () => {
     expect(matchesQuery(item, 'oat latte')).toBe(true);
     expect(matchesQuery(item, 'dining 6.50')).toBe(true);
     expect(matchesQuery(item, 'uber')).toBe(false);
+  });
+});
+
+describe('search', () => {
+  it('finds a transaction by a word in its note, ignoring case and punctuation', () => {
+    const [item] = ledgerForActivity(
+      [
+        tx({
+          id: 'gift',
+          type: 'expense',
+          amount: 1200,
+          transactionDate: '2026-10-02',
+          notes: "Birthday gift for Ravi's sister",
+        }),
+      ],
+      [dining],
+    );
+    expect(matchesQuery(item, 'birthday')).toBe(true);
+    expect(matchesQuery(item, 'RAVIS sister')).toBe(true);
+    expect(matchesQuery(item, 'gift, ravi')).toBe(true);
+    expect(matchesQuery(item, 'anniversary')).toBe(false);
+  });
+
+  it('splits text into highlighted runs for the search words', () => {
+    expect(highlightParts('Birthday gift', searchTokens('gift BIRTH'))).toEqual([
+      {text: 'Birth', match: true},
+      {text: 'day ', match: false},
+      {text: 'gift', match: true},
+    ]);
+    expect(highlightParts('Chai', [])).toEqual([{text: 'Chai', match: false}]);
   });
 });

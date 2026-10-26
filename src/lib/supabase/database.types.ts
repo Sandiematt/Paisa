@@ -1,6 +1,6 @@
 export type MoneyFlow = 'income' | 'expense';
 export type TransactionKind = 'regular' | 'opening_balance' | 'balance_adjustment';
-export type TransactionSource = 'manual' | 'upi_auto';
+export type TransactionSource = 'manual' | 'upi_auto' | 'receipt_scan';
 
 export type Database = {
   public: {

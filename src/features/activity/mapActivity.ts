@@ -56,30 +56,79 @@ function amountNeedles(amount: number): string[] {
   return [fixed, String(Number(fixed)), String(Math.trunc(abs))];
 }
 
+/**
+ * Lowercased, with punctuation dropped (but not the decimal point, so
+ * amounts still match), so "ravis" finds "Ravi's" and "w/o" finds "wo".
+ */
+function normalizeSearch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}.\s]+/gu, '')
+    .replace(/\s+/g, ' ');
+}
+
+/** The words of a search, each of which must appear somewhere in a match. */
+export function searchTokens(query: string): string[] {
+  return normalizeSearch(query.trim()).split(' ').filter(Boolean);
+}
+
 export function matchesQuery(item: ActivityTransaction, query: string): boolean {
-  const normalized = query.trim().toLowerCase();
-  if (!normalized) {
+  const tokens = searchTokens(query);
+  if (tokens.length === 0) {
     return true;
   }
 
-  const haystack = [
-    item.merchant,
-    item.category,
-    item.account,
-    item.note,
-    item.kind,
-    item.date,
-    item.source?.description ?? '',
-    item.source?.merchant ?? '',
-    item.recurring ? 'recurring repeats' : '',
-    ...amountNeedles(item.amount),
-  ]
-    .join(' ')
-    .toLowerCase();
+  const haystack = normalizeSearch(
+    [
+      item.merchant,
+      item.category,
+      item.account,
+      item.note,
+      item.kind,
+      item.date,
+      item.source?.description ?? '',
+      item.source?.merchant ?? '',
+      item.recurring ? 'recurring repeats' : '',
+      ...amountNeedles(item.amount),
+    ].join(' '),
+  );
 
-  return normalized
-    .split(/\s+/)
-    .every(token => haystack.includes(token.replace(/,/g, '')));
+  return tokens.every(token => haystack.includes(token));
+}
+
+export type HighlightPart = {text: string; match: boolean};
+
+/**
+ * Splits text into plain and matching runs for the search words, ignoring
+ * case, so a result can show why it matched (a word in its note, say).
+ */
+export function highlightParts(
+  text: string,
+  tokens: string[],
+): HighlightPart[] {
+  const needles = tokens.filter(token => token.length > 0);
+  if (!text || needles.length === 0) {
+    return [{text, match: false}];
+  }
+  const lower = text.toLowerCase();
+  const marked = new Array<boolean>(text.length).fill(false);
+  for (const needle of needles) {
+    let from = lower.indexOf(needle);
+    while (from !== -1) {
+      marked.fill(true, from, from + needle.length);
+      from = lower.indexOf(needle, from + needle.length);
+    }
+  }
+  const parts: HighlightPart[] = [];
+  for (let i = 0; i < text.length; i += 1) {
+    const last = parts[parts.length - 1];
+    if (last && last.match === marked[i]) {
+      last.text += text[i];
+    } else {
+      parts.push({text: text[i], match: marked[i]});
+    }
+  }
+  return parts;
 }
 
 export function matchesFilter(

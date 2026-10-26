@@ -389,6 +389,11 @@ deno_version = 2
 # service role) so Row Level Security scopes every query to the caller.
 verify_jwt = true
 
+[functions.scan-receipt]
+# Requires a valid user JWT so only signed-in users can spend OCR credits. The
+# function stores nothing; it returns the receipt's text lines to the app.
+verify_jwt = true
+
 [functions.delete-account]
 # Identifies the caller from their JWT, then deletes only that user with the
 # service role. Profile, categories, and transactions cascade from auth.users.

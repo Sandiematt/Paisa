@@ -13,12 +13,12 @@ import {
   useFloatingNavDockHeight,
 } from '../NavBar/FloatingNavScroll';
 import {colors, duration, easing, radii, shadows, spacing, withAlpha} from '../../theme';
-import {AddKind} from './types';
+import {AddChoice} from './types';
 
 type AddActionSheetProps = {
   visible: boolean;
   onClose: () => void;
-  onSelect: (kind: AddKind) => void;
+  onSelect: (choice: AddChoice) => void;
 };
 
 const CARD_WIDTH = 264;
@@ -28,7 +28,7 @@ const ROW_HEIGHT = 60;
 const SIDE_INSET = spacing.xxl;
 
 const OPTIONS: {
-  kind: AddKind;
+  kind: AddChoice;
   title: string;
   description: string;
   accent: string;
@@ -44,6 +44,12 @@ const OPTIONS: {
     title: 'Add expense',
     description: 'Record money going out',
     accent: colors.roseLight,
+  },
+  {
+    kind: 'scan',
+    title: 'Scan receipt',
+    description: 'Read a bill or receipt from a photo',
+    accent: colors.lavender,
   },
 ];
 
@@ -134,7 +140,7 @@ export function AddActionSheet({
                     },
                   ]}>
                   <TileLottieIcon
-                    kind={option.kind === 'income' ? 'income' : 'expense'}
+                    kind={option.kind === 'scan' ? 'receipt' : option.kind}
                     size={20}
                     color={option.accent}
                     replayKey={visible}

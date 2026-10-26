@@ -54,6 +54,7 @@ import {InsightsData, InsightsPeriod, insightsData} from './insightsPlaceholder'
 import type {ChangeKind} from './insightsTypes';
 import {buildInsightsDataFromResponse} from './mapInsights';
 import {AiSparkle} from './AiSparkle';
+import {useTutorialTarget} from '../tutorial/TutorialProvider';
 import {SpendingBars} from './SpendingBars';
 import {useLoadingGate} from './loadingGate';
 import {useInsights} from './useInsights';
@@ -484,6 +485,7 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
   }, [insights]);
 
   const hasSpending = data.currentTotal > 0;
+  const periodTarget = useTutorialTarget('insights.period');
 
   return (
     <Screen edges={['top']} glow>
@@ -504,13 +506,14 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
         }>
         <Header canShare={canShare} onShare={onShare} />
 
-        <SegmentedControl
-          options={PERIOD_OPTIONS}
-          value={period}
-          onChange={setPeriod}
-          style={styles.tabs}
-          accessibilityLabel="Insights period"
-        />
+        <View ref={periodTarget} collapsable={false} style={styles.tabs}>
+          <SegmentedControl
+            options={PERIOD_OPTIONS}
+            value={period}
+            onChange={setPeriod}
+            accessibilityLabel="Insights period"
+          />
+        </View>
 
         {hasError ? (
           <StatusBanner offline={isOfflineError(insights.error)} message={insights.error} onRetry={insights.reload} />

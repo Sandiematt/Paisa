@@ -88,6 +88,7 @@ If everything is set up correctly, the app opens in the Android Emulator, iOS Si
 | `npm run ios` | Build and run on iOS |
 | `npm run lint` | Run ESLint |
 | `npm test` | Run the Jest test suite |
+| `npm run functions:deploy:scan` | Deploy the `scan-receipt` OCR function (needs the `GEMINI_API_KEY` secret, set with `npm run functions:secrets`; `OCR_MODEL` optionally picks another Gemini model, default `gemini-3.1-flash-lite`, falling back to `gemini-3.5-flash-lite`) |
 
 ---
 
