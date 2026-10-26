@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo/logo.png" alt="Paisa logo" width="200">
+  <img src="assets/logo/logo.png" alt="Paisa logo" width="300">
 </p>
 
 
