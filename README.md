@@ -1,110 +1,118 @@
-
-
-
-
 <p align="center">
   <img src="assets/logo/logo.png" alt="Paisa logo" width="180">
 </p>
 
-# Paisa
+<h1 align="center">Paisa</h1>
+
+<p align="center">
+  A React Native expense tracker with insights, activity history and notifications.
+</p>
+
+<p align="center">
+  <img alt="React Native" src="https://img.shields.io/badge/React%20Native-0.87-61DAFB?logo=react&logoColor=white">
+  <img alt="Expo" src="https://img.shields.io/badge/Expo-58-000020?logo=expo&logoColor=white">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white">
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-3ECF8E?logo=supabase&logoColor=white">
+</p>
+
+---
 
 ## Demo
+
 https://github.com/user-attachments/assets/a9deb1eb-1c2c-44d8-b31f-6bc5b67e8107
 
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+---
 
-# Getting Started
+## Table of Contents
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+- [Getting Started](#getting-started)
+- [Scripts](#scripts)
+- [Modifying the App](#modifying-the-app)
+- [Troubleshooting](#troubleshooting)
+- [Learn More](#learn-more)
 
-## Step 1: Start Metro
+---
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## Getting Started
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+> **Note:** Complete the [React Native environment setup](https://reactnative.dev/docs/set-up-your-environment) before continuing.
+
+### 1. Install dependencies
 
 ```sh
-# Using npm
+npm install
+```
+
+### 2. Start Metro
+
+```sh
 npm start
-
-# OR using Yarn
-yarn start
 ```
 
-## Step 2: Build and run your app
+### 3. Build and run the app
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+In a new terminal, from the project root:
 
-### Android
+**Android**
 
 ```sh
-# Using npm
 npm run android
-
-# OR using Yarn
-yarn android
 ```
 
-### iOS
+**iOS**
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+Install the CocoaPods dependencies on first clone and after updating native dependencies:
 
 ```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
+bundle install          # first time only
 bundle exec pod install
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+Then run:
 
 ```sh
-# Using npm
 npm run ios
-
-# OR using Yarn
-yarn ios
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+See the [CocoaPods guide](https://guides.cocoapods.org/using/getting-started.html) for more details.
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+If everything is set up correctly, the app opens in the Android Emulator, iOS Simulator or on your connected device. You can also build it from Android Studio or Xcode.
 
-## Step 3: Modify your app
+---
 
-Now that you have successfully run the app, let's make changes!
+## Scripts
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+| Command | Description |
+| --- | --- |
+| `npm start` | Start the Expo dev server (dev client) |
+| `npm run android` | Build and run on Android |
+| `npm run ios` | Build and run on iOS |
+| `npm run lint` | Run ESLint |
+| `npm test` | Run the Jest test suite |
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+---
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+## Modifying the App
 
-## Congratulations! :tada:
+Open `App.tsx` in your editor and make a change. When you save, the app updates automatically through [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
 
-You've successfully run and modified your React Native App. :partying_face:
+To force a full reload and reset the app state:
 
-### Now what?
+- **Android:** press <kbd>R</kbd> twice, or choose **Reload** from the Dev Menu (<kbd>Ctrl</kbd> + <kbd>M</kbd> on Windows/Linux, <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> on macOS).
+- **iOS:** press <kbd>R</kbd> in the iOS Simulator.
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+---
 
-# Troubleshooting
+## Troubleshooting
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+If the steps above don't work, see the React Native [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
 
-# Learn More
+---
 
-To learn more about React Native, take a look at the following resources:
+## Learn More
 
 - [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- [Getting Started](https://reactnative.dev/docs/environment-setup) - an overview of React Native and how to set up your environment.
+- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a guided tour of the React Native basics.
+- [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps) - add React Native to an existing application.
+- [Blog](https://reactnative.dev/blog) - the latest official React Native blog posts.
