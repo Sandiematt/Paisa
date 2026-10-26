@@ -132,12 +132,19 @@ export function btoaPolyfill(input: string): string {
   return output;
 }
 
+// The DOM lib is not in this project's TypeScript config, so the slice of
+// Web Crypto that is polyfilled here is typed locally.
+type CryptoLike = {
+  getRandomValues?: unknown;
+  subtle?: {digest?: unknown};
+};
+
 function installWebCrypto() {
   const scope = globalThis as typeof globalThis & {
-    crypto?: Crypto;
+    crypto?: CryptoLike;
     btoa?: (value: string) => string;
   };
-  const cryptoObject = scope.crypto ?? ({} as Crypto);
+  const cryptoObject = scope.crypto ?? ({} as CryptoLike);
 
   if (typeof cryptoObject.getRandomValues !== 'function') {
     Object.defineProperty(cryptoObject, 'getRandomValues', {
@@ -149,7 +156,7 @@ function installWebCrypto() {
     Object.defineProperty(cryptoObject, 'subtle', {
       configurable: true,
       value: {
-        digest(algorithm: AlgorithmIdentifier, data: BufferSource) {
+        digest(algorithm: string | {name: string}, data: BufferSource) {
           const name = typeof algorithm === 'string' ? algorithm : algorithm.name;
           if (name.toUpperCase() !== 'SHA-256') {
             return Promise.reject(new Error(`Unsupported digest: ${name}`));

@@ -519,6 +519,15 @@ object AppStore {
                 } catch (t: Throwable) {
                     appendLog(now, "ERROR deleting the user's history: $t")
                 }
+                // The account is gone: later detections must not be stamped with it, or no future user could adopt them.
+                if (lastOwner == owner) {
+                    lastOwner = null
+                    try {
+                        db?.putSetting(ExpenseDb.KEY_LAST_OWNER, null)
+                    } catch (t: Throwable) {
+                        appendLog(now, "ERROR clearing the last owner: $t")
+                    }
+                }
             }
         }
         appendLog(now, "preferences and budget snapshot cleared (sign-out)" + if (purgeHistory) "; history deleted" else "")

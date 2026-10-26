@@ -172,6 +172,7 @@ export async function saveProfile(
   draft: OnboardingDraft,
   options?: SaveProfileOptions,
 ) {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const {password: _password, ...rest} = draft;
   await AsyncStorage.setItem(cacheKey(userId), JSON.stringify(rest));
 

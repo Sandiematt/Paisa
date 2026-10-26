@@ -720,8 +720,9 @@ export function calculateInsightStats(
     // A period requested for "today" is still in progress — more transactions
     // could still land later today, so it's never a finished summary. Only a
     // period ending strictly before today (an explicit past referenceDate) is
-    // complete.
-    isPeriodComplete: referenceDate < todayISO(),
+    // complete. The client sends its local date, which can be a day behind
+    // the server's UTC date, so only a date before UTC yesterday counts.
+    isPeriodComplete: referenceDate < addDays(todayISO(), -1),
     currency: profile?.currency ?? 'INR',
     periodComparison,
     categoryChanges,

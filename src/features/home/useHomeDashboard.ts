@@ -1,10 +1,11 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {useAuth} from '../auth/AuthProvider';
 import {CategoryRow, loadCategories} from '../../lib/categoriesStore';
 import {
   TransactionRow,
   loadTransactions,
+  needsOpeningSeed,
   removeLedgerRow,
   seedOpeningBalance,
   upsertLedgerRow,
@@ -34,8 +35,15 @@ export function useHomeDashboard(
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   // When the fetch behind `transactions` started; 0 until the first load.
   const [ledgerAsOf, setLedgerAsOf] = useState(0);
+  // Reloads overlap (every auto-track sync starts one), so only the latest
+  // may apply its result.
+  const latestRequest = useRef(0);
+  // Bumped by local edits: a reload that started before one would undo it.
+  const localEdits = useRef(0);
+  const reloadRef = useRef<() => Promise<void>>(async () => {});
 
   const upsertLocal = useCallback((row: TransactionRow) => {
+    localEdits.current += 1;
     setTransactions(current => upsertLedgerRow(current, row));
     setUpdatedAt(new Date());
     setStatus('ready');
@@ -43,11 +51,13 @@ export function useHomeDashboard(
   }, []);
 
   const removeLocal = useCallback((id: string) => {
+    localEdits.current += 1;
     setTransactions(current => removeLedgerRow(current, id));
     setUpdatedAt(new Date());
   }, []);
 
   const reload = useCallback(async () => {
+    const request = ++latestRequest.current;
     if (!user) {
       setCategories([]);
       setTransactions([]);
@@ -56,23 +66,41 @@ export function useHomeDashboard(
       return;
     }
 
+    const editsAtStart = localEdits.current;
+    let editedMeanwhile = false;
     setRefreshing(true);
     setError(null);
-    const fetchStartedAt = Date.now();
+    let fetchStartedAt = Date.now();
     try {
-      if (openingAmount > 0) {
-        await seedOpeningBalance(openingAmount);
-      }
-      const [nextCategories, nextTransactions] = await Promise.all([
+      const [nextCategories, loaded] = await Promise.all([
         loadCategories(),
         loadTransactions(),
       ]);
+      let nextTransactions = loaded;
+      // Only touches the opening balance when it is missing or out of place.
+      if (openingAmount > 0 && needsOpeningSeed(loaded)) {
+        await seedOpeningBalance(openingAmount);
+        fetchStartedAt = Date.now();
+        nextTransactions = await loadTransactions();
+      }
+      // A newer reload started meanwhile: its ledger wins.
+      if (request !== latestRequest.current) {
+        return;
+      }
+      // An edit made meanwhile is not in this ledger: fetch again instead.
+      if (localEdits.current !== editsAtStart) {
+        editedMeanwhile = true;
+        return;
+      }
       setCategories(nextCategories);
       setTransactions(nextTransactions);
       setLedgerAsOf(fetchStartedAt);
       setUpdatedAt(new Date());
       setStatus('ready');
     } catch (caught) {
+      if (request !== latestRequest.current) {
+        return;
+      }
       setError(
         caught instanceof Error
           ? caught.message
@@ -80,9 +108,15 @@ export function useHomeDashboard(
       );
       setStatus('error');
     } finally {
-      setRefreshing(false);
+      if (request === latestRequest.current && !editedMeanwhile) {
+        setRefreshing(false);
+      }
+    }
+    if (editedMeanwhile) {
+      await reloadRef.current();
     }
   }, [openingAmount, user]);
+  reloadRef.current = reload;
 
   useEffect(() => {
     reload();

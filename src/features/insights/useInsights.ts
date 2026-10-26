@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 
 import {generateInsights, InsightPeriod, InsightsResponse} from '../../lib/supabase/insights';
+import {localDateISO} from '../../lib/transactionsStore';
 import {useAuth} from '../auth/AuthProvider';
 
 export type InsightsFetchStatus = 'loading' | 'ready' | 'error';
@@ -50,7 +51,8 @@ export function useInsights(period: InsightPeriod) {
         setError(null);
       }
       try {
-        const response = await generateInsights({period: targetPeriod});
+        // The server's own "today" is UTC; transactions carry the device's local date.
+        const response = await generateInsights({period: targetPeriod, referenceDate: localDateISO()});
         // A generate-insights deployment from before the year period falls back to
         // week for an unknown period. Never show that as if it were the year.
         if (response.stats.period !== targetPeriod) {

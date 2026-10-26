@@ -133,18 +133,35 @@ function mapRow(row: {
 const SELECT_COLUMNS =
   'id, user_id, type, amount, category_id, description, merchant, transaction_date, payment_method, notes, kind, is_recurring, source, external_ref, upi_ref, created_at, updated_at';
 
+/** PostgREST caps one response (max_rows in supabase/config.toml). */
+const LOAD_PAGE_SIZE = 1000;
+
+/**
+ * Every transaction of the signed-in user, oldest first. Paged, because a
+ * single select stops at the API's row cap and, ordered oldest first, would
+ * silently drop the newest rows.
+ */
 export async function loadTransactions(): Promise<TransactionRow[]> {
-  const {data, error} = await supabase
-    .from('transactions')
-    .select(SELECT_COLUMNS)
-    .order('transaction_date', {ascending: true})
-    .order('created_at', {ascending: true});
+  const rows: TransactionRow[] = [];
+  for (let from = 0; ; from += LOAD_PAGE_SIZE) {
+    const {data, error} = await supabase
+      .from('transactions')
+      .select(SELECT_COLUMNS)
+      .order('transaction_date', {ascending: true})
+      .order('created_at', {ascending: true})
+      .order('id', {ascending: true})
+      .range(from, from + LOAD_PAGE_SIZE - 1);
 
-  if (error) {
-    throw new Error(dataErrorMessage(error));
+    if (error) {
+      throw new Error(dataErrorMessage(error));
+    }
+
+    const batch = data ?? [];
+    rows.push(...batch.map(mapRow));
+    if (batch.length < LOAD_PAGE_SIZE) {
+      return rows;
+    }
   }
-
-  return (data ?? []).map(mapRow);
 }
 
 export async function createTransaction(
@@ -223,8 +240,26 @@ export async function upsertDetectedTransaction(
     }
   };
 
+  // A UPI ref often arrives after the first sync (from the payment
+  // notification); only fills one the row does not have yet.
+  const addUpiRef = async () => {
+    if (!pending.upiRef) {
+      return;
+    }
+    const {error} = await supabase
+      .from('transactions')
+      .update({upi_ref: pending.upiRef})
+      .eq('user_id', userId)
+      .eq('external_ref', pending.externalRef)
+      .is('upi_ref', null);
+    if (error) {
+      throw new Error(dataErrorMessage(error));
+    }
+  };
+
   if (pending.alreadySynced) {
     await addNote();
+    await addUpiRef();
     return pending.remoteId;
   }
 
@@ -306,6 +341,29 @@ export function openingBalanceDate(dates: string[], today: string): string {
     }
   }
   return earliest;
+}
+
+/**
+ * Whether seedOpeningBalance would change anything for this ledger: there is
+ * no opening row yet, or it is dated after today or after another row. Lets
+ * callers holding the ledger skip its queries on every refresh.
+ */
+export function needsOpeningSeed(
+  rows: TransactionRow[],
+  today = localDateISO(),
+): boolean {
+  const opening = rows.find(isOpeningBalance);
+  if (!opening) {
+    return true;
+  }
+  return (
+    opening.transactionDate > today ||
+    rows.some(
+      row =>
+        !isOpeningBalance(row) &&
+        row.transactionDate < opening.transactionDate,
+    )
+  );
 }
 
 export async function seedOpeningBalance(amount: number): Promise<boolean> {

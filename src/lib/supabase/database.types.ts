@@ -145,7 +145,12 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      consume_function_quota: {
+        Args: {p_function: string};
+        Returns: boolean;
+      };
+    };
     Enums: {
       money_flow: MoneyFlow;
     };

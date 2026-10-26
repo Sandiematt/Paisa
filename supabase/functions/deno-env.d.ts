@@ -26,6 +26,7 @@ declare module 'npm:@supabase/supabase-js@2.45.4' {
 declare module 'npm:zod@3.23.8' {
   export const z: any;
   export namespace z {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     type infer<T> = any;
   }
 }
