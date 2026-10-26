@@ -19,6 +19,7 @@ import {
   FileCsv,
   Fingerprint,
   Flag,
+  Lightning,
   PencilSimple,
   PiggyBank,
   SealCheck,
@@ -67,6 +68,8 @@ import {
   MIN_CATEGORIES,
 } from '../onboarding/constants';
 import {GoalId, OnboardingDraft} from '../onboarding/types';
+import {useAutoTrack} from '../autotrack/AutoTrackProvider';
+import {autoTrackState} from '../autotrack/autoTrackFormat';
 import {useBiometricLock} from '../security/BiometricLockProvider';
 import {AvatarPickerModal} from './AvatarPickerModal';
 import {useNotificationSettings} from './NotificationsSettingsSection';
@@ -87,6 +90,8 @@ type ProfileScreenProps = {
     options?: SaveProfileOptions,
   ) => void;
   onSignOut?: () => void | Promise<void>;
+  /** Opens the UPI auto-tracking dashboard. The row shows only on Android. */
+  onOpenAutoTracking?: () => void;
   onClose: () => void;
 };
 
@@ -209,6 +214,7 @@ export function ProfileScreen({
   draft,
   onSave,
   onSignOut,
+  onOpenAutoTracking,
   onClose,
 }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
@@ -233,6 +239,7 @@ export function ProfileScreen({
   const [avatarOpen, setAvatarOpen] = useState(false);
   const biometricLock = useBiometricLock();
   const notificationSettings = useNotificationSettings();
+  const autoTrack = useAutoTrack();
   const [biometricBusy, setBiometricBusy] = useState(false);
   const [exporting, setExporting] = useState<'month' | 'all' | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -487,6 +494,14 @@ export function ProfileScreen({
       ? `About ${perDayText} / day · ${symbol}${leftover.toLocaleString('en-IN')} planned leftover.`
       : `About ${perDayText} / day · leftover is below the savings goal.`;
   };
+
+  const autoTrackStatus = autoTrackState(autoTrack.supported, autoTrack.status);
+  const autoTrackRowValue =
+    autoTrackStatus === 'active'
+      ? 'On'
+      : autoTrackStatus === 'needs-permission'
+        ? 'Set up'
+        : undefined;
 
   const initials = initialsFrom(name);
   const monthName = new Date().toLocaleDateString('en-IN', {month: 'long'});
@@ -757,6 +772,17 @@ export function ProfileScreen({
                 />
               }
             />
+            {autoTrack.supported && onOpenAutoTracking ? (
+              <SettingsRow
+                key="autoTrack"
+                icon={<Lightning size={ICON_SIZE} color={colors.text} />}
+                label="Auto-tracking"
+                value={autoTrackRowValue}
+                onPress={onOpenAutoTracking}
+                accessibilityLabel="Auto-tracking"
+                accessibilityHint="Opens UPI auto-tracking settings"
+              />
+            ) : null}
             <SettingsRow
               key="exportAll"
               icon={<DownloadSimple size={ICON_SIZE} color={colors.text} />}

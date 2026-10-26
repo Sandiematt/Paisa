@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  packageNames scopes the service at the OS level: Android does not dispatch events
+  from any other app, so the service is idle outside GPay / PhonePe / Paytm.
+  Keep this list in sync with SupportedApps.kt.
+
+  flagIncludeNotImportantViews: some apps mark their amount/status TextViews as
+  "not important for accessibility"; without this flag those nodes are hidden.
+  isAccessibilityTool (Android 14+): apps can mark views "accessibility data sensitive"; those views are
+  hidden from every accessibility service that has not declared itself an accessibility tool. Without this a
+  payment result screen can read as an empty window. Fine for a sideloaded test build; Google Play restricts
+  who may declare it, so revisit before any store release.
+  flagRetrieveInteractiveWindows: lets the service find the UPI app's window when
+  the active window is a dialog, keyboard or bottom sheet.
+  notificationTimeout 50 ms: the daily-limit check runs on events directly, so a shorter delay gets the warning up
+  sooner; windows are read on the event and only the payment decision is debounced in the service.
+  typeWindowsChanged: a window added or removed (PhonePe's processing/result window over the chat, or the app being
+  covered) can come with no content event of its own.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeWindowsChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:isAccessibilityTool="true"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="50"
+    android:packageNames="com.google.android.apps.nbu.paisa.user,com.phonepe.app,net.one97.paytm" />

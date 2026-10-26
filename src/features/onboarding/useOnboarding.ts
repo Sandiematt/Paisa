@@ -1,5 +1,6 @@
 import {useCallback, useMemo, useState} from 'react';
 
+import {isAutoTrackSupported} from '../../lib/autotrack/nativeUpiDetector';
 import {useAuth} from '../auth/AuthProvider';
 import {DEFAULT_CATEGORY_IDS, MIN_CATEGORIES} from './constants';
 import {OnboardingDraft, STEP_KEYS, StepKey, StepValidity} from './types';
@@ -16,6 +17,8 @@ const INITIAL_DRAFT: OnboardingDraft = {
   categoryIds: DEFAULT_CATEGORY_IDS,
   monthlyBudget: '',
   monthlySavingsGoal: '',
+  autoTrackNotes: true,
+  autoTrackBlocking: true,
 };
 
 export type OnboardingController = ReturnType<typeof useOnboarding>;
@@ -88,11 +91,17 @@ export function useOnboarding(
 
   // For OAuth (passwordless) users, name/email come from Google — skip basics.
   const firstStep = passwordless ? 1 : 0;
+  // Auto-tracking is Android only, so the last step exists only there.
+  const [steps] = useState<readonly StepKey[]>(() =>
+    isAutoTrackSupported()
+      ? STEP_KEYS
+      : STEP_KEYS.filter(key => key !== 'autotrack'),
+  );
   const [stepIndex, setStepIndex] = useState(firstStep);
   const [direction, setDirection] = useState<1 | -1>(1);
   const [showErrors, setShowErrors] = useState(false);
 
-  const stepKey = STEP_KEYS[stepIndex];
+  const stepKey = steps[stepIndex];
 
   const update = useCallback(<K extends keyof OnboardingDraft>(
     key: K,
@@ -150,23 +159,24 @@ export function useOnboarding(
         skippable: false,
       },
       budget: {canContinue: true, skippable: true},
+      autotrack: {canContinue: true, skippable: true},
     }),
     [draft.categoryIds.length, draft.goal, errors],
   );
 
   const current = validity[stepKey];
-  const isLastStep = stepIndex === STEP_KEYS.length - 1;
+  const isLastStep = stepIndex === steps.length - 1;
 
   const advance = useCallback(() => {
     setDirection(1);
     setShowErrors(false);
     setStepIndex(index => {
-      if (index >= STEP_KEYS.length - 1) {
+      if (index >= steps.length - 1) {
         return index;
       }
       return index + 1;
     });
-  }, []);
+  }, [steps.length]);
 
   const goNext = useCallback(() => {
     if (!current.canContinue) {
@@ -202,9 +212,9 @@ export function useOnboarding(
     stepKey,
     stepIndex,
     visibleStepIndex: stepIndex - firstStep,
-    stepCount: STEP_KEYS.length - firstStep,
+    stepCount: steps.length - firstStep,
     direction,
-    progress: (stepIndex - firstStep + 1) / (STEP_KEYS.length - firstStep),
+    progress: (stepIndex - firstStep + 1) / (steps.length - firstStep),
     canContinue: current.canContinue,
     skippable: current.skippable,
     isLastStep,

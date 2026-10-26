@@ -84,3 +84,39 @@ jest.mock('expo-image-manipulator', () => ({
   manipulateAsync: async uri => ({uri, width: 512, height: 512}),
   SaveFormat: {JPEG: 'jpeg', PNG: 'png'},
 }));
+
+// The native UPI detector exists only in the Android build. Platform.OS is
+// 'ios' under jest, so the JS wrapper treats it as unsupported unless a test
+// switches the platform to 'android'; then it reaches these stubs, which
+// resolve the same empty values the real module would for a fresh install.
+const {NativeModules} = require('react-native');
+NativeModules.UpiDetector = {
+  getStatus: jest.fn(async () =>
+    JSON.stringify({
+      accessibilityEnabled: false,
+      notificationAccessEnabled: false,
+      installedApps: [],
+    }),
+  ),
+  openAccessibilitySettings: jest.fn(async () => {}),
+  openNotificationAccessSettings: jest.fn(async () => {}),
+  getTransactions: jest.fn(async () => '[]'),
+  getLog: jest.fn(async () => '[]'),
+  getPending: jest.fn(async () => '[]'),
+  ackSynced: jest.fn(async () => {}),
+  setPreferences: jest.fn(async () => {}),
+  getPreferences: jest.fn(async () =>
+    JSON.stringify({notesEnabled: true, blockingEnabled: true}),
+  ),
+  setBudgetSnapshot: jest.fn(async () => {}),
+  getAllowance: jest.fn(async () => null),
+  keep: jest.fn(async () => {}),
+  merge: jest.fn(async () => {}),
+  clear: jest.fn(async () => {}),
+  buildReport: jest.fn(async () => ''),
+  setOwner: jest.fn(async () => {}),
+  clearUserData: jest.fn(async () => {}),
+  setLogStreaming: jest.fn(async () => {}),
+  addListener: jest.fn(),
+  removeListeners: jest.fn(),
+};

@@ -3,6 +3,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- Lets the app see which UPI apps are installed (package visibility, API 30+) and lets the accessibility service
+         tell their Activities from dialogs. Keep in sync with SupportedApps.kt. -->
+    <queries>
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+        <package android:name="com.phonepe.app" />
+        <package android:name="net.one97.paytm" />
+    </queries>
+
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"
@@ -30,5 +38,39 @@
             <data android:scheme="paisa" />
         </intent-filter>
       </activity>
+
+      <!-- Post-payment "what was this for?" dialog, only when the service's overlay could not be shown. -->
+      <activity
+        android:name="io.yestack.upidetector.ui.NoteActivity"
+        android:excludeFromRecents="true"
+        android:exported="false"
+        android:taskAffinity=""
+        android:theme="@style/Theme.UpiDetector.Note"
+        android:windowSoftInputMode="stateVisible|adjustResize" />
+
+      <!-- Reads on-screen text of GPay, PhonePe and Paytm only (scoped by packageNames in the config). -->
+      <service
+        android:name="io.yestack.upidetector.service.UpiAccessibilityService"
+        android:exported="true"
+        android:label="@string/accessibility_service_label"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+        <intent-filter>
+          <action android:name="android.accessibilityservice.AccessibilityService" />
+        </intent-filter>
+        <meta-data
+          android:name="android.accessibilityservice"
+          android:resource="@xml/accessibility_service_config" />
+      </service>
+
+      <!-- Cross-checks payment notifications; never creates records. -->
+      <service
+        android:name="io.yestack.upidetector.service.UpiNotificationListener"
+        android:exported="true"
+        android:label="@string/notification_listener_label"
+        android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+        <intent-filter>
+          <action android:name="android.service.notification.NotificationListenerService" />
+        </intent-filter>
+      </service>
     </application>
 </manifest>

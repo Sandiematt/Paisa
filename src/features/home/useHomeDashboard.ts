@@ -32,6 +32,8 @@ export function useHomeDashboard(
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  // When the fetch behind `transactions` started; 0 until the first load.
+  const [ledgerAsOf, setLedgerAsOf] = useState(0);
 
   const upsertLocal = useCallback((row: TransactionRow) => {
     setTransactions(current => upsertLedgerRow(current, row));
@@ -56,6 +58,7 @@ export function useHomeDashboard(
 
     setRefreshing(true);
     setError(null);
+    const fetchStartedAt = Date.now();
     try {
       if (openingAmount > 0) {
         await seedOpeningBalance(openingAmount);
@@ -66,6 +69,7 @@ export function useHomeDashboard(
       ]);
       setCategories(nextCategories);
       setTransactions(nextTransactions);
+      setLedgerAsOf(fetchStartedAt);
       setUpdatedAt(new Date());
       setStatus('ready');
     } catch (caught) {
@@ -99,6 +103,7 @@ export function useHomeDashboard(
     refreshing,
     error,
     updatedAt,
+    ledgerAsOf,
     reload,
     upsertLocal,
     removeLocal,

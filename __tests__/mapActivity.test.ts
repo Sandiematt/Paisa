@@ -90,6 +90,18 @@ describe('activity ledger helpers', () => {
     expect(ledger).toHaveLength(1);
   });
 
+  it('passes the note through to the activity item, empty when there is none', () => {
+    const [withNote, withoutNote] = ledgerForActivity(
+      [
+        tx({id: 'a', type: 'expense', amount: 6.5, transactionDate: '2026-09-14', notes: 'Chai with Ravi'}),
+        tx({id: 'b', type: 'expense', amount: 4, transactionDate: '2026-09-13', notes: null}),
+      ],
+      [dining],
+    );
+    expect(withNote.note).toBe('Chai with Ravi');
+    expect(withoutNote.note).toBe('');
+  });
+
   it('matches search tokens across merchant, note, category, and amount', () => {
     const [item] = ledgerForActivity(
       [tx({id: 'coffee', type: 'expense', amount: 6.5, transactionDate: '2026-09-14'})],

@@ -15,8 +15,15 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
         var previousHadStatusPhrase = false
     }
 
+    /** A payment being started: a PIN screen ([amount] unknown) or a confirm screen with its amount. */
+    private class Attempt(val packageName: String, var atMillis: Long, val amount: BigDecimal?) {
+        /** A finished (success or failed) record came out of this attempt: it confirms no further result screen. */
+        var finished = false
+    }
+
     private val records = mutableListOf<Record>()
     private val pendingHits = mutableListOf<NotificationHit>()
+    private val attempts = ArrayDeque<Attempt>()
     private var session: Session? = null
     private var nextTxnId = 1L
     private var nextSessionId = 1L
@@ -79,6 +86,14 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
             is ParseResult.Candidate -> {
                 val decisions = handleCandidate(packageName, result, current, reappeared, nowMillis)
                 out += decisions
+                for (d in decisions) {
+                    val txn = when (d) {
+                        is Decision.Inserted -> d.txn
+                        is Decision.Updated -> d.txn
+                        else -> null
+                    }
+                    if (txn != null && txn.status != TxnStatus.PENDING) finishAttempts(packageName, txn.amount, nowMillis)
+                }
                 if (decisions.any { it is Decision.Inserted || it is Decision.FlaggedPossibleDuplicate }) {
                     out += retryPendingHits(nowMillis)
                 }
@@ -101,13 +116,78 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
                 pendingHits += hit
                 if (pendingHits.size > MAX_PENDING_HITS) pendingHits.removeAt(0)
             }
+            val heldBack = records.map { it.txn }
+                .filter { it.upiRef == null && matches(hit, it) }
+                .mapNotNull { t -> laterAttemptElsewhere(hit, t)?.let { a -> "#${t.id} (${sourceLabel(a.packageName)} payment started after it)" } }
+            val why = if (heldBack.isEmpty()) "" else "; not attached to ${heldBack.joinToString()}"
             out += Decision.NotificationChecked(
                 null,
-                "Notification ${hitSummary(hit)} from ${sourceLabel(hit.sourcePackage)}: no matching screen record yet; " +
+                "Notification ${hitSummary(hit)} from ${sourceLabel(hit.sourcePackage)}: no matching screen record yet$why; " +
                     "waiting up to ${NOTIFICATION_WINDOW_MILLIS / 60_000} min",
             )
         }
         return out
+    }
+
+    /**
+     * A payment is being started in [packageName]: a UPI PIN screen came up ([amount] null; the screen is never read),
+     * or a confirm screen showing [amount] about to be paid. Never creates a record. It is used twice:
+     * - A success read after it is a new payment, not a repeat of a record last seen before it (same app, amount and
+     *   merchant, or same screen session): paying the same merchant again from the same chat stays in one session.
+     * - A bank SMS posted after it is not attached to an earlier record of a different app; it waits for this app's.
+     *
+     * Returns false when it only refreshed the attempt already noted (the same confirm screen read again), or when it
+     * was ignored because the result of that amount is still showing (see [resultStillShowing]).
+     */
+    fun onPaymentAttempt(packageName: String, nowMillis: Long, amount: BigDecimal? = null): Boolean {
+        if (amount != null && resultStillShowing(packageName, amount)) return false
+        val last = attempts.lastOrNull()
+        if (amount != null && last != null && !last.finished && last.packageName == packageName &&
+            last.amount?.compareTo(amount) == 0
+        ) {
+            last.atMillis = nowMillis
+            return false
+        }
+        attempts.addLast(Attempt(packageName, nowMillis, amount))
+        while (attempts.size > MAX_ATTEMPTS) attempts.removeFirst()
+        return true
+    }
+
+    /**
+     * A payment of [amount] was started in [packageName] at most [LIVE_ATTEMPT_MILLIS] before [nowMillis] and has not
+     * produced a finished record yet: a result screen for that amount read now is that payment's live result. This is
+     * how the GPay screen is trusted (nothing on it looks like history) carried over to PhonePe, whose live result shares
+     * its screen with chat cards and an old payment's details: the payment flow itself (confirm screen, PIN or
+     * fingerprint) says the result is live, instead of a "Done" button and printed time that may not be drawn yet.
+     */
+    fun hasOpenAttempt(packageName: String, amount: BigDecimal, nowMillis: Long): Boolean =
+        openAttempts(packageName, amount, nowMillis).isNotEmpty()
+
+    /** When the open attempt for [amount] in [packageName] was started, or null; for the live log. */
+    fun openAttemptAt(packageName: String, amount: BigDecimal, nowMillis: Long): Long? =
+        openAttempts(packageName, amount, nowMillis).maxOfOrNull { it.atMillis }
+
+    /**
+     * The last read of this screen session still showed a status phrase, and the session already has a finished record
+     * of [amount]: a confirm-screen match now is that result read again (say after our note prompt closed over it), not
+     * a new payment. A real repeat payment first leaves the result (the chat or pay sheet shows no status phrase).
+     */
+    private fun resultStillShowing(pkg: String, amount: BigDecimal): Boolean {
+        val s = session?.takeIf { it.packageName == pkg && it.previousHadStatusPhrase } ?: return false
+        return records.any {
+            it.txn.sessionId == s.id && it.txn.sourceApp == pkg && it.txn.amount.compareTo(amount) == 0 &&
+                it.txn.status != TxnStatus.PENDING
+        }
+    }
+
+    private fun openAttempts(pkg: String, amount: BigDecimal, now: Long) = attempts.filter {
+        !it.finished && it.packageName == pkg && it.atMillis <= now && now - it.atMillis <= LIVE_ATTEMPT_MILLIS &&
+            (it.amount == null || it.amount.compareTo(amount) == 0)
+    }
+
+    /** A finished record of [amount] came out of the payment flow: its attempts confirm nothing more. */
+    private fun finishAttempts(pkg: String, amount: BigDecimal, now: Long) {
+        openAttempts(pkg, amount, now).forEach { it.finished = true }
     }
 
     /** Clears the POSSIBLE_DUPLICATE flag so the record counts. Returns false if no such flagged record. */
@@ -124,6 +204,28 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
         return true
     }
 
+    /**
+     * Replaces the records with [saved] (loaded from disk after a restart). Record ids continue after the highest saved
+     * id, and session ids after the highest saved session, so a new session never matches a restored record's session.
+     * The current session and pending notification hits are dropped.
+     */
+    fun restore(saved: List<Transaction>) {
+        records.clear()
+        saved.sortedBy { it.id }.forEach { records += Record(it, it.updatedAtMillis) }
+        pendingHits.clear()
+        attempts.clear()
+        session = null
+        nextTxnId = maxOf(nextTxnId, (saved.maxOfOrNull { it.id } ?: 0L) + 1)
+        nextSessionId = maxOf(nextSessionId, (saved.mapNotNull { it.sessionId }.maxOrNull() ?: 0L) + 1)
+    }
+
+    /** Sets the note on record [id]; a blank [note] clears it. Returns false if no such record. */
+    fun attachNote(id: Long, note: String?): Boolean {
+        val rec = records.firstOrNull { it.txn.id == id } ?: return false
+        rec.txn = rec.txn.copy(note = note?.trim()?.takeIf { it.isNotEmpty() })
+        return true
+    }
+
     /** Sum of SUCCESS + DEBIT records without a flag. */
     fun expenseTotal(): BigDecimal = records.map { it.txn }
         .filter { it.status == TxnStatus.SUCCESS && it.direction == Direction.DEBIT && it.flag == null }
@@ -132,6 +234,7 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
     fun clear() {
         records.clear()
         pendingHits.clear()
+        attempts.clear()
         session = null
     }
 
@@ -156,6 +259,26 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
             Math.abs(t.detectedAtMillis - h.postedAtMillis) <= NOTIFICATION_WINDOW_MILLIS &&
             directionCompatible(h.direction, t.direction) && sourceCompatible(h, t)
 
+    /**
+     * For a bank SMS (which names no UPI app): a payment attempt in a different app between [t]'s detection and the
+     * SMS, which makes the SMS more likely that app's. Null when there is none.
+     */
+    /**
+     * A payment of [amount] (or of an unknown amount, from a PIN screen) was started in [pkg] after [sinceMillis]:
+     * whatever is read now is a new payment, not a repeat of what was last seen at [sinceMillis].
+     */
+    private fun newAttemptSince(pkg: String, amount: BigDecimal, sinceMillis: Long, now: Long) = attempts.any {
+        it.packageName == pkg && it.atMillis > sinceMillis && it.atMillis <= now &&
+            (it.amount == null || it.amount.compareTo(amount) == 0)
+    }
+
+    private fun laterAttemptElsewhere(h: NotificationHit, t: Transaction): Attempt? {
+        if (h.sourcePackage in UPI_APP_PACKAGES) return null
+        return attempts.lastOrNull {
+            it.packageName != t.sourceApp && it.atMillis > t.detectedAtMillis && it.atMillis <= h.postedAtMillis
+        }
+    }
+
     /** Applies [h] to the records; null when nothing matched. */
     private fun resolveHit(h: NotificationHit, now: Long): Decision.NotificationChecked? {
         val source = sourceLabel(h.sourcePackage)
@@ -165,7 +288,9 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
                 "Notification from $source confirms record #${it.txn.id}: UPI ref ${h.upiRef} already attached",
             )
         }
-        val candidates = records.filter { it.txn.upiRef == null && matches(h, it.txn) }
+        val candidates = records.filter {
+            it.txn.upiRef == null && matches(h, it.txn) && laterAttemptElsewhere(h, it.txn) == null
+        }
         fun closest(flagged: Boolean) = candidates.filter { (it.txn.flag != null) == flagged }
             .minByOrNull { Math.abs(it.txn.detectedAtMillis - h.postedAtMillis) }
 
@@ -251,10 +376,11 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
             }
         }
 
-        // Rule 2: same screen session.
+        // Rule 2: same screen session (not across a payment started since the record was last seen).
         if (session != null) {
             val rec = records.lastOrNull {
-                it.txn.sessionId == session.id && sameCore(it.txn, pkg, c) && !refConflict(it.txn, c)
+                it.txn.sessionId == session.id && sameCore(it.txn, pkg, c) && !refConflict(it.txn, c) &&
+                    !newAttemptSince(pkg, c.amount, it.lastSeenMillis, now)
             }
             if (rec != null) {
                 // A PENDING -> final transition often passes through a phrase-less redraw; that is an upgrade, not a second payment.
@@ -273,11 +399,12 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
             }
         }
 
-        // Rule 3: recent record in a different (or no) session.
+        // Rule 3: recent record in a different (or no) session (not across a payment started since it was last seen).
         val recent = records.lastOrNull {
             sameCore(it.txn, pkg, c) && !refConflict(it.txn, c) &&
                 now - it.lastSeenMillis <= windowMillis &&
-                (it.txn.sessionId == null || it.txn.sessionId != session?.id)
+                (it.txn.sessionId == null || it.txn.sessionId != session?.id) &&
+                !newAttemptSince(pkg, c.amount, it.lastSeenMillis, now)
         }
         if (recent != null) {
             val t = recent.txn
@@ -297,10 +424,17 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
             }
         }
 
-        // Rule 4: new record.
+        // Rule 4: new record. Say so when only a payment started since kept it from matching an earlier record.
+        val repeatOf = records.lastOrNull {
+            sameCore(it.txn, pkg, c) && !refConflict(it.txn, c) &&
+                (it.txn.sessionId == session?.id || now - it.lastSeenMillis <= windowMillis)
+        }
+        val why = repeatOf?.let {
+            "; same app/amount/merchant as record #${it.txn.id}, but a new payment was started after it was last seen"
+        } ?: ""
         val txn = newTransaction(pkg, c, session?.id, now, null, null, null)
         records += Record(txn, now)
-        return Decision.Inserted(txn, "Inserted record #${txn.id}: $summary${c.upiRef?.let { " ref $it" } ?: ""}")
+        return Decision.Inserted(txn, "Inserted record #${txn.id}: $summary${c.upiRef?.let { " ref $it" } ?: ""}$why")
     }
 
     private fun sameCore(t: Transaction, pkg: String, c: ParseResult.Candidate) =
@@ -397,6 +531,10 @@ class DuplicateDetector(private val windowMillis: Long = 60_000L) {
     companion object {
         const val NOTIFICATION_WINDOW_MILLIS = 300_000L
         private const val MAX_PENDING_HITS = 20
+        private const val MAX_ATTEMPTS = 20
+
+        /** A payment's result screen comes within this long after it was started (processing can take a while). */
+        const val LIVE_ATTEMPT_MILLIS = 180_000L
         private const val GPAY_PACKAGE = "com.google.android.apps.nbu.paisa.user"
         private const val PHONEPE_PACKAGE = "com.phonepe.app"
         private const val PAYTM_PACKAGE = "net.one97.paytm"

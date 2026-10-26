@@ -11,6 +11,7 @@ import {Screen, SlideSwap} from '../../components/ui';
 import {spacing} from '../../theme';
 import {OnboardingFooter} from './components/OnboardingFooter';
 import {OnboardingHeader} from './components/OnboardingHeader';
+import {AutoTrackStep} from './steps/AutoTrackStep';
 import {BasicInfoStep} from './steps/BasicInfoStep';
 import {BudgetStep} from './steps/BudgetStep';
 import {CategoriesStep} from './steps/CategoriesStep';
@@ -69,6 +70,8 @@ export function OnboardingFlow({
           );
         case 'budget':
           return <BudgetStep draft={flow.draft} onChange={flow.update} />;
+        case 'autotrack':
+          return <AutoTrackStep draft={flow.draft} onChange={flow.update} />;
         default:
           return null;
       }

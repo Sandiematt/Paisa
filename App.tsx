@@ -4,6 +4,7 @@ import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 import {RootNavigator} from './src/app/RootNavigator';
 import {AuthProvider, useAuth} from './src/features/auth/AuthProvider';
+import {AutoTrackProvider} from './src/features/autotrack/AutoTrackProvider';
 import {NotificationsProvider} from './src/features/notifications/NotificationsProvider';
 import {BiometricLockProvider} from './src/features/security/BiometricLockProvider';
 import {LaunchSplash} from './src/features/splash/LaunchSplash';
@@ -39,7 +40,9 @@ function AppShell() {
     <>
       <BiometricLockProvider suspended={!splashDone}>
         <NotificationsProvider>
-          <RootNavigator />
+          <AutoTrackProvider>
+            <RootNavigator />
+          </AutoTrackProvider>
         </NotificationsProvider>
       </BiometricLockProvider>
       {splashDone ? null : (

@@ -3,6 +3,7 @@ import {Animated, LayoutChangeEvent, PanResponder, StyleSheet, View} from 'react
 import {
   ArrowsClockwise,
   Copy,
+  NotePencil,
   PencilSimple,
   Trash,
 } from 'phosphor-react-native';
@@ -160,6 +161,7 @@ export function SwipeableTxnRow({
   };
 
   const amountLabel = formatMoney(item.amount, currencySymbol, {signed: true});
+  const note = item.note?.trim() ?? '';
 
   const rowBody = (
     <>
@@ -197,6 +199,20 @@ export function SwipeableTxnRow({
           numberOfLines={1}>
           {item.category} · {detailTail(item)}
         </Text>
+        {note ? (
+          <View style={styles.noteRow} testID="txn-note">
+            <NotePencil size={12} color={colors.muted} />
+            <Text
+              fontFamily={fonts.jakartaRegular}
+              fontSize={12}
+              lineHeight={17}
+              color={colors.inkSecondary}
+              numberOfLines={1}
+              style={styles.noteText}>
+              {note}
+            </Text>
+          </View>
+        ) : null}
       </View>
       <Text
         fontFamily={fonts.jakartaBold}
@@ -231,7 +247,7 @@ export function SwipeableTxnRow({
         accessibilityRole="text"
         accessibilityLabel={`${item.merchant}, ${item.category}, ${amountLabel}${
           item.recurring ? ', recurring' : ''
-        }. Swipe for actions.`}>
+        }${note ? `, note: ${note}` : ''}. Swipe for actions.`}>
         <View style={styles.cluster}>
           <PressableScale
             scaleTo={0.96}
@@ -369,6 +385,14 @@ const styles = StyleSheet.create({
   name: {
     flexShrink: 1,
     minWidth: 0,
+  },
+  noteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  noteText: {
+    flexShrink: 1,
   },
   amount: {
     flexShrink: 0,

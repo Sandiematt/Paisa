@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark "What was this for?" dialog, started by AppStore.openNoteScreen as a fallback to the overlay. -->
+    <style name="Theme.UpiDetector.Note" parent="android:Theme.Material.Dialog">
+        <item name="android:colorPrimary">@color/paisa_violet</item>
+        <item name="android:colorAccent">@color/paisa_lavender</item>
+        <item name="android:windowBackground">@drawable/upi_card_bg</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowCloseOnTouchOutside">false</item>
+        <item name="android:textColorPrimary">@color/paisa_text</item>
+        <item name="android:textColorSecondary">@color/paisa_muted</item>
+        <item name="android:textColorHint">@color/paisa_muted</item>
+    </style>
+</resources>

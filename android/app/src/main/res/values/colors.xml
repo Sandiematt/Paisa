@@ -2,4 +2,31 @@
 <resources>
     <color name="ic_launcher_background">#0E0E11</color>
     <color name="canvas">#0E0E11</color>
+
+    <!-- Paisa design tokens, used by the UPI detector's overlays and note dialog. -->
+    <color name="paisa_ground">#0E0E11</color>
+    <color name="paisa_surface">#1B1B20</color>
+    <color name="paisa_surface_raised">#24242B</color>
+    <color name="paisa_line">#14FFFFFF</color>
+    <color name="paisa_text">#F5F5F7</color>
+    <color name="paisa_muted">#A3A3AD</color>
+    <color name="paisa_violet">#6D4AFF</color>
+    <color name="paisa_lavender">#B9A7FF</color>
+    <color name="paisa_mint">#5EE0A0</color>
+    <color name="paisa_rose_light">#FB7193</color>
+    <color name="paisa_gold">#E9C77B</color>
+
+    <!-- The detector framework's colour names, mapped to the tokens above. -->
+    <color name="bg">@color/paisa_ground</color>
+    <color name="surface">@color/paisa_surface</color>
+    <color name="surface_raised">@color/paisa_surface_raised</color>
+    <color name="line">@color/paisa_line</color>
+    <color name="text_primary">@color/paisa_text</color>
+    <color name="text_secondary">@color/paisa_muted</color>
+    <color name="muted">@color/paisa_muted</color>
+    <color name="accent">@color/paisa_violet</color>
+    <color name="accent_soft">@color/paisa_lavender</color>
+    <color name="success">@color/paisa_mint</color>
+    <color name="failed">@color/paisa_rose_light</color>
+    <color name="pending">@color/paisa_gold</color>
 </resources>

@@ -1,5 +1,5 @@
-import React, {useEffect, useRef} from 'react';
-import {Animated, Pressable, StyleSheet, View} from 'react-native';
+import React, {useEffect, useRef, useState} from 'react';
+import {Animated, LayoutChangeEvent, StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {ChartBar, House, Plus, Receipt} from 'phosphor-react-native';
@@ -25,6 +25,7 @@ import {
   radii,
   shadows,
   spacing,
+  spring,
 } from '../../theme';
 
 export const TABS = ['home', 'activity', 'insights'] as const;
@@ -71,6 +72,7 @@ function TabGlyph({
 function NavSlot({
   label,
   active,
+  showFill,
   onPress,
   accessibilityRole,
   accessibilityLabel,
@@ -78,11 +80,37 @@ function NavSlot({
 }: {
   label: string;
   active: boolean;
+  /** Paint the active fill here; off once the sliding indicator has measured. */
+  showFill: boolean;
   onPress: () => void;
   accessibilityRole: 'tab' | 'button';
   accessibilityLabel: string;
   children: React.ReactNode;
 }) {
+  const reducedMotion = useReducedMotion();
+  const pop = useRef(new Animated.Value(1)).current;
+  const wasActive = useRef(active);
+
+  // The glyph pops as its tab is picked; never on mount.
+  useEffect(() => {
+    const picked = active && !wasActive.current;
+    wasActive.current = active;
+    if (!picked || reducedMotion) {
+      return;
+    }
+    pop.setValue(0);
+    const anim = Animated.spring(pop, {toValue: 1, ...spring.pop, useNativeDriver: true});
+    anim.start();
+    return () => anim.stop();
+  }, [active, pop, reducedMotion]);
+
+  const glyphMotion = {
+    transform: [
+      {translateY: pop.interpolate({inputRange: [0, 1], outputRange: [3, 0]})},
+      {scale: pop.interpolate({inputRange: [0, 1], outputRange: [0.78, 1]})},
+    ],
+  };
+
   return (
     <PressableScale
       onPress={onPress}
@@ -91,8 +119,8 @@ function NavSlot({
       accessibilityState={accessibilityRole === 'tab' ? {selected: active} : undefined}
       accessibilityLabel={accessibilityLabel}
       containerStyle={styles.slot}
-      style={[styles.item, active && styles.itemActive]}>
-      {children}
+      style={[styles.item, active && showFill && styles.itemActive]}>
+      <Animated.View style={glyphMotion}>{children}</Animated.View>
       <AppText
         variant="caption"
         color={active ? colors.text : colors.muted}
@@ -116,6 +144,30 @@ export function NavBar({
   const hideDistance = useFloatingNavClearance() + spacing.lg;
   const hidden = useRef(new Animated.Value(0)).current;
   const plusTwist = useRef(new Animated.Value(0)).current;
+  const [pillWidth, setPillWidth] = useState(0);
+  const slotWidth = (pillWidth - FLOATING_NAV_PILL_PAD_V * 2) / TAB_ITEMS.length;
+  const activeIndex = Math.max(0, TABS.indexOf(activeTab));
+  const indicatorX = useRef(new Animated.Value(0)).current;
+  const indicatorPlaced = useRef(false);
+
+  // The active fill glides between tabs instead of jumping. It snaps on the
+  // first measure so the bar never animates in from the wrong slot.
+  useEffect(() => {
+    if (pillWidth === 0) {
+      return;
+    }
+    const toValue = activeIndex * slotWidth;
+    if (!indicatorPlaced.current || reducedMotion) {
+      indicatorPlaced.current = true;
+      indicatorX.setValue(toValue);
+      return;
+    }
+    Animated.spring(indicatorX, {toValue, ...spring.select, useNativeDriver: true}).start();
+  }, [activeIndex, indicatorX, pillWidth, reducedMotion, slotWidth]);
+
+  const onPillLayout = (event: LayoutChangeEvent) => {
+    setPillWidth(Math.round(event.nativeEvent.layout.width));
+  };
 
   useEffect(() => {
     Animated.timing(hidden, {
@@ -171,6 +223,23 @@ export function NavBar({
           radius={radii.pill}
           style={[styles.pillWrap, shadows.nav]}
           contentStyle={styles.pill}>
+          <View
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+            onLayout={onPillLayout}
+          />
+          {pillWidth > 0 ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.indicator,
+                {
+                  left: FLOATING_NAV_PILL_PAD_V + (slotWidth - ACTIVE_PILL_WIDTH) / 2,
+                  transform: [{translateX: indicatorX}],
+                },
+              ]}
+            />
+          ) : null}
           {TAB_ITEMS.map(item => {
             const active = activeTab === item.id;
             return (
@@ -178,6 +247,7 @@ export function NavBar({
                 key={item.id}
                 label={item.label}
                 active={active}
+                showFill={pillWidth === 0}
                 onPress={() => onTabPress(item.id)}
                 accessibilityRole="tab"
                 accessibilityLabel={item.label}>
@@ -191,20 +261,20 @@ export function NavBar({
           })}
         </GlassPanel>
 
-        <Pressable
+        <PressableScale
           onPress={onAddPress}
+          scaleTo={0.9}
           accessibilityRole="button"
           accessibilityLabel="Add transaction"
           accessibilityHint="Adds an expense or income"
-          style={styles.addHit}>
-          <View collapsable={false} style={[styles.addFace, shadows.add]}>
-            <Animated.View
-              pointerEvents="none"
-              style={{transform: [{rotate: spin}]}}>
-              <Plus color={colors.text} size={24} weight="bold" />
-            </Animated.View>
-          </View>
-        </Pressable>
+          containerStyle={styles.addHit}
+          style={[styles.addFace, shadows.add]}>
+          <Animated.View
+            pointerEvents="none"
+            style={{transform: [{rotate: spin}]}}>
+            <Plus color={colors.text} size={24} weight="bold" />
+          </Animated.View>
+        </PressableScale>
       </View>
     </Animated.View>
   );
@@ -260,6 +330,15 @@ const styles = StyleSheet.create({
 
   // Opaque so the glass blur behind the bar cannot show through unevenly.
   itemActive: {
+    backgroundColor: colors.surfaceRaised,
+  },
+
+  indicator: {
+    position: 'absolute',
+    top: FLOATING_NAV_PILL_PAD_V,
+    width: ACTIVE_PILL_WIDTH,
+    height: FLOATING_NAV_ITEM_HEIGHT,
+    borderRadius: radii.pill,
     backgroundColor: colors.surfaceRaised,
   },
 

@@ -1,3 +1,4 @@
+export {AnimatedNumber} from './AnimatedNumber';
 export {AppText} from './AppText';
 export {BackButton, BACK_BUTTON_SIZE} from './BackButton';
 export {BannerPill} from './BannerPill';

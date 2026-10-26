@@ -14,7 +14,6 @@ import {
   Lightning,
   ShareFat,
   ShoppingCart,
-  Sparkle,
   Tag,
   TrendDown,
   TrendUp,
@@ -53,6 +52,7 @@ import {
 import {InsightsData, InsightsPeriod, insightsData} from './insightsPlaceholder';
 import type {ChangeKind} from './insightsTypes';
 import {buildInsightsDataFromResponse} from './mapInsights';
+import {AiSparkle} from './AiSparkle';
 import {SpendingBars} from './SpendingBars';
 import {useLoadingGate} from './loadingGate';
 import {useInsights} from './useInsights';
@@ -308,7 +308,7 @@ function AiSummaryCard({data}: {data: InsightsData}) {
     <GradientView gradient={[colors.surfaceRaised, colors.surface]} angle={160} style={[styles.aiCard, styles.sectionGap]}>
       <View style={styles.aiHeader}>
         <GradientIconSquare size={36} glow>
-          <Sparkle size={18} color={colors.text} weight="fill" />
+          <AiSparkle size={18} />
         </GradientIconSquare>
         <View style={styles.aiTitleBlock}>
           <Text style={styles.cardTitle}>AI summary</Text>

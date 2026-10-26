@@ -8,7 +8,13 @@ import {colors, radii, withAlpha} from '../../theme';
 const BLOCK = withAlpha(colors.text, 0.08);
 
 /** Shimmering placeholder blocks that stand in for a ledger day while loading. */
-export function ActivitySkeleton({rows = 4}: {rows?: number}) {
+export function ActivitySkeleton({
+  rows = 4,
+  label = 'Loading activity',
+}: {
+  rows?: number;
+  label?: string;
+}) {
   const reducedMotion = useReducedMotion();
   const pulse = useRef(new Animated.Value(0)).current;
 
@@ -45,7 +51,7 @@ export function ActivitySkeleton({rows = 4}: {rows?: number}) {
       padding={0}
       radius={radii.card}
       accessibilityRole="progressbar"
-      accessibilityLabel="Loading activity"
+      accessibilityLabel={label}
       accessibilityState={{busy: true}}>
       <Animated.View style={{opacity}}>
         <View style={styles.header}>

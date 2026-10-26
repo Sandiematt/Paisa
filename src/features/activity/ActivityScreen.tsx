@@ -8,11 +8,10 @@ import {
   View,
 } from 'react-native';
 
-import {MagnifyingGlass, Receipt, XCircle} from 'phosphor-react-native';
+import {MagnifyingGlass, XCircle} from 'phosphor-react-native';
 
 import {
   Card,
-  GradientIconSquare,
   PressableScale,
   Screen,
   Text,
@@ -30,6 +29,7 @@ import {
 import {colors, fonts, layout, radii} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {ActivitySkeleton} from './ActivitySkeleton';
+import {FloatingReceipt} from './FloatingReceipt';
 import {ledgerForActivity, matchesFilter, matchesQuery} from './mapActivity';
 import {SwipeableTxnRow} from './SwipeableTxnRow';
 import {ActivityFilter, ActivityTransaction} from './types';
@@ -352,9 +352,7 @@ export function ActivityScreen({
         ) : groups.length === 0 ? (
           <Card radius={radii.cardHero} padding={0} style={styles.emptyCard}>
             <View style={styles.emptyInner}>
-              <GradientIconSquare size={48} glow>
-                <Receipt size={24} color={colors.text} weight="fill" />
-              </GradientIconSquare>
+              <FloatingReceipt />
               <Text
                 fontFamily={fonts.jakartaBold}
                 fontSize={18}

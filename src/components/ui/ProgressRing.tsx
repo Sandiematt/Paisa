@@ -1,8 +1,11 @@
-import React, {useRef} from 'react';
-import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import React, {useEffect, useRef} from 'react';
+import {Animated, StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
 import Svg, {Circle, Defs, LinearGradient, Stop} from 'react-native-svg';
 
-import {GradientKey, colors, gradients} from '../../theme';
+import {GradientKey, colors, dataReveal, easing, gradients} from '../../theme';
+import {useReducedMotion} from '../../hooks/useReducedMotion';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 type ProgressRingProps = {
   /** Outer diameter. Budget/savings rings are 112; avatar ring is 46. */
@@ -19,6 +22,8 @@ type ProgressRingProps = {
   children?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
+  /** Sweep the arc in from empty on mount and glide between values. */
+  animated?: boolean;
 };
 
 let ringSeq = 0;
@@ -26,6 +31,10 @@ let ringSeq = 0;
 /**
  * SVG progress ring: dim track, round-capped gradient arc starting at 12
  * o'clock. Centre content goes in `children`.
+ *
+ * The arc sweeps in on mount and glides to each new value. SVG props cannot
+ * ride the native driver, but this is one dash offset on one circle for under
+ * a second, then the loop is idle.
  *
  *   <ProgressRing size={112} stroke={10} progress={0.81} gradient="primary">
  *     <AppText variant="title">81%</AppText>
@@ -40,7 +49,28 @@ export function ProgressRing({
   children,
   style,
   accessibilityLabel,
+  animated = true,
 }: ProgressRingProps) {
+  const reducedMotion = useReducedMotion();
+  const clamped = Math.max(0, Math.min(1, progress));
+  const still = !animated || reducedMotion;
+  const fill = useRef(new Animated.Value(still ? clamped : 0)).current;
+
+  useEffect(() => {
+    if (still) {
+      fill.setValue(clamped);
+      return;
+    }
+    const sweep = Animated.timing(fill, {
+      toValue: clamped,
+      duration: dataReveal.ring,
+      easing: easing.out,
+      useNativeDriver: false,
+    });
+    sweep.start();
+    return () => sweep.stop();
+  }, [clamped, fill, still]);
+
   const idRef = useRef<string | null>(null);
   if (idRef.current == null) {
     ringSeq += 1;
@@ -48,7 +78,6 @@ export function ProgressRing({
   }
   const id = idRef.current;
 
-  const clamped = Math.max(0, Math.min(1, progress));
   const radius = (size - stroke) / 2;
   const center = size / 2;
   const circumference = 2 * Math.PI * radius;
@@ -82,7 +111,7 @@ export function ProgressRing({
           strokeWidth={stroke}
         />
         {clamped > 0 ? (
-          <Circle
+          <AnimatedCircle
             cx={center}
             cy={center}
             r={radius}
@@ -90,7 +119,17 @@ export function ProgressRing({
             stroke={`url(#${id})`}
             strokeWidth={stroke}
             strokeLinecap="round"
-            strokeDasharray={`${circumference * clamped} ${circumference}`}
+            strokeDasharray={`${circumference} ${circumference}`}
+            strokeDashoffset={fill.interpolate({
+              inputRange: [0, 1],
+              outputRange: [circumference, 0],
+            })}
+            // A zero-length dash still draws its round caps as a dot.
+            strokeOpacity={fill.interpolate({
+              inputRange: [0, 0.01],
+              outputRange: [0, 1],
+              extrapolate: 'clamp',
+            })}
             transform={`rotate(-90 ${center} ${center})`}
           />
         ) : null}

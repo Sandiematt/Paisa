@@ -4,6 +4,7 @@ import {Alert, StyleSheet} from 'react-native';
 import {SlideSwap} from '../components/ui';
 import {useAuth} from '../features/auth/AuthProvider';
 import {AuthChoiceScreen} from '../features/auth/AuthChoiceScreen';
+import {useAutoTrack} from '../features/autotrack/AutoTrackProvider';
 import {LoginScreen} from '../features/auth/LoginScreen';
 import {SplashScreen} from '../features/auth/SplashScreen';
 import {OnboardingFlow} from '../features/onboarding/OnboardingFlow';
@@ -35,6 +36,21 @@ export function RootNavigator() {
     updateRecoveredPassword,
     cancelPasswordReset,
   } = useAuth();
+  const {supported: autoTrackSupported, stagePrefs} = useAutoTrack();
+
+  // The onboarding toggles belong to the account, which may not exist yet:
+  // staged, they replace the defaults when this user's prefs first load.
+  const stageAutoTrack = useCallback(
+    (completed: OnboardingDraft) => {
+      if (autoTrackSupported) {
+        stagePrefs({
+          notesEnabled: completed.autoTrackNotes ?? true,
+          blockingEnabled: completed.autoTrackBlocking ?? true,
+        });
+      }
+    },
+    [autoTrackSupported, stagePrefs],
+  );
   const [draft, setDraft] = useState<OnboardingDraft | null>(null);
   const [profileReady, setProfileReady] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
@@ -82,6 +98,7 @@ export function RootNavigator() {
 
   const handleComplete = useCallback(
     async (completed: OnboardingDraft) => {
+      stageAutoTrack(completed);
       const password = completed.password ?? '';
       const result = await signUp(
         completed.email,
@@ -112,7 +129,7 @@ export function RootNavigator() {
       }
       setDraft(completed);
     },
-    [router, signUp],
+    [router, signUp, stageAutoTrack],
   );
 
   const handleSignIn = useCallback(
@@ -164,6 +181,7 @@ export function RootNavigator() {
       if (!user?.id) {
         return;
       }
+      stageAutoTrack(completed);
       try {
         await saveProfile(user.id, completed);
       } catch {
@@ -175,7 +193,7 @@ export function RootNavigator() {
       setDraft(completed);
       setNeedsSetup(false);
     },
-    [user?.id],
+    [stageAutoTrack, user?.id],
   );
 
   const handleProfileSave = useCallback(

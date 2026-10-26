@@ -64,6 +64,12 @@ object UpiTextParser {
     private val PENDING = phraseRegex(PENDING_PHRASES)
     private val SUCCESS = phraseRegex(SUCCESS_PHRASES, extraAlternative = AMOUNT_PAID_TO)
 
+    /**
+     * Success phrases only, for a phrase split across two views. "₹X paid to" is not looked for that way: a history row
+     * draws "₹50" and "Paid to Ravi" as separate views, and that is not a success statement.
+     */
+    private val SUCCESS_WORDS = phraseRegex(SUCCESS_PHRASES)
+
     private val DEBIT = phraseRegex(DEBIT_PHRASES)
     private val CREDIT = phraseRegex(CREDIT_PHRASES)
 
@@ -134,7 +140,7 @@ object UpiTextParser {
 
         val failure = findStatus(texts, FAILURE)
         val pending = findStatus(texts, PENDING)
-        val success = findStatus(texts, SUCCESS) ?: findPaidToSignature(texts)
+        val success = findStatus(texts, SUCCESS, SUCCESS_WORDS) ?: findPaidToSignature(texts)
 
         if (failure == null && pending == null && success == null) {
             return ParseResult.Rejected(RejectReason.NO_STATUS_PHRASE, "no recognised status phrase", false)
@@ -218,11 +224,33 @@ object UpiTextParser {
         return joined.replace(WHITESPACE, " ").trim()
     }
 
-    private fun findStatus(texts: List<String>, regex: Regex): StatusHit? {
+    /**
+     * The first node holding a phrase of [regex]; failing that, the first two consecutive non-empty nodes that only
+     * hold it together ("Payment" / "Successful" drawn as two views). The hit is placed at the first of the two.
+     */
+    private fun findStatus(texts: List<String>, regex: Regex, splitRegex: Regex = regex): StatusHit? {
         for ((index, text) in texts.withIndex()) {
             regex.find(text)?.let { return StatusHit(index, it.value) }
         }
+        val nonEmpty = texts.indices.filter { texts[it].isNotEmpty() }
+        for ((a, b) in nonEmpty.zipWithNext()) {
+            val first = texts[a]
+            val joined = "$first ${texts[b]}"
+            val match = splitRegex.find(joined) ?: continue
+            // Only a phrase that starts in the first node and ends in the second is a split phrase.
+            if (match.range.first < first.length && match.range.last > first.length) return StatusHit(a, match.value)
+        }
         return null
+    }
+
+    /** Status phrases on [snapshot] (failure, pending, success; split ones too), for the live log. */
+    fun statusPhrases(snapshot: ScreenSnapshot): List<String> {
+        val texts = mergeSplitAmounts(snapshot.nodes.map { searchableText(it) })
+        return listOfNotNull(
+            findStatus(texts, FAILURE)?.phrase,
+            findStatus(texts, PENDING)?.phrase,
+            (findStatus(texts, SUCCESS, SUCCESS_WORDS) ?: findPaidToSignature(texts))?.phrase,
+        )
     }
 
     private fun directionOf(texts: List<String>, statusPhrase: String): Direction {

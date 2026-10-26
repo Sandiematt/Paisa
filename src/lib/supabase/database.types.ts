@@ -1,5 +1,6 @@
 export type MoneyFlow = 'income' | 'expense';
 export type TransactionKind = 'regular' | 'opening_balance' | 'balance_adjustment';
+export type TransactionSource = 'manual' | 'upi_auto';
 
 export type Database = {
   public: {
@@ -96,6 +97,9 @@ export type Database = {
           notes: string | null;
           kind: TransactionKind;
           is_recurring: boolean;
+          source: TransactionSource;
+          external_ref: string | null;
+          upi_ref: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -112,6 +116,9 @@ export type Database = {
           notes?: string | null;
           kind?: TransactionKind;
           is_recurring?: boolean;
+          source?: TransactionSource;
+          external_ref?: string | null;
+          upi_ref?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -128,6 +135,9 @@ export type Database = {
           notes?: string | null;
           kind?: TransactionKind;
           is_recurring?: boolean;
+          source?: TransactionSource;
+          external_ref?: string | null;
+          upi_ref?: string | null;
           created_at?: string;
           updated_at?: string;
         };

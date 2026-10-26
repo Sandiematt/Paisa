@@ -1,3 +1,5 @@
+import {clearAutoTrackPrefs} from '../autotrack/autoTrackPrefs';
+import {clearUserData} from '../autotrack/nativeUpiDetector';
 import {clearBiometricPref} from '../biometricLock';
 import {clearNotificationData} from '../notifications/notificationStorage';
 import {clearProfileCache} from '../profileStore';
@@ -36,6 +38,9 @@ export async function deleteAccount(): Promise<void> {
     clearProfileCache(userId),
     clearBiometricPref(userId),
     clearNotificationData(userId),
+    clearAutoTrackPrefs(userId),
+    // The account is gone, so its detected payments and log must go too.
+    clearUserData(true),
   ]);
   await supabase.auth.signOut({scope: 'local'});
 }

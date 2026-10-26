@@ -82,10 +82,12 @@ Use **₹1** payments to someone you know (or yourself on a second UPI ID). Befo
 
 GPay's success screen has no "successful" text — just `₹1` / `Paid to` / name / `Share screenshot` / `See details`. The parser treats *an amount node directly followed by "Paid to"* as success **only** when one of those success-screen controls is on screen.
 
-Expected: exactly **one** row: Google Pay · ₹1.00 · SUCCESS · DEBIT · payee name · 12-digit UPI ref (if GPay showed "UPI transaction ID"). Expense total ₹1.00. Log: `Session … started`, `snapshot Google Pay … N text nodes` with N > 0, `Inserted record #1: 1.00 SUCCESS at <payee> …`, then a `Session … ended … (app went to background)`.
+Expected: exactly **one** row: Google Pay · ₹1.00 · SUCCESS · DEBIT · payee name · 12-digit UPI ref (if GPay showed "UPI transaction ID"). Expense total ₹1.00. Log: `Session … started`, `read Google Pay …: 1 window(s): [used] N nodes candidate ₹1.00 SUCCESS DEBIT` with N > 0, `Inserted record #1: 1.00 SUCCESS at <payee> …`, then a `Session … ended … (app went to background)`.
 
 ### TC2 — PhonePe success
 Same as TC1 in PhonePe. Expected: one PhonePe SUCCESS row; ref from "UTR" if shown. PhonePe's own "Transaction ID T…" must **not** appear as the ref.
+
+PhonePe draws its processing and result screens in a window of their own above the chat. Expected log: `skipped PIN-entry screen (not read)`, then `read PhonePe …: 2 window(s): [used] … candidate ₹… PENDING` or `SUCCESS` for the result window and `rejected NO_STATUS_PHRASE` for the chat, then `Inserted record` (or `Updated record … PENDING -> SUCCESS`), and the note prompt. In the Raw tab each window is its own capture, with a line such as `window 123, layer 1 of 3, app, root …`. If no record appears, share the report: the raw captures from that minute show every window that was read, and every failed read with the window list it saw.
 
 ### TC3 — Paytm success
 Same as TC1 in Paytm. Expected: one Paytm SUCCESS row; ref from "UPI Ref No" if shown. Paytm's "Order ID" must **not** appear as the ref.
@@ -161,6 +163,17 @@ Expected: status card says not enabled; nothing is recorded.
 With notification access on, pay ₹1 in GPay and then ₹1 in PhonePe to the same person, and wait for the bank SMS for each.
 
 Expected: each screen row gets a UPI ref within a minute or two (`attached UPI ref … to record #N`). If a payment produced a POSSIBLE_DUPLICATE row, the second SMS with a different ref clears the flag and the total includes both. The UPI app's own notification and the bank SMS for the same payment produce one `attached` plus one `confirms` line — never a new row. Note which banks' SMS were `ignored` (the report counts them) so their format can be added.
+
+### Device test (no UPI app, no payment)
+`PaymentFlowDeviceTest` runs the read pipeline and a real SQLite database on the phone: a successful payment (processing window, then the result window above the chat), a failed one, the app going to the background, a bank-SMS cross-check, and a restore as after a restart. It uses its own database and deletes it. Build: `./gradlew :app:assembleDebugAndroidTest`. Run without uninstalling the app:
+
+```
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell am instrument -w io.yestack.upidetector.test/android.test.InstrumentationTestRunner
+```
+
+`./gradlew :app:connectedDebugAndroidTest` also works but uninstalls the app afterwards, which turns the accessibility service off. Instrumenting restarts the app's process; Android rebinds the service by itself.
 
 ## 6. Exporting the diagnostic report
 

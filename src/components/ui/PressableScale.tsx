@@ -7,7 +7,7 @@ import {
   ViewStyle,
 } from 'react-native';
 
-import {duration, easing} from '../../theme';
+import {duration, easing, spring} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 
 type PressableScaleProps = Omit<PressableProps, 'style'> & {
@@ -22,7 +22,9 @@ type PressableScaleProps = Omit<PressableProps, 'style'> & {
 
 /**
  * Press feedback for every tappable surface in the app. Scale runs on the
- * native driver so it stays responsive while JS is busy.
+ * native driver so it stays responsive while JS is busy. The press sinks on a
+ * quick ease-out; the release springs back with a hint of overshoot so the
+ * surface feels like it pushes back.
  */
 export function PressableScale({
   scaleTo = 0.97,
@@ -38,6 +40,14 @@ export function PressableScale({
 
   const animate = useCallback(
     (toValue: number) => {
+      if (toValue === 1) {
+        Animated.spring(scale, {
+          toValue,
+          ...spring.release,
+          useNativeDriver: true,
+        }).start();
+        return;
+      }
       Animated.timing(scale, {
         toValue,
         duration: duration.press,

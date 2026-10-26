@@ -1,7 +1,8 @@
-import React, {useEffect, useMemo} from 'react';
+import React, {useEffect, useMemo, useRef} from 'react';
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  Animated,
   Image,
   RefreshControl,
   ScrollView,
@@ -15,7 +16,6 @@ import {
   Bell,
   CaretRight,
   ChartBar,
-  PiggyBank,
   Plus,
   Wallet,
   Warning,
@@ -23,6 +23,7 @@ import {
 } from 'phosphor-react-native';
 
 import {
+  AnimatedNumber,
   AppText,
   GlassPanel,
   GradientIconSquare,
@@ -37,7 +38,8 @@ import {
 import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
-import {colors, fonts, layout, radii, withAlpha} from '../../theme';
+import {useReducedMotion} from '../../hooks/useReducedMotion';
+import {colors, dataReveal, easing, fonts, layout, radii, withAlpha} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {isLocalAvatarUri} from '../profile/avatarImage';
 import {useNotifications} from '../notifications/NotificationsProvider';
@@ -52,6 +54,7 @@ import {
 } from './homeInsights';
 import {HomeRange, HomeReport, SavingsState, rangeNoun, rangeScopeLabel} from './homeReport';
 import {RelatedTransactions} from './RelatedTransactions';
+import {SavingsPiggy} from './SavingsPiggy';
 
 const RECENT_LIMIT = 5;
 
@@ -163,6 +166,40 @@ function syncCaption(
     return 'Updated 1 min ago';
   }
   return `Updated ${minutes} min ago`;
+}
+
+/**
+ * Bell that gives a short ring when a new notification arrives while Home is
+ * open. Never on mount: an unread badge the user has already seen stays still.
+ */
+function RingingBell({unreadCount}: {unreadCount: number}) {
+  const reducedMotion = useReducedMotion();
+  const swing = useRef(new Animated.Value(0)).current;
+  const previous = useRef(unreadCount);
+
+  useEffect(() => {
+    const rose = unreadCount > previous.current;
+    previous.current = unreadCount;
+    if (!rose || reducedMotion) {
+      return;
+    }
+    const step = (toValue: number) =>
+      Animated.timing(swing, {toValue, duration: 90, easing: easing.standard, useNativeDriver: true});
+    const ring = Animated.sequence([step(1), step(-0.8), step(0.5), step(-0.3), step(0)]);
+    ring.start();
+    return () => ring.stop();
+  }, [reducedMotion, swing, unreadCount]);
+
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          {rotate: swing.interpolate({inputRange: [-1, 1], outputRange: ['-18deg', '18deg']})},
+        ],
+      }}>
+      <Bell size={20} color={colors.text} />
+    </Animated.View>
+  );
 }
 
 type StatTileProps = {
@@ -282,7 +319,27 @@ function GoalCard({
   );
 }
 
-function RingPercent({text, color = colors.text}: {text: string; color?: string}) {
+function RingPercent({
+  text,
+  percent,
+  color = colors.text,
+}: {
+  text: string;
+  /** Counts up alongside the ring sweep instead of showing `text` outright. */
+  percent?: number;
+  color?: string;
+}) {
+  if (percent != null) {
+    return (
+      <AnimatedNumber
+        value={percent}
+        format={value => `${Math.round(value)}%`}
+        durationMs={dataReveal.ring}
+        style={[styles.ringPercent, tabular, {color}]}
+        numberOfLines={1}
+      />
+    );
+  }
   return (
     <AppText
       style={[styles.ringPercent, tabular, {color}]}
@@ -348,7 +405,7 @@ function BudgetGoalCard({
         over ? (
           <RingPercent text="Over" color={colors.roseLight} />
         ) : (
-          <RingPercent text={`${usedPct}%`} />
+          <RingPercent text={`${usedPct}%`} percent={usedPct} />
         )
       }
       centerSub={over ? 'budget' : 'used'}
@@ -387,7 +444,7 @@ function SavingsGoalCard({
   onPress?: () => void;
 }) {
   const scope = rangeScopeLabel(range);
-  const icon = <PiggyBank size={17} weight="fill" color={colors.text} />;
+  const icon = <SavingsPiggy saved={Math.max(0, actualSavings)} />;
   const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
 
   if (savingsState.kind === 'no-income') {
@@ -462,7 +519,7 @@ function SavingsGoalCard({
       iconGradient="savings"
       ringProgress={progress}
       ringGradient="savings"
-      centerTop={<RingPercent text={`${pct}%`} />}
+      centerTop={<RingPercent text={`${pct}%`} percent={pct} />}
       centerSub="of goal"
       title="Savings"
       value={`${money(saved)} of ${money(periodSavingsTarget)}`}
@@ -639,7 +696,7 @@ export function HomeScreen({
               accessibilityRole="button"
               accessibilityLabel={notificationsLabel}
               style={styles.bell}>
-              <Bell size={20} color={colors.text} />
+              <RingingBell unreadCount={unreadCount} />
               {unreadCount > 0 ? <View style={styles.unreadDot} /> : null}
             </PressableScale>
           </GlassPanel>
@@ -671,15 +728,19 @@ export function HomeScreen({
                 />
               </View>
 
-              <AppText
+              {/* Sized from the final text so the font never steps mid-count. */}
+              <AnimatedNumber
+                value={data.balance}
+                format={value => money(Math.round(value))}
+                durationMs={dataReveal.count}
+                memoryKey="home-balance"
                 style={[
                   styles.balance,
                   balanceSize,
                   data.balance < 0 ? {color: colors.roseLight} : null,
                 ]}
-                numberOfLines={1}>
-                {balanceText}
-              </AppText>
+                numberOfLines={1}
+              />
 
               {data.empty ? null : (
                 <AppText style={styles.changeLine} numberOfLines={1}>

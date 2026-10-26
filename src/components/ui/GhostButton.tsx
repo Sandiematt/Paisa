@@ -9,6 +9,7 @@ type GhostButtonProps = {
   label: string;
   onPress: () => void;
   tone?: 'muted' | 'ink';
+  disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -17,14 +18,18 @@ export function GhostButton({
   label,
   onPress,
   tone = 'muted',
+  disabled = false,
   style,
 }: GhostButtonProps) {
   return (
     <PressableScale
       onPress={onPress}
+      disabled={disabled}
       scaleTo={0.96}
       accessibilityRole="button"
-      containerStyle={style}
+      accessibilityLabel={label}
+      accessibilityState={{disabled}}
+      containerStyle={[style, disabled && styles.disabled]}
       style={styles.surface}>
       <AppText
         variant="bodyStrong"
@@ -36,6 +41,9 @@ export function GhostButton({
 }
 
 const styles = StyleSheet.create({
+  disabled: {
+    opacity: 0.5,
+  },
   surface: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,

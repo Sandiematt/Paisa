@@ -95,7 +95,7 @@ export function LoginScreen({
           showsVerticalScrollIndicator={false}>
           <Stagger index={0} style={styles.hero}>
             <View pointerEvents="none" style={styles.mark}>
-              <Logo size={96} />
+              <Logo size={96} trim />
             </View>
             <AppText
               variant="label"

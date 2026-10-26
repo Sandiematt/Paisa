@@ -27,6 +27,11 @@ export const STEP_TITLES: Record<StepKey, {title: string; subtitle: string}> = {
     title: 'Budget and savings',
     subtitle: 'Set a spending ceiling and how much you want to save each month.',
   },
+  autotrack: {
+    title: 'Track UPI payments for you',
+    subtitle:
+      'Paisa can log what you pay in Google Pay, PhonePe and Paytm, so you never type an expense in again.',
+  },
 };
 
 export const CURRENCIES: CurrencyPreset[] = [

@@ -11,6 +11,7 @@ import {ActivityScreen} from '../activity/ActivityScreen';
 import {ActivityFilter} from '../activity/types';
 import {AddActionSheet} from '../add/AddActionSheet';
 import {AddTransactionScreen} from '../add/AddTransactionScreen';
+import {SavedEvent, SavedToast} from '../add/SavedToast';
 import {AddKind} from '../add/types';
 import {BudgetDetailsScreen} from '../home/BudgetDetailsScreen';
 import {HomeScreen} from '../home/HomeScreen';
@@ -18,10 +19,15 @@ import {SavingsDetailsScreen} from '../home/SavingsDetailsScreen';
 import {useHomeDashboard} from '../home/useHomeDashboard';
 import {FloatingNavScrollProvider} from '../NavBar/FloatingNavScroll';
 import {NavBar, TabId} from '../NavBar/NavBar';
+import {TabStage} from '../NavBar/TabStage';
 import {currencyByCode, MIN_CATEGORIES} from '../onboarding/constants';
 import {OnboardingDraft} from '../onboarding/types';
+import {formatMoney} from '../../lib/formatMoney';
 import {SaveProfileOptions} from '../../lib/profileStore';
 import {TransactionRow} from '../../lib/transactionsStore';
+import {useAutoTrack} from '../autotrack/AutoTrackProvider';
+import {AutoTrackingScreen} from '../autotrack/AutoTrackingScreen';
+import {unsyncedSpendByDate} from '../autotrack/dailyAllowance';
 import {InsightsScreen} from '../insights/InsightsScreen';
 import {NotificationHistorySheet} from '../notifications/NotificationHistorySheet';
 import {useNotifications} from '../notifications/NotificationsProvider';
@@ -49,11 +55,13 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   const [addKind, setAddKind] = useState<AddKind | null>(null);
   const [editRow, setEditRow] = useState<TransactionRow | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [autoTrackOpen, setAutoTrackOpen] = useState(false);
   const [budgetOpen, setBudgetOpen] = useState(false);
   const [budgetEditOpen, setBudgetEditOpen] = useState(false);
   const [savingsOpen, setSavingsOpen] = useState(false);
   const [ledgerFocus, setLedgerFocus] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [savedEvent, setSavedEvent] = useState<SavedEvent | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   // Week key of the Home spending nudge closed during this session.
   const [dismissedNudgeKey, setDismissedNudgeKey] = useState<string | null>(null);
@@ -85,6 +93,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     refreshing,
     error,
     updatedAt,
+    ledgerAsOf,
     reload,
     upsertLocal,
     removeLocal,
@@ -95,6 +104,17 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   );
 
   const {setSnapshot, pendingTarget, consumeTarget} = useNotifications();
+  const {
+    setBudgetInputs,
+    syncNonce,
+    transactions: detectedPayments,
+  } = useAutoTrack();
+  // Detected payments the ledger above does not include yet still count toward
+  // today's limit: unsaved ones, and ones saved after the ledger was read.
+  const unsyncedSpend = useMemo(
+    () => unsyncedSpendByDate(detectedPayments, ledgerAsOf),
+    [detectedPayments, ledgerAsOf],
+  );
   const handoffTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyClosedAt = useRef(0);
 
@@ -116,6 +136,25 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     status,
     transactions,
   ]);
+
+  // The UPI spend guard and daily allowance run from the same ledger and budget.
+  useEffect(() => {
+    if (status !== 'ready') {
+      return;
+    }
+    setBudgetInputs({
+      transactions,
+      monthlyBudget: moneyPlan.monthlyBudget,
+      dataAsOfMillis: ledgerAsOf,
+    });
+  }, [ledgerAsOf, moneyPlan.monthlyBudget, setBudgetInputs, status, transactions]);
+
+  // Payments auto-tracking just saved are new rows to show.
+  useEffect(() => {
+    if (syncNonce > 0) {
+      setRefreshNonce(value => value + 1);
+    }
+  }, [syncNonce]);
 
   useEffect(
     () => () => {
@@ -144,6 +183,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     // same dismiss time as an overlay that is still on screen.
     const overlayOpen =
       profileOpen ||
+      autoTrackOpen ||
       budgetOpen ||
       budgetEditOpen ||
       savingsOpen ||
@@ -152,6 +192,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       Date.now() - historyClosedAt.current < MODAL_HANDOFF_MS;
     setNotificationsOpen(false);
     setProfileOpen(false);
+    setAutoTrackOpen(false);
     setBudgetOpen(false);
     setBudgetEditOpen(false);
     setSavingsOpen(false);
@@ -184,6 +225,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     }
   }, [
     addKind,
+    autoTrackOpen,
     budgetEditOpen,
     budgetOpen,
     consumeTarget,
@@ -194,6 +236,14 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     savingsOpen,
     setRange,
   ]);
+
+  // Lets the overlay that is closing finish dismissing before the next opens.
+  const openAfterHandoff = useCallback((open: () => void) => {
+    if (handoffTimer.current) {
+      clearTimeout(handoffTimer.current);
+    }
+    handoffTimer.current = setTimeout(open, MODAL_HANDOFF_MS);
+  }, []);
 
   const openComposer = useCallback((kind: AddKind) => {
     setSheetOpen(false);
@@ -279,11 +329,11 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
 
   return (
     <FloatingNavScrollProvider
-          resetKey={`${tab}:${profileOpen}:${budgetOpen}:${budgetEditOpen}:${savingsOpen}:${notificationsOpen}:${sheetOpen}:${addKind ?? ''}:${editRow?.id ?? ''}`}>
+          resetKey={`${tab}:${profileOpen}:${autoTrackOpen}:${budgetOpen}:${budgetEditOpen}:${savingsOpen}:${notificationsOpen}:${sheetOpen}:${addKind ?? ''}:${editRow?.id ?? ''}`}>
       <View style={styles.root} collapsable={false}>
-        <View style={styles.stage} collapsable={false}>
+        <TabStage tab={tab} style={styles.stage}>
           {page}
-        </View>
+        </TabStage>
 
         <NavBar
           activeTab={tab}
@@ -312,6 +362,17 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
             setEditRow(null);
           }}
           onSaved={row => {
+            const kindLabel = row.type === 'income' ? 'Income' : 'Expense';
+            setSavedEvent(previous => ({
+              key: (previous?.key ?? 0) + 1,
+              title: editRow ? `${kindLabel} updated` : `${kindLabel} added`,
+              detail: formatMoney(
+                row.type === 'income' ? row.amount : -row.amount,
+                currency.symbol,
+                {signed: true, decimals: Number.isInteger(row.amount) ? 0 : 2},
+              ),
+              tone: row.type === 'income' ? 'income' : 'expense',
+            }));
             upsertLocal(row);
             setLedgerFocus(row.transactionDate);
             setRefreshNonce(value => value + 1);
@@ -334,6 +395,8 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           range={report.range ?? 'month'}
           transactions={transactions}
           categories={categories}
+          monthlyBudget={moneyPlan.monthlyBudget}
+          extraSpendByDate={unsyncedSpend}
         />
 
         <MoneySheet
@@ -388,7 +451,27 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
             setRefreshNonce(value => value + 1);
           }}
           onSignOut={onSignOut}
+          onOpenAutoTracking={() => {
+            setProfileOpen(false);
+            openAfterHandoff(() => setAutoTrackOpen(true));
+          }}
           onClose={() => setProfileOpen(false)}
+        />
+
+        <SavedToast event={savedEvent} />
+
+        <AutoTrackingScreen
+          visible={autoTrackOpen}
+          currencySymbol={currency.symbol}
+          // Back returns to Profile, where the dashboard was opened from.
+          onClose={() => {
+            setAutoTrackOpen(false);
+            openAfterHandoff(() => setProfileOpen(true));
+          }}
+          onOpenBudget={() => {
+            setAutoTrackOpen(false);
+            openAfterHandoff(() => setBudgetEditOpen(true));
+          }}
         />
       </View>
     </FloatingNavScrollProvider>

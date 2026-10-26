@@ -52,6 +52,21 @@ export const duration = {
 export const spring = {
   select: {tension: 320, friction: 18},
   celebrate: {tension: 170, friction: 12},
+  /** Press release: snappy, one small overshoot, settles fast. */
+  release: {tension: 380, friction: 14},
+  /** Icon pop on selection (nav tabs, toggled glyphs). */
+  pop: {tension: 260, friction: 9},
+} as const;
+
+/**
+ * Data reveals: rings filling, chart lines drawing, numbers counting. Long
+ * enough to read as "the value arrived", short enough that a returning user
+ * is never kept waiting for it.
+ */
+export const dataReveal = {
+  count: 900,
+  ring: 900,
+  chart: 820,
 } as const;
 
 /**

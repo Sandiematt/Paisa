@@ -48,6 +48,13 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.expense_tracker"
+
+    sourceSets {
+        main {
+            // UPI detector core (pure Kotlin, no android.*): compiled straight into the app, never modified here.
+            java.srcDirs += ['../../backend_service/core/src/main/kotlin']
+        }
+    }
     defaultConfig {
         applicationId "com.expense_tracker"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -96,4 +103,8 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    testImplementation 'junit:junit:4.13.2'
+    // android.jar stubs org.json in unit tests; the real implementation is needed to read the shared test vectors.
+    testImplementation 'org.json:json:20240303'
 }

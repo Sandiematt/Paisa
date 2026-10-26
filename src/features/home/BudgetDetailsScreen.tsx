@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import {View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {Wallet} from 'phosphor-react-native';
 
 import {AppText, Card, ProgressBar} from '../../components/ui';
@@ -7,6 +7,8 @@ import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
 import {colors} from '../../theme';
+import {daysLabel, weekProgress} from '../autotrack/autoTrackFormat';
+import {buildBudgetSnapshot, dailyAllowance} from '../autotrack/dailyAllowance';
 import {DetailsFrame, HeroCard, StatCard, StatRow, detailsStyles} from './DetailsParts';
 import {relatedTransactions} from './homeInsights';
 import {HomeRange, SpendSlice, rangePlanTitle, rangeScopeLabel} from './homeReport';
@@ -25,10 +27,20 @@ type BudgetDetailsScreenProps = {
   range?: HomeRange;
   transactions?: TransactionRow[];
   categories?: CategoryRow[];
+  /**
+   * The full monthly budget. `budget` above is scaled to the selected range,
+   * so the daily plan needs this. Zero or less hides the Daily plan card.
+   */
+  monthlyBudget?: number;
+  /** Spend not in `transactions` yet (UPI payments detected but not synced), by local date. */
+  extraSpendByDate?: Record<string, number>;
+  /** Overrides "now" for the daily plan; tests only. */
+  today?: Date;
 };
 
 const EMPTY_ROWS: TransactionRow[] = [];
 const EMPTY_CATEGORIES: CategoryRow[] = [];
+const NO_EXTRA_SPEND: Record<string, number> = {};
 
 export function BudgetDetailsScreen({
   visible,
@@ -43,6 +55,9 @@ export function BudgetDetailsScreen({
   range = 'month',
   transactions = EMPTY_ROWS,
   categories = EMPTY_CATEGORIES,
+  monthlyBudget = 0,
+  extraSpendByDate = NO_EXTRA_SPEND,
+  today,
 }: BudgetDetailsScreenProps) {
   const progress = budget > 0 ? Math.max(0, Math.min(1, spent / budget)) : 0;
   const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
@@ -50,6 +65,21 @@ export function BudgetDetailsScreen({
     () => (visible ? relatedTransactions(transactions, range, 'expenses', 8) : EMPTY_ROWS),
     [range, transactions, visible],
   );
+
+  // The same function the dashboard and the UPI spend guard use, so the
+  // number matches everywhere. It needs the whole month's ledger, not the
+  // range-filtered view.
+  const plan = useMemo(() => {
+    if (!visible || !(monthlyBudget > 0)) {
+      return null;
+    }
+    const now = today ?? new Date();
+    return dailyAllowance(
+      buildBudgetSnapshot(transactions, monthlyBudget, now),
+      now,
+      extraSpendByDate,
+    );
+  }, [extraSpendByDate, monthlyBudget, today, transactions, visible]);
 
   return (
     <DetailsFrame visible={visible} title="Budget" onClose={onClose}>
@@ -80,6 +110,56 @@ export function BudgetDetailsScreen({
           valueColor={overBudget ? colors.roseLight : colors.mint}
         />
       </StatRow>
+
+      {plan ? (
+        <Card style={detailsStyles.gap} testID="daily-plan">
+          <AppText variant="heading" accessibilityRole="header" style={detailsStyles.cardTitle}>
+            Daily plan
+          </AppText>
+          <AppText variant="label" color={colors.muted}>
+            Today you can spend
+          </AppText>
+          <AppText
+            variant="numeric"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.7}
+            style={planStyles.limit}>
+            {money(plan.dailyLimit)}
+          </AppText>
+          <AppText variant="label" color={colors.muted} style={planStyles.line}>
+            {`Spent today ${money(plan.spentToday)} · `}
+            {plan.remainingToday < 0 ? (
+              <AppText variant="label" color={colors.roseLight}>
+                {`Over today's limit by ${money(-plan.remainingToday)}`}
+              </AppText>
+            ) : (
+              `${money(plan.remainingToday)} left today`
+            )}
+          </AppText>
+          <View style={planStyles.week}>
+            <ProgressBar
+              progress={weekProgress(plan)}
+              gradient={plan.remainingWeek < 0 ? 'rose' : 'primary'}
+              height={4}
+            />
+          </View>
+          <AppText
+            variant="label"
+            color={plan.remainingWeek < 0 ? colors.roseLight : colors.muted}
+            style={planStyles.line}>
+            {`This week ${money(plan.weekBudget)} · ${money(
+              Math.abs(plan.remainingWeek),
+            )} ${plan.remainingWeek < 0 ? 'over' : 'left'} · ${daysLabel(
+              plan.daysLeftInWeek,
+              'to go',
+            )}`}
+          </AppText>
+          <AppText variant="caption" color={colors.muted} style={detailsStyles.note}>
+            Unspent money rolls into the rest of the week; overspending lowers the coming days.
+          </AppText>
+        </Card>
+      ) : null}
 
       {slices.length > 0 ? (
         <Card style={detailsStyles.gap}>
@@ -141,3 +221,17 @@ export function BudgetDetailsScreen({
     </DetailsFrame>
   );
 }
+
+const planStyles = StyleSheet.create({
+  limit: {
+    fontSize: 28,
+    lineHeight: 34,
+    marginTop: 2,
+  },
+  line: {
+    marginTop: 6,
+  },
+  week: {
+    marginTop: 12,
+  },
+});

@@ -4,6 +4,7 @@ export const STEP_KEYS = [
   'goal',
   'categories',
   'budget',
+  'autotrack',
 ] as const;
 
 export type StepKey = (typeof STEP_KEYS)[number];
@@ -22,6 +23,9 @@ export type OnboardingDraft = {
   monthlyBudget: string;
   monthlySavingsGoal: string;
   avatarUrl?: string;
+  /** Auto-tracking toggles picked on the last step (Android only). */
+  autoTrackNotes?: boolean;
+  autoTrackBlocking?: boolean;
 };
 
 export type CategoryPreset = {

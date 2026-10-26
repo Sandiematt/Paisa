@@ -16,6 +16,11 @@ import io.yestack.upidetector.NotificationSources
  */
 class UpiNotificationListener : NotificationListenerService() {
 
+    override fun onCreate() {
+        super.onCreate()
+        AppStore.init(applicationContext)
+    }
+
     override fun onListenerConnected() {
         AppStore.post { AppStore.log("listener connected") }
     }

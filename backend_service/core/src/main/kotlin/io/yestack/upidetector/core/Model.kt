@@ -33,6 +33,9 @@ enum class RejectReason {
 
     /** The screen shows a payment dated before the app was installed (history, chat, receipts). */
     BEFORE_INSTALL,
+
+    /** A history list or an old payment's detail page (see [HistoryScreen]): not a payment just made. */
+    HISTORY_SCREEN,
 }
 
 sealed interface ParseResult {
@@ -87,7 +90,35 @@ data class Transaction(
     val flagReason: String?,
     /** For a flagged record: the earlier record it may duplicate. */
     val possibleDuplicateOfId: Long?,
+    /** What the user said the payment was for; null when they skipped the prompt or were never asked. */
+    val note: String? = null,
 )
+
+enum class ConfirmRejectReason {
+    EMPTY_SNAPSHOT,
+
+    /** A success, failure or pending phrase is on screen: the payment already happened (or is happening). */
+    RESULT_SCREEN,
+
+    /** A history list or old-payment detail page, or a screen with too many amounts to be a confirm screen. */
+    HISTORY_SCREEN,
+    PIN_SCREEN,
+    NO_PAY_BUTTON,
+    NO_AMOUNT,
+    AMBIGUOUS_AMOUNT,
+}
+
+/** What [ConfirmScreenParser] read from a pre-payment confirm screen. Never creates a record. */
+sealed interface ConfirmResult {
+    data class Candidate(
+        /** The amount about to be paid: the one nearest the Pay button. */
+        val amount: BigDecimal,
+        /** The Pay button label as shown, for the live log. */
+        val payButton: String,
+    ) : ConfirmResult
+
+    data class Rejected(val reason: ConfirmRejectReason, val detail: String) : ConfirmResult
+}
 
 /** Everything DuplicateDetector decides. Each carries the live-log line explaining why. */
 sealed interface Decision {
