@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Animated, LayoutChangeEvent, StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {ChartBar, House, Plus, Receipt} from 'phosphor-react-native';
+import {Plus} from 'phosphor-react-native';
 
 import {
   FLOATING_NAV_GAP,
@@ -12,7 +12,7 @@ import {
   useFloatingNavClearance,
   useFloatingNavVisible,
 } from './FloatingNavScroll';
-import {AppText, GlassPanel, PressableScale} from '../../components/ui';
+import {AppText, GlassPanel, NavLottieIcon, PressableScale} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {
   colors,
@@ -47,27 +47,6 @@ const TAB_ITEMS: {id: TabId; label: string}[] = [
 const ACTIVE_PILL_WIDTH = 70;
 const ADD_SIZE = layout.addButton;
 const FAB_IMAGE = linearGradient(gradients.fab, 140, [0, 0.55, 1]);
-
-function TabGlyph({
-  id,
-  color,
-  active,
-}: {
-  id: TabId;
-  color: string;
-  active: boolean;
-}) {
-  const size = layout.navIcon;
-  const weight = active ? 'fill' : 'regular';
-  switch (id) {
-    case 'home':
-      return <House color={color} size={size} weight={weight} />;
-    case 'activity':
-      return <Receipt color={color} size={size} weight={weight} />;
-    case 'insights':
-      return <ChartBar color={color} size={size} weight={weight} />;
-  }
-}
 
 function NavSlot({
   label,
@@ -251,11 +230,7 @@ export function NavBar({
                 onPress={() => onTabPress(item.id)}
                 accessibilityRole="tab"
                 accessibilityLabel={item.label}>
-                <TabGlyph
-                  id={item.id}
-                  color={active ? colors.text : colors.muted}
-                  active={active}
-                />
+                <NavLottieIcon id={item.id} active={active} size={layout.navIcon} />
               </NavSlot>
             );
           })}

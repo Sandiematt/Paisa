@@ -1,8 +1,6 @@
-import React, {useEffect, useMemo, useRef} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   AccessibilityInfo,
-  ActivityIndicator,
-  Animated,
   Image,
   RefreshControl,
   ScrollView,
@@ -11,13 +9,9 @@ import {
 } from 'react-native';
 
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
-  Bell,
   CaretRight,
   ChartBar,
   Plus,
-  Wallet,
   Warning,
   X,
 } from 'phosphor-react-native';
@@ -28,18 +22,19 @@ import {
   GlassPanel,
   GradientIconSquare,
   GradientView,
+  Loader,
   PressableScale,
   ProgressRing,
   Screen,
   SectionTitle,
   SegmentedControl,
+  TileLottieIcon,
   BannerPill,
 } from '../../components/ui';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
-import {useReducedMotion} from '../../hooks/useReducedMotion';
-import {colors, dataReveal, easing, fonts, layout, radii, withAlpha} from '../../theme';
+import {colors, dataReveal, fonts, layout, radii, withAlpha} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {isLocalAvatarUri} from '../profile/avatarImage';
 import {useNotifications} from '../notifications/NotificationsProvider';
@@ -54,7 +49,6 @@ import {
 } from './homeInsights';
 import {HomeRange, HomeReport, SavingsState, rangeNoun, rangeScopeLabel} from './homeReport';
 import {RelatedTransactions} from './RelatedTransactions';
-import {SavingsPiggy} from './SavingsPiggy';
 
 const RECENT_LIMIT = 5;
 
@@ -173,33 +167,17 @@ function syncCaption(
  * open. Never on mount: an unread badge the user has already seen stays still.
  */
 function RingingBell({unreadCount}: {unreadCount: number}) {
-  const reducedMotion = useReducedMotion();
-  const swing = useRef(new Animated.Value(0)).current;
+  const [rings, setRings] = useState(0);
   const previous = useRef(unreadCount);
 
   useEffect(() => {
-    const rose = unreadCount > previous.current;
-    previous.current = unreadCount;
-    if (!rose || reducedMotion) {
-      return;
+    if (unreadCount > previous.current) {
+      setRings(count => count + 1);
     }
-    const step = (toValue: number) =>
-      Animated.timing(swing, {toValue, duration: 90, easing: easing.standard, useNativeDriver: true});
-    const ring = Animated.sequence([step(1), step(-0.8), step(0.5), step(-0.3), step(0)]);
-    ring.start();
-    return () => ring.stop();
-  }, [reducedMotion, swing, unreadCount]);
+    previous.current = unreadCount;
+  }, [unreadCount]);
 
-  return (
-    <Animated.View
-      style={{
-        transform: [
-          {rotate: swing.interpolate({inputRange: [-1, 1], outputRange: ['-18deg', '18deg']})},
-        ],
-      }}>
-      <Bell size={20} color={colors.text} />
-    </Animated.View>
-  );
+  return <TileLottieIcon kind="bell" size={20} replayKey={rings} playOnMount={false} />;
 }
 
 type StatTileProps = {
@@ -368,7 +346,7 @@ function BudgetGoalCard({
   onPress?: () => void;
   onEditPress?: () => void;
 }) {
-  const icon = <Wallet size={17} weight="fill" color={colors.text} />;
+  const icon = <TileLottieIcon kind="wallet" size={20} replayKey={remainingBudget} />;
   const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
 
   if (!showBudget) {
@@ -444,7 +422,9 @@ function SavingsGoalCard({
   onPress?: () => void;
 }) {
   const scope = rangeScopeLabel(range);
-  const icon = <SavingsPiggy saved={Math.max(0, actualSavings)} />;
+  const icon = (
+    <TileLottieIcon kind="piggy" size={20} replayKey={Math.max(0, actualSavings)} />
+  );
   const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
 
   if (savingsState.kind === 'no-income') {
@@ -615,7 +595,7 @@ export function HomeScreen({
       gradient={stripOver ? 'rose' : 'budgetStrip'}
       angle={90}
       style={styles.strip}>
-      <Wallet size={16} weight="fill" color={colors.text} />
+      <TileLottieIcon kind="wallet" size={18} replayKey={stripText} />
       <AppText
         variant="bodyStrong"
         style={styles.stripText}
@@ -768,7 +748,7 @@ export function HomeScreen({
                 accessibilityLabel={`Sync now. ${syncLabel}`}
                 style={styles.syncRow}>
                 {syncing ? (
-                  <ActivityIndicator size="small" color={colors.muted} />
+                  <Loader size={22} />
                 ) : status === 'error' ? (
                   <Warning size={13} weight="fill" color={colors.roseLight} />
                 ) : null}
@@ -797,13 +777,13 @@ export function HomeScreen({
           <StatTile
             label="Expense"
             amount={money(data.spent)}
-            icon={<ArrowUpRight size={18} weight="bold" color={colors.text} />}
+            icon={<TileLottieIcon kind="expense" size={20} replayKey={data.spent} />}
             accessibilityLabel={`Expense this ${noun}, ${money(data.spent)}`}
           />
           <StatTile
             label="Income"
             amount={money(data.income)}
-            icon={<ArrowDownLeft size={18} weight="bold" color={colors.text} />}
+            icon={<TileLottieIcon kind="income" size={20} replayKey={data.income} />}
             accessibilityLabel={`Income this ${noun}, ${money(data.income)}`}
           />
         </View>

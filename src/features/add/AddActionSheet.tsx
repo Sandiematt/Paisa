@@ -6,9 +6,8 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import {ArrowDownLeft, ArrowUpRight} from 'phosphor-react-native';
 
-import {AppText, PressableScale} from '../../components/ui';
+import {AppText, PressableScale, TileLottieIcon} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {
   useFloatingNavDockHeight,
@@ -134,19 +133,12 @@ export function AddActionSheet({
                       borderColor: withAlpha(option.accent, 0.3),
                     },
                   ]}>
-                  {option.kind === 'income' ? (
-                    <ArrowDownLeft
-                      size={20}
-                      color={option.accent}
-                      weight="bold"
-                    />
-                  ) : (
-                    <ArrowUpRight
-                      size={20}
-                      color={option.accent}
-                      weight="bold"
-                    />
-                  )}
+                  <TileLottieIcon
+                    kind={option.kind === 'income' ? 'income' : 'expense'}
+                    size={20}
+                    color={option.accent}
+                    replayKey={visible}
+                  />
                 </View>
                 <View style={styles.copy}>
                   <AppText variant="heading" color={colors.text}>

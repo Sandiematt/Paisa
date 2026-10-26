@@ -3,12 +3,15 @@ import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
 
 import {colors, layout, radii, spacing} from '../../theme';
 import {AppText} from './AppText';
+import {Loader} from './Loader';
 import {PressableScale} from './PressableScale';
 
 type PrimaryButtonProps = {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  /** Shows the loading animation beside the label (and blocks presses). */
+  loading?: boolean;
   /** Optional trailing glyph, e.g. an arrow on a wizard's continue button. */
   trailing?: string;
   style?: StyleProp<ViewStyle>;
@@ -20,6 +23,7 @@ export function PrimaryButton({
   label,
   onPress,
   disabled = false,
+  loading = false,
   trailing,
   style,
   accessibilityHint,
@@ -28,7 +32,7 @@ export function PrimaryButton({
   return (
     <PressableScale
       onPress={onPress}
-      disabled={disabled}
+      disabled={disabled || loading}
       scaleTo={0.975}
       accessibilityRole="button"
       accessibilityState={{disabled}}
@@ -36,6 +40,7 @@ export function PrimaryButton({
       containerStyle={style}
       style={[styles.surface, disabled && styles.surfaceDisabled]}>
       <View style={styles.row}>
+        {loading ? <Loader size={24} style={styles.loader} /> : null}
         <AppText
           variant="heading"
           color={labelColor}
@@ -70,5 +75,8 @@ const styles = StyleSheet.create({
   },
   trailing: {
     marginLeft: spacing.sm,
+  },
+  loader: {
+    marginRight: spacing.sm,
   },
 });

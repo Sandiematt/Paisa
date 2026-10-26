@@ -585,6 +585,7 @@ export function AddTransactionScreen({
               label={submitLabel}
               onPress={handleSubmit}
               disabled={!canSubmit}
+              loading={saving}
               accessibilityHint={
                 numericAmount > 0
                   ? `Saves this ${kind}`

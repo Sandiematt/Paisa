@@ -1,6 +1,5 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Animated,
   Image,
@@ -36,6 +35,7 @@ import {
   BackButton,
   Card,
   GradientView,
+  Loader,
   PressableScale,
   ProgressRing,
   Screen,
@@ -700,7 +700,7 @@ export function ProfileScreen({
                 </AppText>
               </View>
               {exportingMonth ? (
-                <ActivityIndicator color={colors.text} />
+                <Loader size={28} />
               ) : (
                 <CaretRight size={20} color={colors.text} weight="bold" />
               )}

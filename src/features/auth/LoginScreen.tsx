@@ -203,6 +203,7 @@ export function LoginScreen({
               label={busy ? 'Signing in…' : 'Sign in'}
               onPress={handleSignIn}
               disabled={busy}
+              loading={busy}
             />
 
             <DividerLabel label="or" />

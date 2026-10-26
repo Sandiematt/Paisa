@@ -10,16 +10,17 @@ jest.mock('../src/theme/useAppFonts', () => ({useAppFonts: () => [true, null]}))
 const format = (value: number) => `₹${Math.round(value)}`;
 
 let now = 0;
-let queued: FrameRequestCallback[] = [];
+type Frame = (time: number) => void;
+let queued: Frame[] = [];
 
 beforeEach(() => {
   now = 0;
   queued = [];
-  jest.spyOn(global, 'requestAnimationFrame').mockImplementation(callback => {
+  jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback: Frame) => {
     queued.push(callback);
     return queued.length;
   });
-  jest.spyOn(global, 'cancelAnimationFrame').mockImplementation(() => {});
+  jest.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
 });
 
 afterEach(() => {

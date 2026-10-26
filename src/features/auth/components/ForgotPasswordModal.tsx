@@ -267,6 +267,7 @@ export function ForgotPasswordModal({
             label={busy ? action.busyLabel : action.label}
             onPress={action.onPress}
             disabled={busy}
+            loading={busy}
           />
 
           {step !== 'done' ? (

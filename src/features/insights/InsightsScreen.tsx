@@ -26,6 +26,7 @@ import {
   Card,
   GradientIconSquare,
   GradientView,
+  LoadingState,
   PressableScale,
   ProgressBar,
   Screen,
@@ -414,25 +415,6 @@ function StatusBanner({offline, message, onRetry}: {offline: boolean; message: s
   );
 }
 
-/** Pulsing opacity used to animate skeleton blocks while insights are loading. */
-function useSkeletonPulse(reducedMotion: boolean): Animated.Value {
-  const opacity = useRef(new Animated.Value(0.5)).current;
-
-  useEffect(() => {
-    if (reducedMotion) return;
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {toValue: 1, duration: 650, useNativeDriver: true}),
-        Animated.timing(opacity, {toValue: 0.5, duration: 650, useNativeDriver: true}),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity, reducedMotion]);
-
-  return opacity;
-}
-
 /** Fades its children in once on mount; stays put (no re-fade) across re-renders. */
 function FadeIn({children}: {children: React.ReactNode}) {
   const reducedMotion = useReducedMotion();
@@ -449,53 +431,9 @@ function FadeIn({children}: {children: React.ReactNode}) {
   return <Animated.View style={{opacity}}>{children}</Animated.View>;
 }
 
-function SkeletonBlock({opacity, style}: {opacity: Animated.Value; style?: object}) {
-  return <Animated.View style={[styles.skeletonBlock, style, {opacity}]} />;
-}
-
 /** Shown while the first fetch for a period is in flight; no fabricated numbers. */
 function InsightsSkeleton() {
-  const reducedMotion = useReducedMotion();
-  const opacity = useSkeletonPulse(reducedMotion);
-
-  return (
-    <View accessibilityLabel="Loading insights" accessibilityRole="progressbar">
-      <Card radius={24} padding={20} style={styles.skeletonSummary}>
-        <SkeletonBlock opacity={opacity} style={styles.skeletonLabel} />
-        <SkeletonBlock opacity={opacity} style={styles.skeletonAmount} />
-        <SkeletonBlock opacity={opacity} style={styles.skeletonDelta} />
-        <SkeletonBlock opacity={opacity} style={styles.skeletonCompare} />
-        <SkeletonBlock opacity={opacity} style={styles.skeletonCompare} />
-      </Card>
-
-      <Card radius={24} padding={18} style={[styles.barsCard, styles.skeletonBarsCard]}>
-        <SkeletonBlock opacity={opacity} style={styles.skeletonLabel} />
-        <View style={styles.skeletonBarsRow}>
-          {[60, 96, 44, 72].map((height, index) => (
-            <SkeletonBlock key={index} opacity={opacity} style={[styles.skeletonBar, {height}]} />
-          ))}
-        </View>
-      </Card>
-
-      <Card radius={24} padding={0} style={[styles.categoryCard, styles.sectionGap]}>
-        {[0, 1, 2].map(index => (
-          <View key={index} style={[styles.categoryRow, index < 2 ? styles.categoryRowDivider : null]}>
-            <SkeletonBlock opacity={opacity} style={styles.skeletonIcon} />
-            <View style={styles.categoryText}>
-              <SkeletonBlock opacity={opacity} style={styles.skeletonRowLabel} />
-              <SkeletonBlock opacity={opacity} style={styles.skeletonRowBar} />
-            </View>
-          </View>
-        ))}
-      </Card>
-
-      <View style={[styles.aiCard, styles.sectionGap, styles.skeletonAi]}>
-        <SkeletonBlock opacity={opacity} style={styles.skeletonLabel} />
-        <SkeletonBlock opacity={opacity} style={styles.skeletonCompare} />
-        <SkeletonBlock opacity={opacity} style={styles.skeletonCompare} />
-      </View>
-    </View>
-  );
+  return <LoadingState label="Loading insights" size={120} style={styles.loadingState} />;
 }
 
 export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsScreenProps) {
@@ -966,69 +904,10 @@ const styles = StyleSheet.create({
   },
 
   // Loading skeleton
-  skeletonBlock: {
-    backgroundColor: colors.surfaceRaised,
+  loadingState: {
+    paddingVertical: 72,
   },
   pendingSpace: {
     minHeight: 640,
-  },
-  skeletonSummary: {
-    marginTop: 18,
-    gap: 14,
-    minHeight: 306,
-  },
-  skeletonAi: {
-    minHeight: 190,
-    gap: 14,
-    backgroundColor: colors.surface,
-  },
-  skeletonLabel: {
-    width: 120,
-    height: 14,
-    borderRadius: 7,
-  },
-  skeletonAmount: {
-    width: 190,
-    height: 40,
-    borderRadius: 12,
-  },
-  skeletonDelta: {
-    width: 220,
-    height: 14,
-    borderRadius: 7,
-  },
-  skeletonCompare: {
-    width: '100%',
-    height: 10,
-    borderRadius: 5,
-  },
-  skeletonBarsCard: {
-    marginTop: 14,
-    minHeight: 220,
-  },
-  skeletonBarsRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    height: 120,
-  },
-  skeletonBar: {
-    width: '21%',
-    borderRadius: 14,
-  },
-  skeletonIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-  },
-  skeletonRowLabel: {
-    width: '45%',
-    height: 14,
-    borderRadius: 7,
-  },
-  skeletonRowBar: {
-    width: '100%',
-    height: 4,
-    borderRadius: 2,
   },
 });
