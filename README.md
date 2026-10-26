@@ -1,8 +1,7 @@
 <p align="center">
-  <img src="assets/logo/logo.png" alt="Paisa logo" width="180">
+  <img src="assets/logo/logo.png" alt="Paisa logo" width="300">
 </p>
 
-<h1 align="center">Paisa</h1>
 
 <p align="center">
   A React Native expense tracker with insights, activity history and notifications.
