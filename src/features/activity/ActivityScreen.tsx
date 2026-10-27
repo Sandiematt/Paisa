@@ -17,6 +17,7 @@ import {
   Text,
 } from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
+import {recurringRootId} from '../../lib/recurring';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {
   TransactionRow,
@@ -432,13 +433,27 @@ export function ActivityScreen({
                   onEdit={() => item.source && onEdit(item.source)}
                   onDelete={() => onDelete(item)}
                   onToggleRecurring={() =>
-                    run(
-                      () =>
-                        updateTransaction(item.id, {
-                          isRecurring: !item.recurring,
-                        }),
-                      'Could not update',
-                    )
+                    run(async () => {
+                      const next = !item.recurring;
+                      // A saved copy belongs to a series; turning it off ends
+                      // the series, or the next month would add it again.
+                      const rootId = item.source
+                        ? recurringRootId(item.source)
+                        : null;
+                      if (rootId && !next) {
+                        const root = transactions.find(
+                          row => row.id === rootId,
+                        );
+                        if (root?.isRecurring) {
+                          onUpsert(
+                            await updateTransaction(rootId, {
+                              isRecurring: false,
+                            }),
+                          );
+                        }
+                      }
+                      return updateTransaction(item.id, {isRecurring: next});
+                    }, 'Could not update')
                   }
                   onDuplicate={() =>
                     run(

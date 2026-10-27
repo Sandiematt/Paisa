@@ -23,6 +23,7 @@ import {
   PrimaryButton,
   SegmentedControl,
   TextField,
+  ToggleSwitch,
 } from '../../components/ui';
 import {formatAmountInput, parseAmountInput} from '../../lib/formatMoney';
 import {buildTransactionPayload} from './transactionPayload';
@@ -153,6 +154,7 @@ export function AddTransactionScreen({
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [customCategory, setCustomCategory] = useState('');
   const [note, setNote] = useState('');
+  const [repeatMonthly, setRepeatMonthly] = useState(false);
   const [occurredOn, setOccurredOn] = useState(() => new Date());
   const [dateOpen, setDateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -169,6 +171,7 @@ export function AddTransactionScreen({
     setCategoryId(null);
     setCustomCategory('');
     setNote(existing?.notes ?? '');
+    setRepeatMonthly(existing?.isRecurring ?? false);
     setOccurredOn(
       existing ? dateFromCalendarISO(existing.transactionDate) : new Date(),
     );
@@ -306,6 +309,7 @@ export function AddTransactionScreen({
         categoryName: categoryRow?.name ?? categoryName,
         transactionDate: localDateISO(occurredOn),
         note,
+        isRecurring: repeatMonthly,
         existing,
         oldCategoryName:
           dbCategories.find(row => row.id === existing?.categoryId)?.name ??
@@ -533,6 +537,20 @@ export function AddTransactionScreen({
               underlineColorAndroid="transparent"
               style={styles.field}
             />
+
+            <View style={styles.repeatRow}>
+              <View style={styles.repeatCopy}>
+                <AppText variant="bodyStrong">Repeat every month</AppText>
+                <AppText variant="caption" color={colors.inkSecondary}>
+                  Adds this {kind} again on the same day each month.
+                </AppText>
+              </View>
+              <ToggleSwitch
+                value={repeatMonthly}
+                onValueChange={setRepeatMonthly}
+                accessibilityLabel="Repeat every month"
+              />
+            </View>
           </ScrollView>
 
           <View
@@ -694,6 +712,17 @@ const styles = StyleSheet.create({
   },
   field: {
     marginTop: spacing.md,
+  },
+  repeatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+  },
+  repeatCopy: {
+    flex: 1,
+    gap: 2,
   },
   dock: {
     paddingHorizontal: layout.screenPadding,

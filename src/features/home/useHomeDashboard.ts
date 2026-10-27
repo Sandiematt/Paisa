@@ -2,6 +2,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {useAuth} from '../auth/AuthProvider';
 import {CategoryRow, loadCategories} from '../../lib/categoriesStore';
+import {saveDueRecurring} from '../../lib/recurring';
 import {
   TransactionRow,
   loadTransactions,
@@ -82,6 +83,16 @@ export function useHomeDashboard(
         await seedOpeningBalance(openingAmount);
         fetchStartedAt = Date.now();
         nextTransactions = await loadTransactions();
+      }
+      // Monthly repeats that came due since the last visit become real rows.
+      // A failure here must not hide the ledger that did load.
+      try {
+        if ((await saveDueRecurring(nextTransactions, user.id)) > 0) {
+          fetchStartedAt = Date.now();
+          nextTransactions = await loadTransactions();
+        }
+      } catch {
+        // Tried again on the next reload.
       }
       // A newer reload started meanwhile: its ledger wins.
       if (request !== latestRequest.current) {

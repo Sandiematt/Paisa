@@ -1,6 +1,5 @@
 import {categoryVisual} from '../src/features/insights/categoryVisual';
 import {buildInsightsDataFromResponse} from '../src/features/insights/mapInsights';
-import {insightsData} from '../src/features/insights/insightsPlaceholder';
 import {buildSpendingBars} from '../src/features/insights/insightsMath';
 import type {InsightsResponse} from '../src/lib/supabase/insights';
 
@@ -153,30 +152,6 @@ describe('buildInsightsDataFromResponse', () => {
     );
     expect(data.period).toBe('year');
     expect(buildSpendingBars(data).bars.map(bar => bar.label)).toEqual(['Jan', 'Feb']);
-  });
-});
-
-describe('insightsData (example data)', () => {
-  const now = new Date(2026, 9, 24);
-
-  it.each(['week', 'month', 'year'] as const)('is internally consistent for %s', period => {
-    const data = insightsData('₹', period, now);
-    const bucketTotal = data.buckets.reduce((sum, bucket) => sum + bucket.amount, 0);
-    expect(data.period).toBe(period);
-    expect(data.referenceDate).toBe('2026-10-24');
-    expect(data.currentTotal).toBe(bucketTotal);
-    expect(data.buckets.length).toBeGreaterThan(0);
-    expect(data.categories.length).toBeGreaterThan(0);
-    expect(data.generatedAt).toBeNull();
-    expect(data.deltaAmount).toBe(Math.abs(data.previousTotal - data.currentTotal));
-  });
-
-  it('uses the right bucket shape per period', () => {
-    expect(insightsData('₹', 'week', now).buckets).toHaveLength(7);
-    // 24 October: four 7-day chunks.
-    expect(insightsData('₹', 'month', now).buckets.map(b => b.label)).toEqual(['W1', 'W2', 'W3', 'W4']);
-    // January to October.
-    expect(insightsData('₹', 'year', now).buckets).toHaveLength(10);
   });
 });
 

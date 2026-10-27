@@ -46,12 +46,12 @@ import {
   compareFractions,
   describeDelta,
   isOfflineError,
+  localIsoDate,
   periodLabels,
   previousPeriodLabel,
   updatedLabel,
 } from './insightsMath';
-import {InsightsData, InsightsPeriod, insightsData} from './insightsPlaceholder';
-import type {ChangeKind} from './insightsTypes';
+import type {ChangeKind, InsightsData, InsightsPeriod} from './insightsTypes';
 import {buildInsightsDataFromResponse} from './mapInsights';
 import {AiSparkle} from './AiSparkle';
 import {useTutorialTarget} from '../tutorial/TutorialProvider';
@@ -395,6 +395,19 @@ function EmptyCard({labels}: {labels: PeriodLabels}) {
   );
 }
 
+/** Shown when insights could not be loaded: no numbers rather than made-up ones. */
+function UnavailableCard() {
+  return (
+    <Card radius={24} padding={24} style={[styles.emptyCard, styles.sectionGapSmall]}>
+      <GradientIconSquare size={48} glow>
+        <ChartBar size={24} color={colors.text} weight="fill" />
+      </GradientIconSquare>
+      <Text style={styles.emptyTitle}>Insights unavailable</Text>
+      <Text style={styles.emptyBody}>Your spending summary will appear here as soon as it loads.</Text>
+    </Card>
+  );
+}
+
 function StatusBanner({offline, message, onRetry}: {offline: boolean; message: string | null; onRetry: () => void}) {
   return (
     <BannerPill
@@ -408,7 +421,7 @@ function StatusBanner({offline, message, onRetry}: {offline: boolean; message: s
         )
       }
       title={offline ? "You're offline" : "Couldn't refresh insights"}
-      subtitle={offline ? 'Showing example numbers until you reconnect.' : (message ?? 'Showing example numbers for now.')}
+      subtitle={offline ? 'Insights need a connection. Reconnect and retry.' : (message ?? 'Pull down or tap retry to try again.')}
       trailing={<Text style={styles.retryText}>Retry</Text>}
       onPress={onRetry}
       accessibilityLabel="Retry loading insights"
@@ -455,19 +468,21 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
   const showPending = loading && !skeletonVisible;
   const hasError = insights.status === 'error';
 
-  const data = useMemo<InsightsData>(() => {
-    if (isLive && insights.data) {
-      return buildInsightsDataFromResponse(insights.data, monthlyBudget);
-    }
-    const example = insightsData(currencySymbol, period);
-    return monthlyBudget && monthlyBudget > 0 ? {...example, monthlyBudget} : example;
-  }, [currencySymbol, isLive, insights.data, monthlyBudget, period]);
+  // Only real numbers are ever shown: with no response there is no data.
+  const data = useMemo<InsightsData | null>(
+    () => (isLive && insights.data ? buildInsightsDataFromResponse(insights.data, monthlyBudget) : null),
+    [isLive, insights.data, monthlyBudget],
+  );
 
-  const labels = useMemo(() => periodLabels(data.period, data.referenceDate), [data.period, data.referenceDate]);
+  const labels = useMemo(
+    () => (data ? periodLabels(data.period, data.referenceDate) : periodLabels(period, localIsoDate(new Date()))),
+    [data, period],
+  );
   const money = useCallback((value: number) => formatMoney(value, currencySymbol, {decimals: 0}), [currencySymbol]);
 
-  const canShare = isLive && !showSkeleton;
+  const canShare = data !== null && !showSkeleton;
   const onShare = useCallback(async () => {
+    if (!data) return;
     try {
       await Share.share({message: buildShareText(data, money)});
     } catch {
@@ -484,7 +499,7 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
     }
   }, [insights]);
 
-  const hasSpending = data.currentTotal > 0;
+  const hasSpending = data !== null && data.currentTotal > 0;
   const periodTarget = useTutorialTarget('insights.period');
 
   return (
@@ -525,6 +540,8 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
           </FadeIn>
         ) : showPending ? (
           <View style={styles.pendingSpace} />
+        ) : data === null ? (
+          <UnavailableCard />
         ) : (
           <FadeIn key="content">
             <SummaryCard data={data} labels={labels} currencySymbol={currencySymbol} />

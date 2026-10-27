@@ -14,6 +14,8 @@ export type TransactionFormInput = {
   categoryName: string | null;
   transactionDate: string;
   note: string;
+  /** Repeats every month. Defaults to the existing row's setting, else off. */
+  isRecurring?: boolean;
   existing?: {
     merchant: string | null;
     description: string | null;
@@ -70,7 +72,13 @@ export function buildTransactionPayload(
     return {
       ok: true,
       mode: 'create',
-      payload: {...base, kind: 'regular', description: name, merchant: name},
+      payload: {
+        ...base,
+        kind: 'regular',
+        description: name,
+        merchant: name,
+        isRecurring: input.isRecurring ?? false,
+      },
     };
   }
   const old = input.oldCategoryName;
@@ -86,7 +94,7 @@ export function buildTransactionPayload(
         ? name
         : existing.merchant,
       paymentMethod: existing.paymentMethod,
-      isRecurring: existing.isRecurring,
+      isRecurring: input.isRecurring ?? existing.isRecurring,
     },
   };
 }
