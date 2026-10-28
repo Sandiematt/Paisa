@@ -1,7 +1,6 @@
 import React, {useState} from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   View,
@@ -80,9 +79,9 @@ export function LoginScreen({
 
   return (
     <Screen glow={360}>
-      <KeyboardAvoidingView
-        style={styles.fill}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Android too: the app is edge-to-edge, so adjustResize no longer
+          shrinks the window and the keyboard would cover the password. */}
+      <KeyboardAvoidingView style={styles.fill} behavior="padding">
         <ScreenHeader onBack={onBack} />
 
         <ScrollView

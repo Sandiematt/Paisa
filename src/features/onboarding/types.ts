@@ -15,6 +15,8 @@ export type OnboardingDraft = {
   name: string;
   email: string;
   password?: string;
+  /** Typed again on sign-up; must match `password`. Never sent anywhere. */
+  confirmPassword?: string;
   currency: string;
   startingBalance: string;
   monthlyIncome: string;

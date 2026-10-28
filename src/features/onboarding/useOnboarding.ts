@@ -130,6 +130,9 @@ export function useOnboarding(
     if (!passwordless && (draft.password ?? '').length < 6) {
       next.password = 'Use at least 6 characters.';
     }
+    if (!passwordless && (draft.confirmPassword ?? '') !== (draft.password ?? '')) {
+      next.confirmPassword = "Passwords don't match.";
+    }
     if (draft.goal === null) {
       next.goal = 'Pick one so we know what to show you first.';
     }
@@ -139,6 +142,7 @@ export function useOnboarding(
     return next;
   }, [
     draft.categoryIds.length,
+    draft.confirmPassword,
     draft.email,
     draft.goal,
     draft.name,
@@ -149,7 +153,11 @@ export function useOnboarding(
   const validity = useMemo<Record<StepKey, StepValidity>>(
     () => ({
       basics: {
-        canContinue: !errors.name && !errors.email && !errors.password,
+        canContinue:
+          !errors.name &&
+          !errors.email &&
+          !errors.password &&
+          !errors.confirmPassword,
         skippable: false,
       },
       money: {canContinue: true, skippable: true},

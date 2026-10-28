@@ -1,7 +1,6 @@
 import React, {useCallback, useEffect, useRef} from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   ScrollViewInstance,
   StyleSheet,
@@ -81,9 +80,9 @@ export function OnboardingFlow({
 
   return (
     <Screen glow={280}>
-      <KeyboardAvoidingView
-        style={styles.fill}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Android too: the app is edge-to-edge, so adjustResize no longer
+          shrinks the window and the keyboard would cover the fields. */}
+      <KeyboardAvoidingView style={styles.fill} behavior="padding">
         <OnboardingHeader
           stepIndex={flow.visibleStepIndex}
           stepCount={flow.stepCount}

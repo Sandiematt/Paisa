@@ -1,8 +1,9 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {StyleSheet, View} from 'react-native';
+import {Eye, EyeSlash} from 'phosphor-react-native';
 
-import {Stagger, TextField} from '../../../components/ui';
-import {spacing} from '../../../theme';
+import {PressableScale, Stagger, TextField} from '../../../components/ui';
+import {colors, spacing} from '../../../theme';
 import {STEP_TITLES} from '../constants';
 import {StepLayout} from '../components/StepLayout';
 import {OnboardingDraft} from '../types';
@@ -17,6 +18,31 @@ type BasicInfoStepProps = {
   passwordless?: boolean;
 };
 
+function RevealToggle({
+  revealed,
+  onToggle,
+  label,
+}: {
+  revealed: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <PressableScale
+      onPress={onToggle}
+      scaleTo={0.94}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={`${revealed ? 'Hide' : 'Show'} ${label}`}>
+      {revealed ? (
+        <EyeSlash color={colors.muted} size={20} />
+      ) : (
+        <Eye color={colors.muted} size={20} />
+      )}
+    </PressableScale>
+  );
+}
+
 export function BasicInfoStep({
   draft,
   errors,
@@ -24,6 +50,8 @@ export function BasicInfoStep({
   passwordless = false,
 }: BasicInfoStepProps) {
   const copy = STEP_TITLES.basics;
+  const [passwordShown, setPasswordShown] = useState(false);
+  const [confirmShown, setConfirmShown] = useState(false);
 
   return (
     <StepLayout title={copy.title} subtitle={copy.subtitle}>
@@ -70,13 +98,46 @@ export function BasicInfoStep({
             placeholder="At least 6 characters"
             value={draft.password ?? ''}
             onChangeText={value => onChange('password', value)}
-            secureTextEntry
+            secureTextEntry={!passwordShown}
             autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="new-password"
+            textContentType="newPassword"
+            returnKeyType="next"
+            helper="This is how you will sign back in."
+            error={errors.password}
+            trailing={
+              <RevealToggle
+                revealed={passwordShown}
+                onToggle={() => setPasswordShown(shown => !shown)}
+                label="password"
+              />
+            }
+          />
+        </Stagger>
+      )}
+
+      {passwordless ? null : (
+        <Stagger index={4} style={styles.spaced}>
+          <TextField
+            label="Confirm password"
+            placeholder="Type it again"
+            value={draft.confirmPassword ?? ''}
+            onChangeText={value => onChange('confirmPassword', value)}
+            secureTextEntry={!confirmShown}
+            autoCapitalize="none"
+            autoCorrect={false}
             autoComplete="new-password"
             textContentType="newPassword"
             returnKeyType="done"
-            helper="This is how you will sign back in."
-            error={errors.password}
+            error={errors.confirmPassword}
+            trailing={
+              <RevealToggle
+                revealed={confirmShown}
+                onToggle={() => setConfirmShown(shown => !shown)}
+                label="confirm password"
+              />
+            }
           />
         </Stagger>
       )}

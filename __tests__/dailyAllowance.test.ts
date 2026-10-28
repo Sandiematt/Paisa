@@ -1,4 +1,5 @@
 import {
+  budgetAllocation,
   buildBudgetSnapshot,
   dailyAllowance,
   unsyncedSpendByDate,
@@ -115,7 +116,8 @@ describe('dailyAllowance', () => {
       {'2026-10-27': 400},
     );
     expect(result?.spentToday).toBe(400);
-    expect(result?.weekBudget).toBe(31000);
+    // Oct 26-31 at 1,000 a day; the unspent month does not land in this week.
+    expect(result?.weekBudget).toBe(6000);
   });
 
   it('has no allowance for a missing or invalid budget', () => {
@@ -141,8 +143,9 @@ describe('dailyAllowance', () => {
     expect(result?.weekStart).toBe('2026-10-26');
     expect(result?.weekEnd).toBe('2026-10-31');
     expect(result?.daysLeftInWeek).toBe(3);
-    expect(result?.weekBudget).toBe(3100);
-    expect(result?.dailyLimit).toBe(1033.33);
+    // 3,100 over 31 days is 100 a day, 600 for the 6 days of the week.
+    expect(result?.weekBudget).toBe(600);
+    expect(result?.dailyLimit).toBe(100);
   });
 
   it('never reports a negative limit and avoids negative zero', () => {
@@ -158,7 +161,29 @@ describe('dailyAllowance', () => {
     expect(result?.dailyLimit).toBe(0);
     expect(Object.is(result?.dailyLimit, 0)).toBe(true);
     expect(result?.remainingToday).toBe(0);
-    expect(result?.remainingWeek).toBe(-4000);
+    // The week's share is 6 * 1,000 / 31 = 193.55, and 5,000 went on Monday.
+    expect(result?.remainingWeek).toBe(-4806.45);
+  });
+});
+
+describe('budgetAllocation', () => {
+  it('divides the month into weeks, then a week into seven days', () => {
+    const october = budgetAllocation(1000, new Date(2026, 9, 28));
+    expect(october.weeksInMonth).toBeCloseTo(31 / 7, 10);
+    expect(october.weeklyBudget).toBeCloseTo(225.806, 3);
+    expect(october.dailyBudget).toBeCloseTo(32.258, 3);
+    // Every day of the month at the daily budget adds back up to the month.
+    expect(october.dailyBudget * 31).toBeCloseTo(1000, 6);
+
+    const february = budgetAllocation(2800, new Date(2026, 1, 10));
+    expect(february.weeksInMonth).toBe(4);
+    expect(february.weeklyBudget).toBe(700);
+    expect(february.dailyBudget).toBe(100);
+  });
+
+  it('is zero for a missing budget', () => {
+    expect(budgetAllocation(0, new Date(2026, 9, 1)).dailyBudget).toBe(0);
+    expect(budgetAllocation(Number.NaN, new Date(2026, 9, 1)).weeklyBudget).toBe(0);
   });
 });
 

@@ -36,9 +36,11 @@ jest.mock('../src/features/autotrack/AutoTrackProvider', () => ({
 
 const mockOpenAccessibility = jest.fn();
 const mockOpenNotificationAccess = jest.fn();
+const mockDeveloperMode = jest.fn(() => Promise.resolve(true));
 jest.mock('../src/lib/autotrack/nativeUpiDetector', () => ({
   openAccessibilitySettings: () => mockOpenAccessibility(),
   openNotificationAccessSettings: () => mockOpenNotificationAccess(),
+  isDeveloperModeEnabled: () => mockDeveloperMode(),
 }));
 
 /** All rendered text plus accessibility labels, flattened. */
@@ -204,6 +206,16 @@ describe('AutoTrackingScreen', () => {
     mockUseAutoTrack.mockReset();
     mockOpenAccessibility.mockReset();
     mockOpenNotificationAccess.mockReset();
+    mockDeveloperMode.mockImplementation(() => Promise.resolve(true));
+  });
+
+  it('hides Diagnostics unless Developer options are on', async () => {
+    mockDeveloperMode.mockImplementation(() => Promise.resolve(false));
+    mockUseAutoTrack.mockReturnValue(autoTrack({lastSyncAt: TODAY_NOON}));
+    const tree = await render(screen());
+    const text = textOf(tree);
+    expect(text).toContain('Detected payments');
+    expect(text).not.toContain('Diagnostics');
   });
 
   it('renders every section with data, including a flagged payment', async () => {

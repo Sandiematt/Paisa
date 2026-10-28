@@ -77,8 +77,8 @@ class BudgetPlanTest {
         val s = snapshot("2026-10", 31000, "2026-10-05" to 20000, "2026-10-26" to 1500, "2026-10-27" to 200)
         val a = BudgetPlan.allowance(s, extra("2026-10-27" to 300), LocalDate.parse("2026-10-27"))!!
         assertMoney("extra today", "spentToday", BigDecimal(500), a.spentToday)
-        assertMoney("extra today", "remainingToday", BigDecimal(1400), a.remainingToday)
-        assertMoney("extra today", "dailyLimit", BigDecimal(1900), a.dailyLimit)
+        assertMoney("extra today", "remainingToday", BigDecimal(400), a.remainingToday)
+        assertMoney("extra today", "dailyLimit", BigDecimal(900), a.dailyLimit)
     }
 
     @Test
@@ -86,15 +86,16 @@ class BudgetPlanTest {
         val s = snapshot("2026-10", 31000, "2026-10-05" to 20000, "2026-10-26" to 1500, "2026-10-27" to 200)
         val a = BudgetPlan.allowance(s, extra("2026-10-26" to 500), LocalDate.parse("2026-10-27"))!!
         assertMoney("extra earlier", "spentWeekBeforeToday", BigDecimal(2000), a.spentWeekBeforeToday)
-        // (11000 - 2000) / 5 days left
-        assertMoney("extra earlier", "dailyLimit", BigDecimal(1800), a.dailyLimit)
+        // Oct 26-31 at 1000 a day is 6000: (6000 - 2000) / 5 days left
+        assertMoney("extra earlier", "dailyLimit", BigDecimal(800), a.dailyLimit)
     }
 
     @Test
     fun unsyncedSpendBeforeTheWeekLowersTheWeekBudget() {
         val s = snapshot("2026-10", 31000, "2026-10-26" to 1500)
-        val a = BudgetPlan.allowance(s, extra("2026-10-05" to 20000), LocalDate.parse("2026-10-27"))!!
-        assertMoney("extra month", "weekBudget", BigDecimal(11000), a.weekBudget)
+        val a = BudgetPlan.allowance(s, extra("2026-10-05" to 26000), LocalDate.parse("2026-10-27"))!!
+        // Only 5000 of the month is left, less than the week's 6000 share.
+        assertMoney("extra month", "weekBudget", BigDecimal(5000), a.weekBudget)
     }
 
     @Test
@@ -102,7 +103,7 @@ class BudgetPlanTest {
         val s = snapshot("2026-09", 31000, "2026-09-30" to 5000)
         val a = BudgetPlan.allowance(s, extra("2026-10-27" to 100), LocalDate.parse("2026-10-27"))!!
         assertMoney("stale", "spentToday", BigDecimal(100), a.spentToday)
-        assertMoney("stale", "weekBudget", BigDecimal(31000), a.weekBudget)
+        assertMoney("stale", "weekBudget", BigDecimal(6000), a.weekBudget)
     }
 
     @Test
@@ -110,7 +111,7 @@ class BudgetPlanTest {
         val s = snapshot("2026-10", 31000, "2026-09-15" to 9999, "2026-11-02" to 9999)
         val a = BudgetPlan.allowance(s, extra("2026-09-20" to 777, "2026-11-01" to 777), LocalDate.parse("2026-10-27"))!!
         assertMoney("outside", "spentToday", BigDecimal.ZERO, a.spentToday)
-        assertMoney("outside", "weekBudget", BigDecimal(31000), a.weekBudget)
+        assertMoney("outside", "weekBudget", BigDecimal(6000), a.weekBudget)
     }
 
     @Test

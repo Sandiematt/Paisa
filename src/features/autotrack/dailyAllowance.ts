@@ -35,11 +35,35 @@ function monthKeyOf(date: Date): string {
 }
 
 /**
- * Adaptive-via-week daily allowance. Weeks run Monday to Sunday, clipped to
- * the calendar month. This week's budget is the unspent monthly budget, shared
- * across the remaining days of the month in proportion to this week's length;
- * today's limit is what is left of it, spread over the days left in the week.
- * Money you skip rolls forward, and overspending lowers the coming days.
+ * How a monthly budget splits into weeks and days. A month holds
+ * daysInMonth / 7 weeks (4.43 for October), so the weekly budget is the
+ * monthly budget over that, and the daily budget is a seventh of a week.
+ * Seven daily budgets make a week and the days of the month add back up to
+ * the monthly budget.
+ */
+export function budgetAllocation(
+  monthlyBudget: number,
+  day: Date,
+): {weeksInMonth: number; weeklyBudget: number; dailyBudget: number} {
+  const monthDays = daysInMonth(day.getFullYear(), day.getMonth());
+  const budget =
+    Number.isFinite(monthlyBudget) && monthlyBudget > 0 ? monthlyBudget : 0;
+  const weeklyBudget = (budget * 7) / monthDays;
+  return {
+    weeksInMonth: monthDays / 7,
+    weeklyBudget,
+    dailyBudget: weeklyBudget / 7,
+  };
+}
+
+/**
+ * Daily allowance from the monthly budget. Weeks run Monday to Sunday,
+ * clipped to the calendar month. Each week gets its share of the monthly
+ * budget (see budgetAllocation; a clipped week gets a daily budget per day it
+ * has), capped by what is left of the month. Today's limit is the daily
+ * budget, lowered when earlier overspending this week leaves less than that
+ * per remaining day. Money you skip is not added to later days, so a quiet
+ * start of the month never turns into a whole month's budget in one week.
  *
  * Mirrors the Kotlin BudgetPlan; both run the vectors in
  * __tests__/fixtures/dailyAllowanceVectors.json.
@@ -101,15 +125,18 @@ export function dailyAllowance(
   }
   add(extraSpendByDate);
 
-  const daysLeftInMonthFromWeekStart = daysBetween(weekStart, monthEnd) + 1;
   const weekDaysInMonth = daysBetween(weekStart, weekEnd) + 1;
   const daysLeftInWeek = daysBetween(day, weekEnd) + 1;
 
-  const weekBudget =
-    (Math.max(0, budget - spentBeforeWeek) * weekDaysInMonth) /
-    daysLeftInMonthFromWeekStart;
-  const dailyLimit =
-    Math.max(0, weekBudget - spentWeekBeforeToday) / daysLeftInWeek;
+  const {dailyBudget} = budgetAllocation(budget, day);
+  const weekBudget = Math.min(
+    dailyBudget * weekDaysInMonth,
+    Math.max(0, budget - spentBeforeWeek),
+  );
+  const dailyLimit = Math.min(
+    dailyBudget,
+    Math.max(0, weekBudget - spentWeekBeforeToday) / daysLeftInWeek,
+  );
 
   return {
     date: todayKey,

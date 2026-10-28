@@ -21,6 +21,8 @@ import {
  */
 type NativeUpiDetector = {
   getStatus(): Promise<string | null>;
+  /** Android Developer options are on. */
+  isDeveloperModeEnabled(): Promise<boolean>;
   openAccessibilitySettings(): Promise<void>;
   openNotificationAccessSettings(): Promise<void>;
   getTransactions(): Promise<string | null>;
@@ -107,6 +109,11 @@ export function getStatus(): Promise<DetectorStatus> {
         : [],
     };
   }, EMPTY_STATUS);
+}
+
+/** Whether Android Developer options are on; false elsewhere or on error. */
+export function isDeveloperModeEnabled(): Promise<boolean> {
+  return call(async m => (await m.isDeveloperModeEnabled()) === true, false);
 }
 
 export function openAccessibilitySettings(): Promise<void> {

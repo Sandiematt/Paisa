@@ -12,7 +12,7 @@ import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {
   useFloatingNavDockHeight,
 } from '../NavBar/FloatingNavScroll';
-import {colors, duration, easing, radii, shadows, spacing, withAlpha} from '../../theme';
+import {colors, duration, easing, radii, spacing, withAlpha} from '../../theme';
 import {AddChoice} from './types';
 
 type AddActionSheetProps = {
@@ -181,13 +181,14 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     transformOrigin: 'bottom right',
   },
+  // No shadow: the scrim already lifts the card, and Android's elevation
+  // shadow ignores the fade-in opacity, so it popped in as a dark box.
   card: {
     padding: spacing.sm,
     borderRadius: radii.cardHero,
     backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.line,
-    ...shadows.nav,
   },
   row: {
     height: ROW_HEIGHT,

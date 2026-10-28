@@ -1,17 +1,17 @@
 {
-  "comment": "Shared vectors for the adaptive-via-week daily allowance. Used by __tests__/dailyAllowance.test.ts and android/app/src/test/.../BudgetPlanTest.kt. Outputs are rounded to 2 decimals (half-up); intermediates are full precision. spendByDate entries outside today's month (or a snapshot for another month) are ignored.",
+  "comment": "Shared vectors for the daily allowance split from the monthly budget (weekly = monthly / (daysInMonth / 7), daily = weekly / 7; unspent money does not roll forward). Used by __tests__/dailyAllowance.test.ts and android/app/src/test/.../BudgetPlanTest.kt. Outputs are rounded to 2 decimals (half-up); intermediates are full precision. spendByDate entries outside today's month (or a snapshot for another month) are ignored.",
   "vectors": [
     {
       "name": "mid-week, week clipped at month end",
       "today": "2026-10-27",
       "snapshot": {"monthKey": "2026-10", "monthlyBudget": 31000, "spendByDate": {"2026-10-05": 20000, "2026-10-26": 1500, "2026-10-27": 200}},
-      "expected": {"date": "2026-10-27", "weekStart": "2026-10-26", "weekEnd": "2026-10-31", "weekBudget": 11000, "spentWeekBeforeToday": 1500, "daysLeftInWeek": 5, "dailyLimit": 1900, "spentToday": 200, "remainingToday": 1700, "remainingWeek": 9300}
+      "expected": {"date": "2026-10-27", "weekStart": "2026-10-26", "weekEnd": "2026-10-31", "weekBudget": 6000, "spentWeekBeforeToday": 1500, "daysLeftInWeek": 5, "dailyLimit": 900, "spentToday": 200, "remainingToday": 700, "remainingWeek": 4300}
     },
     {
       "name": "overspent Monday lowers the rest of the week",
       "today": "2026-11-03",
       "snapshot": {"monthKey": "2026-11", "monthlyBudget": 30000, "spendByDate": {"2026-11-02": 1500}},
-      "expected": {"date": "2026-11-03", "weekStart": "2026-11-02", "weekEnd": "2026-11-08", "weekBudget": 7241.38, "spentWeekBeforeToday": 1500, "daysLeftInWeek": 6, "dailyLimit": 956.9, "spentToday": 0, "remainingToday": 956.9, "remainingWeek": 5741.38}
+      "expected": {"date": "2026-11-03", "weekStart": "2026-11-02", "weekEnd": "2026-11-08", "weekBudget": 7000, "spentWeekBeforeToday": 1500, "daysLeftInWeek": 6, "dailyLimit": 916.67, "spentToday": 0, "remainingToday": 916.67, "remainingWeek": 5500}
     },
     {
       "name": "no budget means no allowance",
@@ -35,13 +35,25 @@
       "name": "Sunday is the last day of the week",
       "today": "2026-10-25",
       "snapshot": {"monthKey": "2026-10", "monthlyBudget": 31000, "spendByDate": {"2026-10-02": 10000, "2026-10-20": 3000, "2026-10-25": 100}},
-      "expected": {"date": "2026-10-25", "weekStart": "2026-10-19", "weekEnd": "2026-10-25", "weekBudget": 11307.69, "spentWeekBeforeToday": 3000, "daysLeftInWeek": 1, "dailyLimit": 8307.69, "spentToday": 100, "remainingToday": 8207.69, "remainingWeek": 8207.69}
+      "expected": {"date": "2026-10-25", "weekStart": "2026-10-19", "weekEnd": "2026-10-25", "weekBudget": 7000, "spentWeekBeforeToday": 3000, "daysLeftInWeek": 1, "dailyLimit": 1000, "spentToday": 100, "remainingToday": 900, "remainingWeek": 3900}
     },
     {
       "name": "stale snapshot from last month counts no spend",
       "today": "2026-10-27",
       "snapshot": {"monthKey": "2026-09", "monthlyBudget": 31000, "spendByDate": {"2026-09-30": 5000}},
-      "expected": {"date": "2026-10-27", "weekStart": "2026-10-26", "weekEnd": "2026-10-31", "weekBudget": 31000, "spentWeekBeforeToday": 0, "daysLeftInWeek": 5, "dailyLimit": 6200, "spentToday": 0, "remainingToday": 6200, "remainingWeek": 31000}
+      "expected": {"date": "2026-10-27", "weekStart": "2026-10-26", "weekEnd": "2026-10-31", "weekBudget": 6000, "spentWeekBeforeToday": 0, "daysLeftInWeek": 5, "dailyLimit": 1000, "spentToday": 0, "remainingToday": 1000, "remainingWeek": 6000}
+    },
+    {
+      "name": "a quiet month does not hand the last week the whole budget",
+      "today": "2026-10-28",
+      "snapshot": {"monthKey": "2026-10", "monthlyBudget": 1000, "spendByDate": {}},
+      "expected": {"date": "2026-10-28", "weekStart": "2026-10-26", "weekEnd": "2026-10-31", "weekBudget": 193.55, "spentWeekBeforeToday": 0, "daysLeftInWeek": 4, "dailyLimit": 32.26, "spentToday": 0, "remainingToday": 32.26, "remainingWeek": 193.55}
+    },
+    {
+      "name": "what is left of the month caps the week",
+      "today": "2026-10-28",
+      "snapshot": {"monthKey": "2026-10", "monthlyBudget": 1000, "spendByDate": {"2026-10-06": 900}},
+      "expected": {"date": "2026-10-28", "weekStart": "2026-10-26", "weekEnd": "2026-10-31", "weekBudget": 100, "spentWeekBeforeToday": 0, "daysLeftInWeek": 4, "dailyLimit": 25, "spentToday": 0, "remainingToday": 25, "remainingWeek": 100}
     }
   ]
 }

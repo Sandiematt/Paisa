@@ -8,7 +8,11 @@ import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
 import {colors} from '../../theme';
 import {daysLabel, weekProgress} from '../autotrack/autoTrackFormat';
-import {buildBudgetSnapshot, dailyAllowance} from '../autotrack/dailyAllowance';
+import {
+  budgetAllocation,
+  buildBudgetSnapshot,
+  dailyAllowance,
+} from '../autotrack/dailyAllowance';
 import {DetailsFrame, HeroCard, StatCard, StatRow, detailsStyles} from './DetailsParts';
 import {relatedTransactions} from './homeInsights';
 import {HomeRange, SpendSlice, rangePlanTitle, rangeScopeLabel} from './homeReport';
@@ -74,11 +78,14 @@ export function BudgetDetailsScreen({
       return null;
     }
     const now = today ?? new Date();
-    return dailyAllowance(
+    const allowance = dailyAllowance(
       buildBudgetSnapshot(transactions, monthlyBudget, now),
       now,
       extraSpendByDate,
     );
+    return allowance
+      ? {...allowance, ...budgetAllocation(monthlyBudget, now)}
+      : null;
   }, [extraSpendByDate, monthlyBudget, today, transactions, visible]);
 
   return (
@@ -155,8 +162,16 @@ export function BudgetDetailsScreen({
               'to go',
             )}`}
           </AppText>
+          <AppText variant="label" color={colors.muted} style={planStyles.line}>
+            {`${money(monthlyBudget)} a month over ${Number(
+              plan.weeksInMonth.toFixed(2),
+            )} weeks: ${money(plan.weeklyBudget)} a week, ${money(
+              plan.dailyBudget,
+            )} a day`}
+          </AppText>
           <AppText variant="caption" color={colors.muted} style={detailsStyles.note}>
-            Unspent money rolls into the rest of the week; overspending lowers the coming days.
+            Your monthly budget is shared across the weeks of the month. Overspending lowers the
+            coming days; unspent money is not added to them.
           </AppText>
         </Card>
       ) : null}

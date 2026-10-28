@@ -26,7 +26,7 @@ data class BudgetSnapshot(
     val dataAsOfMillis: Long = 0L,
 )
 
-/** Adaptive-via-week daily allowance (src/lib/autotrack/types.ts, DailyAllowance). Money is rounded to 2 decimals. */
+/** Daily allowance split from the monthly budget (src/lib/autotrack/types.ts, DailyAllowance). Money is rounded to 2 decimals. */
 data class Allowance(
     val date: LocalDate,
     val weekStart: LocalDate,
@@ -44,14 +44,17 @@ data class Allowance(
 /**
  * The daily allowance, identical to src/features/autotrack/dailyAllowance.ts (shared vectors in
  * __tests__/fixtures/dailyAllowanceVectors.json). Weeks run Monday to Sunday and are clipped to the calendar month.
+ * The monthly budget B is split over the daysInMonth / 7 weeks of the month; unspent money does not roll forward.
  *
- *   weekBudget = max(0, B - spentMonthBeforeWeek) * weekDaysInMonth / daysLeftInMonthFromWeekStart
- *   dailyLimit = max(0, weekBudget - spentWeekBeforeToday) / daysLeftInWeek
+ *   weeklyBudget = B / (daysInMonth / 7),  dailyBudget = weeklyBudget / 7
+ *   weekBudget = min(dailyBudget * weekDaysInMonth, max(0, B - spentMonthBeforeWeek))
+ *   dailyLimit = min(dailyBudget, max(0, weekBudget - spentWeekBeforeToday) / daysLeftInWeek)
  *
  * Intermediates keep full precision; only the returned figures are rounded (half up, 2 decimals). Pure Kotlin.
  */
 object BudgetPlan {
     private val MC = MathContext.DECIMAL128
+    private val SEVEN = BigDecimal(7)
 
     /**
      * Today's allowance, or null when there is no budget. [extraSpendByDate] is spend this phone detected that Paisa
@@ -88,15 +91,16 @@ object BudgetPlan {
         val spentWeekBeforeToday = sum(weekStart, today)
         val spentToday = spend[today] ?: BigDecimal.ZERO
 
-        val daysLeftInMonthFromWeekStart = daysBetweenInclusive(weekStart, monthEnd)
         val weekDaysInMonth = daysBetweenInclusive(weekStart, weekEnd)
         val daysLeftInWeek = daysBetweenInclusive(today, weekEnd)
 
-        val weekBudget = budget.subtract(spentMonthBeforeWeek).max(BigDecimal.ZERO)
-            .multiply(BigDecimal(weekDaysInMonth), MC)
-            .divide(BigDecimal(daysLeftInMonthFromWeekStart), MC)
+        val weeklyBudget = budget.multiply(SEVEN, MC).divide(BigDecimal(month.lengthOfMonth()), MC)
+        val dailyBudget = weeklyBudget.divide(SEVEN, MC)
+        val weekBudget = dailyBudget.multiply(BigDecimal(weekDaysInMonth), MC)
+            .min(budget.subtract(spentMonthBeforeWeek).max(BigDecimal.ZERO))
         val dailyLimit = weekBudget.subtract(spentWeekBeforeToday).max(BigDecimal.ZERO)
             .divide(BigDecimal(daysLeftInWeek), MC)
+            .min(dailyBudget)
         val remainingToday = dailyLimit.subtract(spentToday)
         val remainingWeek = weekBudget.subtract(spentWeekBeforeToday).subtract(spentToday)
 
