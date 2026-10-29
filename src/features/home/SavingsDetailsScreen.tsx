@@ -7,15 +7,17 @@ import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
 import {colors} from '../../theme';
-import {DetailsFrame, HeroCard, StatCard, StatRow, detailsStyles} from './DetailsParts';
+import {budgetAllocation} from '../autotrack/dailyAllowance';
+import {DetailsFrame, HeroCard, StatCard, StatRow, useDetailsStyles} from './DetailsParts';
 import {AreaChart} from './charts';
 import {relatedTransactions, savingsSeries} from './homeInsights';
 import {
   HomeRange,
+  MonthSavings,
   SavingsState,
+  lastMonthLine,
   rangeNoun,
   rangeScopeLabel,
-  scaleMonthly,
   yearlyFromMonthly,
 } from './homeReport';
 import {RelatedTransactions} from './RelatedTransactions';
@@ -28,8 +30,14 @@ type SavingsDetailsScreenProps = {
   periodSavingsTarget: number;
   actualSavings: number;
   savingsVsTarget: number;
+  /** What the goal asks for through today; on track means saved at least this. */
+  savingsTargetToDate?: number;
   savingsState: SavingsState;
+  /** Savings come from what the daily plan left, not income less spending. */
+  fromPlan?: boolean;
   range: HomeRange;
+  /** How the last finished budget month ended; null hides the card. */
+  lastMonth?: MonthSavings | null;
   transactions?: TransactionRow[];
   categories?: CategoryRow[];
 };
@@ -45,16 +53,21 @@ export function SavingsDetailsScreen({
   periodSavingsTarget,
   actualSavings,
   savingsVsTarget,
+  savingsTargetToDate = 0,
   savingsState,
+  fromPlan = false,
   range,
+  lastMonth = null,
   transactions = EMPTY_ROWS,
   categories = EMPTY_CATEGORIES,
 }: SavingsDetailsScreenProps) {
+  const detailsStyles = useDetailsStyles();
   const target = periodSavingsTarget > 0 ? periodSavingsTarget : monthlySavingsGoal;
   const progress = target > 0 ? Math.max(0, Math.min(1, actualSavings / target)) : 0;
   const onTrack = savingsVsTarget >= 0;
   const remaining = target - actualSavings;
-  const weeklyPace = scaleMonthly(monthlySavingsGoal, 'week', new Date());
+  // Same split as the budget: the month's goal over its weeks, a week over 7 days.
+  const allocation = budgetAllocation(monthlySavingsGoal, new Date());
   const yearlyPotential = yearlyFromMonthly(monthlySavingsGoal);
   const periodLabel = rangeScopeLabel(range);
   const noIncome = savingsState.kind === 'no-income';
@@ -85,7 +98,9 @@ export function SavingsDetailsScreen({
         <View style={detailsStyles.warning} accessibilityRole="alert">
           <Warning size={20} weight="fill" color={colors.roseLight} />
           <AppText variant="bodyStrong" color={colors.roseLight} style={detailsStyles.warningText}>
-            You spent {overspend} more than you earned this {rangeNoun(range)}
+            {fromPlan
+              ? `Spending is ${overspend} over what the budget and savings goal allow this ${rangeNoun(range)}`
+              : `You spent ${overspend} more than you earned this ${rangeNoun(range)}`}
           </AppText>
         </View>
       ) : null}
@@ -111,6 +126,19 @@ export function SavingsDetailsScreen({
               )}
             </View>
           </View>
+          {!noIncome && savingsTargetToDate > 0 ? (
+            <AppText variant="caption" color={colors.muted} style={detailsStyles.note}>
+              {fromPlan
+                ? `${money(savingsTargetToDate)} of the goal is due for the days so far, at ${money(
+                    allocation.dailyBudget,
+                  )} a day. Each day you spend under your daily budget adds the difference the next day. ${
+                    onTrack ? "You're ahead of it." : "You're behind it."
+                  }`
+                : `${money(savingsTargetToDate)} is due by today at ${money(
+                    allocation.dailyBudget,
+                  )} a day. ${onTrack ? "You're ahead of it." : "You're behind it."}`}
+            </AppText>
+          ) : null}
           {range !== 'month' && periodSavingsTarget > 0 ? (
             <AppText variant="caption" color={colors.muted} style={detailsStyles.note}>
               Target {periodLabel} is {money(periodSavingsTarget)} from the monthly goal.
@@ -135,6 +163,28 @@ export function SavingsDetailsScreen({
           />
         ) : null}
       </StatRow>
+
+      {lastMonth ? (
+        <Card style={detailsStyles.gap} testID="last-month-savings">
+          <AppText variant="heading" accessibilityRole="header" style={detailsStyles.cardTitle}>
+            {`Last month · ${lastMonth.label}`}
+          </AppText>
+          <AppText
+            variant="bodyStrong"
+            color={
+              lastMonth.saved < 0
+                ? colors.roseLight
+                : lastMonth.goal > 0 && lastMonth.saved < lastMonth.goal
+                  ? colors.text
+                  : colors.mint
+            }>
+            {lastMonthLine(lastMonth, money)}
+          </AppText>
+          <AppText variant="caption" color={colors.muted} style={detailsStyles.note}>
+            Income that came in less everything spent, bills included.
+          </AppText>
+        </Card>
+      ) : null}
 
       <Card style={detailsStyles.gap}>
         <AppText variant="heading" accessibilityRole="header" style={detailsStyles.cardTitle}>
@@ -166,9 +216,17 @@ export function SavingsDetailsScreen({
             From this monthly target
           </AppText>
           <View style={detailsStyles.derivedRow}>
-            <AppText variant="body">Weekly pace</AppText>
+            <AppText variant="body">
+              {`Weekly (${Number(allocation.weeksInMonth.toFixed(2))} weeks this month)`}
+            </AppText>
             <AppText variant="bodyStrong" style={detailsStyles.tabular}>
-              {money(weeklyPace)}
+              {money(allocation.weeklyBudget)}
+            </AppText>
+          </View>
+          <View style={[detailsStyles.derivedRow, detailsStyles.divider]}>
+            <AppText variant="body">Daily</AppText>
+            <AppText variant="bodyStrong" style={detailsStyles.tabular}>
+              {money(allocation.dailyBudget)}
             </AppText>
           </View>
           <View style={[detailsStyles.derivedRow, detailsStyles.divider]}>
@@ -203,3 +261,4 @@ export function SavingsDetailsScreen({
     </DetailsFrame>
   );
 }
+

@@ -155,6 +155,49 @@ describe('buildInsightsDataFromResponse', () => {
   });
 });
 
+describe('buildInsightsDataFromResponse before tracking started', () => {
+  const fresh = (overrides: Partial<InsightsResponse['stats']> = {}) =>
+    response({
+      periodComparison: {
+        currentTotal: 1000,
+        previousTotal: 0,
+        changeAmount: 1000,
+        changePercent: null,
+        direction: 'up',
+        changeKind: 'new',
+      },
+      dailyAverage: 41.67,
+      trendBuckets: [
+        {date: '2026-10-01', amount: 0, label: 'W1'},
+        {date: '2026-10-08', amount: 0, label: 'W2'},
+        {date: '2026-10-15', amount: 400, label: 'W3'},
+        {date: '2026-10-22', amount: 600, label: 'W4'},
+      ],
+      ...overrides,
+    });
+
+  it('has no previous period, movements or empty leading weeks for a user who joined this month', () => {
+    // Joined Sat 17 Oct; the reference date is 24 Oct.
+    const data = buildInsightsDataFromResponse(fresh(), null, '2026-10-17');
+    expect(data.hasPrevious).toBe(false);
+    expect(data.movements).toEqual([]);
+    expect(data.buckets.map(bucket => bucket.label)).toEqual(['W3', 'W4']);
+    // 1,000 over the 8 days tracked, not the 24 days of the month.
+    expect(data.dailyAverage).toBe(125);
+  });
+
+  it('keeps the comparison once the previous period was tracked', () => {
+    const data = buildInsightsDataFromResponse(fresh(), null, '2026-09-10');
+    expect(data.hasPrevious).toBe(true);
+    expect(data.buckets).toHaveLength(4);
+    expect(data.dailyAverage).toBe(41.67);
+  });
+
+  it('keeps everything without a tracking date', () => {
+    expect(buildInsightsDataFromResponse(fresh()).hasPrevious).toBe(true);
+  });
+});
+
 describe('categoryVisual', () => {
   it('maps known slugs to a distinct icon and tone', () => {
     expect(categoryVisual('dining', 'Dining')).toEqual({icon: 'dining', tone: 'rose'});

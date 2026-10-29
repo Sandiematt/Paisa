@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Alert, Modal, ScrollView, StyleSheet, View} from 'react-native';
+import {Alert, Modal, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {NotePencil, ShieldWarning} from 'phosphor-react-native';
 
@@ -14,7 +14,7 @@ import {
   ToggleSwitch,
 } from '../../components/ui';
 import {isDeveloperModeEnabled} from '../../lib/autotrack/nativeUpiDetector';
-import {colors, spacing} from '../../theme';
+import {colors, makeStyles, spacing} from '../../theme';
 import {ActivitySkeleton} from '../activity/ActivitySkeleton';
 import {useLoadingGate} from '../insights/loadingGate';
 import {AllowanceCard} from './AllowanceCard';
@@ -42,6 +42,7 @@ export function AutoTrackingScreen({
   currencySymbol,
   onOpenBudget,
 }: AutoTrackingScreenProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const {
     supported,
@@ -255,7 +256,7 @@ export function AutoTrackingScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   screen: {
     flex: 1,
   },
@@ -288,4 +289,4 @@ const styles = StyleSheet.create({
   diagnostics: {
     marginTop: 26,
   },
-});
+}));

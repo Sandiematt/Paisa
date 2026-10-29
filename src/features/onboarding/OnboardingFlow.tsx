@@ -4,6 +4,8 @@ import {
   ScrollView,
   ScrollViewInstance,
   StyleSheet,
+  View,
+  ViewInstance,
 } from 'react-native';
 
 import {Screen, SlideSwap} from '../../components/ui';
@@ -12,10 +14,13 @@ import {OnboardingFooter} from './components/OnboardingFooter';
 import {OnboardingHeader} from './components/OnboardingHeader';
 import {AutoTrackStep} from './steps/AutoTrackStep';
 import {BasicInfoStep} from './steps/BasicInfoStep';
+import {BillsStep} from './steps/BillsStep';
 import {BudgetStep} from './steps/BudgetStep';
-import {CategoriesStep} from './steps/CategoriesStep';
 import {CurrencyIncomeStep} from './steps/CurrencyIncomeStep';
-import {GoalStep} from './steps/GoalStep';
+import {DoneStep} from './steps/DoneStep';
+import {LockStep} from './steps/LockStep';
+import {PaydayStep} from './steps/PaydayStep';
+import {WhatsNewStep} from './steps/WhatsNewStep';
 import {OnboardingDraft, StepKey} from './types';
 import {OnboardingOptions, useOnboarding} from './useOnboarding';
 
@@ -27,9 +32,42 @@ export function OnboardingFlow({
   onComplete,
   initialDraft,
   passwordless,
+  mode,
+  skipLock,
+  onDismiss,
 }: OnboardingFlowProps) {
-  const flow = useOnboarding(onComplete, {initialDraft, passwordless});
+  const flow = useOnboarding(onComplete, {
+    initialDraft,
+    passwordless,
+    mode,
+    skipLock,
+    onDismiss,
+  });
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const viewportRef = useRef<ViewInstance>(null);
+  const scrollY = useRef(0);
+
+  // Brings a block a step just added into view, such as a new bill's fields,
+  // which otherwise land below the fold with nothing to say they appeared.
+  const reveal = useCallback((target: ViewInstance) => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    viewport.measureInWindow((_vx, top, _vw, height) => {
+      target.measureInWindow((_tx, y, _tw, targetHeight) => {
+        const above = y < top;
+        const below = y + targetHeight > top + height;
+        if (!above && !below) {
+          return;
+        }
+        scrollRef.current?.scrollTo({
+          y: Math.max(0, scrollY.current + (y - top) - spacing.lg),
+          animated: true,
+        });
+      });
+    });
+  }, []);
 
   // A new step always starts at the top; carrying the previous scroll offset
   // over would hide the heading the transition just brought in.
@@ -40,6 +78,8 @@ export function OnboardingFlow({
   const renderStep = useCallback(
     (key: string) => {
       switch (key as StepKey) {
+        case 'whatsnew':
+          return <WhatsNewStep />;
         case 'basics':
           return (
             <BasicInfoStep
@@ -51,31 +91,30 @@ export function OnboardingFlow({
           );
         case 'money':
           return <CurrencyIncomeStep draft={flow.draft} onChange={flow.update} />;
-        case 'goal':
+        case 'payday':
+          return <PaydayStep draft={flow.draft} onChange={flow.update} />;
+        case 'bills':
           return (
-            <GoalStep
-              value={flow.draft.goal}
-              error={flow.errors.goal}
-              onSelect={goal => flow.update('goal', goal)}
-            />
-          );
-        case 'categories':
-          return (
-            <CategoriesStep
-              selectedIds={flow.draft.categoryIds}
-              error={flow.errors.categoryIds}
-              onToggle={flow.toggleCategory}
+            <BillsStep
+              draft={flow.draft}
+              errors={flow.errors}
+              onChange={flow.update}
+              onReveal={reveal}
             />
           );
         case 'budget':
           return <BudgetStep draft={flow.draft} onChange={flow.update} />;
         case 'autotrack':
           return <AutoTrackStep draft={flow.draft} onChange={flow.update} />;
+        case 'lock':
+          return <LockStep draft={flow.draft} onChange={flow.update} />;
+        case 'done':
+          return <DoneStep draft={flow.draft} />;
         default:
           return null;
       }
     },
-    [flow],
+    [flow, reveal],
   );
 
   return (
@@ -91,24 +130,40 @@ export function OnboardingFlow({
           onBack={flow.goBack}
         />
 
-        <ScrollView
-          ref={scrollRef}
-          style={styles.fill}
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}>
-          <SlideSwap
-            swapKey={flow.stepKey}
-            direction={flow.direction}
-            fill={false}
-            render={renderStep}
-          />
-        </ScrollView>
+        <View ref={viewportRef} style={styles.fill} collapsable={false}>
+          <ScrollView
+            ref={scrollRef}
+            style={styles.fill}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={32}
+            onScroll={event => {
+              scrollY.current = event.nativeEvent.contentOffset.y;
+            }}>
+            <SlideSwap
+              swapKey={flow.stepKey}
+              direction={flow.direction}
+              fill={false}
+              render={renderStep}
+            />
+          </ScrollView>
+        </View>
 
         <OnboardingFooter
-          primaryLabel={flow.isLastStep ? 'Finish setup' : 'Continue'}
+          primaryLabel={
+            flow.isLastStep
+              ? mode === 'upgrade'
+                ? 'Back to Paisa'
+                : 'Start using Paisa'
+              : flow.stepKey === 'whatsnew'
+                ? 'Set it up'
+                : 'Continue'
+          }
+          skipLabel={flow.stepKey === 'whatsnew' ? 'Not now' : undefined}
           onPrimary={flow.goNext}
+          loading={flow.busy}
           skippable={flow.skippable}
           onSkip={flow.skip}
         />

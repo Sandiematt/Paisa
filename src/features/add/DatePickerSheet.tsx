@@ -11,7 +11,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {CaretDown, CaretLeft, CaretRight, CaretUp} from 'phosphor-react-native';
 
 import {AppText, PressableScale, PrimaryButton} from '../../components/ui';
-import {colors, layout, radii, spacing} from '../../theme';
+import {colors, layout, makeStyles, palettes, radii, spacing} from '../../theme';
 import {
   isAfterDay,
   longDateLabel,
@@ -48,6 +48,7 @@ export function DatePickerSheet({
   onClose,
   onChange,
 }: DatePickerSheetProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const {width} = useWindowDimensions();
   const today = startOfDay(new Date());
@@ -123,7 +124,7 @@ export function DatePickerSheet({
                   style={[styles.quickChip, on && styles.quickChipOn]}>
                   <AppText
                     variant="label"
-                    color={on ? colors.text : colors.inkSecondary}>
+                    color={on ? colors.onAccent : colors.inkSecondary}>
                     {option.label}
                   </AppText>
                 </PressableScale>
@@ -224,7 +225,7 @@ export function DatePickerSheet({
                     ]}>
                     <AppText
                       variant="label"
-                      color={current ? colors.text : colors.inkSecondary}>
+                      color={current ? colors.onAccent : colors.inkSecondary}>
                       {name.slice(0, 3)}
                     </AppText>
                   </PressableScale>
@@ -284,7 +285,7 @@ export function DatePickerSheet({
                           variant="bodyStrong"
                           color={
                             selected
-                              ? colors.text
+                              ? colors.onAccent
                               : isToday
                               ? colors.lavender
                               : colors.text
@@ -316,7 +317,11 @@ export function DatePickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(palette => {
+  const light = palette === palettes.light;
+  // The sheet is white in light mode, so white chips would sit on white.
+  const chipFill = light ? colors.ground : colors.surface;
+  return {
   layer: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -355,7 +360,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: colors.surface,
+    backgroundColor: chipFill,
   },
   quickChipOn: {
     backgroundColor: colors.violet,
@@ -381,12 +386,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radii.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: chipFill,
     borderWidth: 1,
     borderColor: colors.line,
   },
   navBtnOff: {
-    opacity: 0.35,
+    opacity: light ? 0.5 : 0.35,
   },
   weekRow: {
     flexDirection: 'row',
@@ -405,7 +410,7 @@ const styles = StyleSheet.create({
     borderColor: colors.lavender,
   },
   dayOff: {
-    opacity: 0.3,
+    opacity: light ? 0.4 : 0.3,
   },
   monthGrid: {
     flexDirection: 'row',
@@ -423,7 +428,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.tile,
     borderWidth: 1,
     borderColor: colors.line,
-    backgroundColor: colors.surface,
+    backgroundColor: chipFill,
   },
   monthChipOn: {
     backgroundColor: colors.violet,
@@ -435,4 +440,5 @@ const styles = StyleSheet.create({
   confirmButton: {
     width: '100%',
   },
+};
 });

@@ -281,7 +281,8 @@ describe('buildHomeReport', () => {
     expect(report.overBudget).toBe(true);
     expect(report.planFeasible).toBe(true);
     expect(report.planLabel).toBe('On track');
-    expect(report.savingsState).toEqual({ kind: 'positive', amount: 1000 });
+    // 14 finished days at 200 a day of budget and 133.33 set aside, less the 9000.
+    expect(report.savingsState).toEqual({ kind: 'negative', overspend: 4333.33 });
     expect(report.insightKicker).toBe('Spending');
     expect(report.healthLabel).toBe('Off track');
     expect(report.spendRatio).toBe(150);
@@ -307,13 +308,14 @@ describe('buildHomeReport', () => {
     expect(report.overBudget).toBe(false);
     expect(report.planFeasible).toBe(false);
     expect(report.plannedSavings).toBe(1000);
-    expect(report.savingsState).toEqual({ kind: 'no-income' });
+    // With a budget, savings come from the daily plan: 13 days at 333.33, less 100.
+    expect(report.savingsState).toEqual({ kind: 'positive', amount: 4233.33 });
     expect(report.healthLabel).toBe('On track');
     expect(report.planLabel).toBe('Off track');
     expect(report.planHint.toLowerCase()).toContain('month');
   });
 
-  it('measures savings progress from actual income minus expenses', () => {
+  it('measures savings progress from what the daily plan leaves', () => {
     const rows = [
       tx({
         id: 'pay',
@@ -337,8 +339,10 @@ describe('buildHomeReport', () => {
       monthlySavingsGoal: 5000,
     });
 
-    expect(report.actualSavings).toBe(1500);
-    expect(report.savingsState).toEqual({ kind: 'positive', amount: 1500 });
+    // 13 finished days (2-14 Sep) at 666.67 of budget plus 333.33 set aside, less 500.
+    expect(report.savingsFromPlan).toBe(true);
+    expect(report.actualSavings).toBe(12500);
+    expect(report.savingsState).toEqual({ kind: 'positive', amount: 12500 });
     expect(report.plannedSavings).toBe(10000);
     expect(report.monthlySavingsGoal).toBe(5000);
     expect(report.overBudget).toBe(false);
@@ -348,7 +352,7 @@ describe('buildHomeReport', () => {
     expect(report.insightKicker).toBe('Spending');
   });
 
-  it('reports no income and ignores planned income for savings', () => {
+  it('counts savings from the plan even before income is logged', () => {
     const rows = [
       tx({
         id: 'coffee',
@@ -365,7 +369,7 @@ describe('buildHomeReport', () => {
       monthlySavingsGoal: 5000,
     });
 
-    expect(report.savingsState).toEqual({ kind: 'no-income' });
+    expect(report.savingsState).toEqual({ kind: 'positive', amount: 11000 });
     expect(report.planFeasible).toBe(true);
     expect(report.plannedSavings).toBe(10000);
     expect(report.overBudget).toBe(false);
@@ -515,6 +519,63 @@ describe('buildHomeReport', () => {
     expect(month.compareLabel).toBe('vs August');
   });
 
+  it('paces the savings goal by day, from the day tracking started', () => {
+    // Joined 11 Sep with 30,000 a month to save: 1,000 a day, 5 days so far.
+    const rows = [
+      tx({id: 'open', type: 'income', amount: 10000, categoryId: null, transactionDate: '2026-09-11', kind: 'opening_balance'}),
+      tx({id: 'pay', type: 'income', amount: 6000, categoryId: null, transactionDate: '2026-09-12'}),
+      tx({id: 'food', type: 'expense', amount: 1500, categoryId: 'cat-housing', transactionDate: '2026-09-13'}),
+    ];
+    const report = buildHomeReport(rows, [housing], 'month', now, {
+      monthlyIncome: 0,
+      monthlyBudget: 0,
+      monthlySavingsGoal: 30000,
+    });
+    expect(report.periodSavingsTarget).toBe(30000);
+    expect(report.savingsTargetToDate).toBe(5000);
+    expect(report.actualSavings).toBe(4500);
+    expect(report.savingsVsTarget).toBe(-500);
+  });
+
+  it('does not count the starting balance as change, and counts from the first day', () => {
+    const rows = [
+      tx({id: 'open', type: 'income', amount: 10000, categoryId: null, transactionDate: '2026-09-11', kind: 'opening_balance'}),
+    ];
+    const fresh = buildHomeReport(rows, [housing], 'month', now);
+    expect(fresh.balance).toBe(10000);
+    expect(fresh.balanceChange).toBe(0);
+    expect(fresh.startedThisPeriod).toBe(true);
+    expect(fresh.periodStart).toEqual({day: 11, monthIndex: 8});
+
+    const later = buildHomeReport(
+      [...rows, tx({id: 'tea', type: 'expense', amount: 40, categoryId: 'cat-housing', transactionDate: '2026-09-14'})],
+      [housing],
+      'month',
+      now,
+    );
+    expect(later.balanceChange).toBe(-40);
+  });
+
+  it('draws a new wallet from its first day, with the starting balance as the baseline', () => {
+    // Joined 11 Sep with 10,000; today is 15 Sep. No zeros before the 11th, no jump up.
+    const opening = tx({id: 'open', type: 'income', amount: 10000, categoryId: null, transactionDate: '2026-09-11', kind: 'opening_balance'});
+    const fresh = buildHomeReport([opening], [housing], 'month', now);
+    expect(fresh.series).toEqual([10000, 10000, 10000, 10000, 10000]);
+    expect(fresh.highlightStamp).toBe('15');
+
+    const spent = buildHomeReport(
+      [opening, tx({id: 'tea', type: 'expense', amount: 40, categoryId: 'cat-housing', transactionDate: '2026-09-13'})],
+      [housing],
+      'month',
+      now,
+    );
+    expect(spent.series).toEqual([10000, 10000, 9960, 9960, 9960]);
+
+    // Opened today: one flat point.
+    const today = buildHomeReport([{...opening, transactionDate: '2026-09-15'}], [housing], 'week', now);
+    expect(today.series).toEqual([10000]);
+  });
+
   it('evaluates the savings plan monthly even on the week range', () => {
     const rows = [
       tx({
@@ -539,11 +600,14 @@ describe('buildHomeReport', () => {
       monthlySavingsGoal: 1000,
     });
 
-    expect(report.savingsState).toEqual({ kind: 'positive', amount: 28420 });
-    expect(report.actualSavings).toBe(28420);
+    // Only Mon 14 Sep is over: its 666.67 daily budget, unspent (rent is today).
+    expect(report.savingsState).toEqual({ kind: 'positive', amount: 666.67 });
+    expect(report.actualSavings).toBe(666.67);
     expect(report.monthlySavingsGoal).toBe(1000);
     expect(report.periodSavingsTarget).toBe(233.33);
-    expect(report.savingsVsTarget).toBe(28186.67);
+    // Judged on the finished days: Mon 14 Sep at 1000 / 30 a day.
+    expect(report.savingsTargetToDate).toBe(33.33);
+    expect(report.savingsVsTarget).toBe(633.34);
     expect(report.planFeasible).toBe(false);
     expect(report.plannedSavings).toBe(0);
     expect(report.periodPlannedSavings).toBe(0);
@@ -557,11 +621,12 @@ describe('buildHomeReport', () => {
     expect(report.monthlyRemainingBudget).toBe(-1580);
     expect(report.monthlyOverBudget).toBe(true);
     expect(report.monthlySpendRatio).toBe(108);
-    expect(report.monthlyActualSavings).toBe(28420);
-    expect(report.monthlySavingsVsTarget).toBe(27420);
+    // The ledger starts 14 Sep, so the month has one finished day so far.
+    expect(report.monthlyActualSavings).toBe(666.67);
+    expect(report.monthlySavingsVsTarget).toBe(633.34);
     expect(report.monthlySavingsState).toEqual({
       kind: 'positive',
-      amount: 28420,
+      amount: 666.67,
     });
   });
 

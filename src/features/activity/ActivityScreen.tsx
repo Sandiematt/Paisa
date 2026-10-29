@@ -3,7 +3,6 @@ import {
   Alert,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   TextInput,
   View,
 } from 'react-native';
@@ -27,7 +26,7 @@ import {
   localDateISO,
   updateTransaction,
 } from '../../lib/transactionsStore';
-import {colors, fonts, layout, radii} from '../../theme';
+import {colors, fonts, layout, makeStyles, radii} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {ActivitySkeleton} from './ActivitySkeleton';
 import {FloatingReceipt} from './FloatingReceipt';
@@ -113,6 +112,7 @@ export function ActivityScreen({
   focusDate,
   loading = false,
 }: ActivityScreenProps) {
+  const styles = useStyles();
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const searchTarget = useTutorialTarget('activity.search');
@@ -471,7 +471,7 @@ export function ActivityScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   header: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -562,4 +562,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-});
+}));

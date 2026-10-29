@@ -1,19 +1,22 @@
 import React, {useMemo} from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 import {Wallet} from 'phosphor-react-native';
 
 import {AppText, Card, ProgressBar} from '../../components/ui';
+import {isCalendarCycle} from '../../lib/budgetCycle';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
+import {BillCommitment} from '../../lib/recurring';
 import {TransactionRow} from '../../lib/transactionsStore';
-import {colors} from '../../theme';
+import {colors, makeStyles, radii, spacing} from '../../theme';
 import {daysLabel, weekProgress} from '../autotrack/autoTrackFormat';
 import {
   budgetAllocation,
   buildBudgetSnapshot,
   dailyAllowance,
 } from '../autotrack/dailyAllowance';
-import {DetailsFrame, HeroCard, StatCard, StatRow, detailsStyles} from './DetailsParts';
+import {dayLabel} from '../onboarding/constants';
+import {DetailsFrame, HeroCard, StatCard, StatRow, useDetailsStyles} from './DetailsParts';
 import {relatedTransactions} from './homeInsights';
 import {HomeRange, SpendSlice, rangePlanTitle, rangeScopeLabel} from './homeReport';
 import {RelatedTransactions} from './RelatedTransactions';
@@ -36,6 +39,12 @@ type BudgetDetailsScreenProps = {
    * so the daily plan needs this. Zero or less hides the Daily plan card.
    */
   monthlyBudget?: number;
+  /** Payday the budget month starts on; null keeps calendar months. */
+  payday?: number | null;
+  /** This budget month's monthly bills, paid and still to come. */
+  bills?: BillCommitment[];
+  /** What the bills due this budget month add up to; set aside before the daily plan. */
+  committed?: number;
   /** Spend not in `transactions` yet (UPI payments detected but not synced), by local date. */
   extraSpendByDate?: Record<string, number>;
   /** Overrides "now" for the daily plan; tests only. */
@@ -44,6 +53,7 @@ type BudgetDetailsScreenProps = {
 
 const EMPTY_ROWS: TransactionRow[] = [];
 const EMPTY_CATEGORIES: CategoryRow[] = [];
+const NO_BILLS: BillCommitment[] = [];
 const NO_EXTRA_SPEND: Record<string, number> = {};
 
 export function BudgetDetailsScreen({
@@ -60,9 +70,14 @@ export function BudgetDetailsScreen({
   transactions = EMPTY_ROWS,
   categories = EMPTY_CATEGORIES,
   monthlyBudget = 0,
+  payday = null,
+  bills = NO_BILLS,
+  committed = 0,
   extraSpendByDate = NO_EXTRA_SPEND,
   today,
 }: BudgetDetailsScreenProps) {
+  const detailsStyles = useDetailsStyles();
+  const planStyles = usePlanStyles();
   const progress = budget > 0 ? Math.max(0, Math.min(1, spent / budget)) : 0;
   const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
   const related = useMemo(
@@ -78,15 +93,23 @@ export function BudgetDetailsScreen({
       return null;
     }
     const now = today ?? new Date();
-    const allowance = dailyAllowance(
-      buildBudgetSnapshot(transactions, monthlyBudget, now),
+    const snapshot = buildBudgetSnapshot(
+      transactions,
+      {monthlyBudget, payday, committed},
       now,
-      extraSpendByDate,
     );
+    const allowance = dailyAllowance(snapshot, now, extraSpendByDate);
+    // The daily plan splits what the bills leave of the budget.
     return allowance
-      ? {...allowance, ...budgetAllocation(monthlyBudget, now)}
+      ? {
+          ...allowance,
+          ...budgetAllocation(snapshot.monthlyBudget, now, payday),
+          dayToDay: snapshot.monthlyBudget,
+        }
       : null;
-  }, [extraSpendByDate, monthlyBudget, today, transactions, visible]);
+  }, [committed, extraSpendByDate, monthlyBudget, payday, today, transactions, visible]);
+  const dueBills = bills.filter(bill => bill.dueThisCycle);
+  const cycleNoun = isCalendarCycle(payday) ? 'month' : 'pay cycle';
 
   return (
     <DetailsFrame visible={visible} title="Budget" onClose={onClose}>
@@ -118,65 +141,127 @@ export function BudgetDetailsScreen({
         />
       </StatRow>
 
-      {plan ? (
-        <Card style={detailsStyles.gap} testID="daily-plan">
-          <AppText variant="heading" accessibilityRole="header" style={detailsStyles.cardTitle}>
-            Daily plan
-          </AppText>
-          <AppText variant="label" color={colors.muted}>
-            Today you can spend
-          </AppText>
-          <AppText
-            variant="numeric"
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.7}
-            style={planStyles.limit}>
-            {money(plan.dailyLimit)}
-          </AppText>
-          <AppText variant="label" color={colors.muted} style={planStyles.line}>
-            {`Spent today ${money(plan.spentToday)} · `}
-            {plan.remainingToday < 0 ? (
-              <AppText variant="label" color={colors.roseLight}>
-                {`Over today's limit by ${money(-plan.remainingToday)}`}
-              </AppText>
-            ) : (
-              `${money(plan.remainingToday)} left today`
-            )}
-          </AppText>
-          <View style={planStyles.week}>
-            <ProgressBar
-              progress={weekProgress(plan)}
-              gradient={plan.remainingWeek < 0 ? 'rose' : 'primary'}
-              height={4}
-            />
+      {dueBills.length > 0 ? (
+        <Card style={detailsStyles.gap} testID="committed-bills">
+          <View style={planStyles.row}>
+            <AppText variant="heading" accessibilityRole="header">
+              Monthly bills
+            </AppText>
+            <AppText variant="bodyStrong" style={detailsStyles.tabular}>
+              {money(committed)}
+            </AppText>
           </View>
-          <AppText
-            variant="label"
-            color={plan.remainingWeek < 0 ? colors.roseLight : colors.muted}
-            style={planStyles.line}>
-            {`This week ${money(plan.weekBudget)} · ${money(
-              Math.abs(plan.remainingWeek),
-            )} ${plan.remainingWeek < 0 ? 'over' : 'left'} · ${daysLabel(
-              plan.daysLeftInWeek,
-              'to go',
-            )}`}
+          <AppText variant="caption" color={colors.muted} style={planStyles.billsNote}>
+            {`Set aside from this ${cycleNoun}'s budget before the daily plan.`}
           </AppText>
-          <AppText variant="label" color={colors.muted} style={planStyles.line}>
-            {`${money(monthlyBudget)} a month over ${Number(
-              plan.weeksInMonth.toFixed(2),
-            )} weeks: ${money(plan.weeklyBudget)} a week, ${money(
-              plan.dailyBudget,
-            )} a day`}
-          </AppText>
-          <AppText variant="caption" color={colors.muted} style={detailsStyles.note}>
-            Your monthly budget is shared across the weeks of the month. Overspending lowers the
-            coming days; unspent money is not added to them.
-          </AppText>
+          {dueBills.map((bill, index) => (
+            <View
+              key={bill.key}
+              style={[planStyles.billRow, index > 0 && detailsStyles.divider]}>
+              <View style={detailsStyles.listRowFlex}>
+                <AppText variant="bodyStrong" numberOfLines={1}>
+                  {bill.label}
+                </AppText>
+                <AppText
+                  variant="caption"
+                  color={bill.paidThisCycle ? colors.mint : colors.muted}>
+                  {bill.paidThisCycle
+                    ? 'Paid this cycle'
+                    : `Due on the ${dayLabel(bill.day).toLowerCase()}`}
+                </AppText>
+              </View>
+              <AppText variant="bodyStrong" style={detailsStyles.tabular}>
+                {money(bill.amount)}
+              </AppText>
+            </View>
+          ))}
         </Card>
       ) : null}
 
-      {slices.length > 0 ? (
+      {plan ? (
+        <Card style={detailsStyles.gap} testID="daily-plan">
+          <AppText variant="heading" accessibilityRole="header">
+            Daily plan
+          </AppText>
+
+          {/* Today */}
+          <View style={planStyles.section}>
+            <AppText variant="label" color={colors.muted}>
+              Today you can spend
+            </AppText>
+            <AppText
+              variant="numeric"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              style={planStyles.limit}>
+              {money(plan.dailyLimit)}
+            </AppText>
+            <View style={planStyles.row}>
+              <AppText variant="label" color={colors.muted}>
+                {`Spent ${money(plan.spentToday)}`}
+              </AppText>
+              <AppText
+                variant="label"
+                color={plan.remainingToday < 0 ? colors.roseLight : colors.mint}>
+                {plan.remainingToday < 0
+                  ? `${money(-plan.remainingToday)} over today`
+                  : `${money(plan.remainingToday)} left today`}
+              </AppText>
+            </View>
+          </View>
+
+          {/* This week */}
+          <View style={[planStyles.section, detailsStyles.divider]}>
+            <View style={planStyles.row}>
+              <AppText variant="bodyStrong">This week</AppText>
+              <AppText
+                variant="bodyStrong"
+                color={plan.remainingWeek < 0 ? colors.roseLight : colors.text}
+                style={detailsStyles.tabular}>
+                {`${money(Math.abs(plan.remainingWeek))} ${
+                  plan.remainingWeek < 0 ? 'over' : 'left'
+                }`}
+              </AppText>
+            </View>
+            <View style={planStyles.bar}>
+              <ProgressBar
+                progress={weekProgress(plan)}
+                gradient={plan.remainingWeek < 0 ? 'rose' : 'primary'}
+                height={6}
+              />
+            </View>
+            <AppText variant="caption" color={colors.muted}>
+              {`${money(plan.weekBudget)} for this week · ${daysLabel(
+                plan.daysLeftInWeek,
+                'to go',
+              )}`}
+            </AppText>
+          </View>
+
+          {/* How the month splits */}
+          <View style={[planStyles.section, planStyles.last, detailsStyles.divider]}>
+            <View style={planStyles.split}>
+              <SplitStat
+                value={money(plan.dayToDay)}
+                label={committed > 0 ? 'after bills' : `a ${cycleNoun === 'month' ? 'month' : 'cycle'}`}
+              />
+              <SplitStat value={money(plan.weeklyBudget)} label="a week" />
+              <SplitStat value={money(plan.dailyBudget)} label="a day" />
+            </View>
+            <AppText variant="caption" color={colors.muted} style={planStyles.splitNote}>
+              {`${
+                committed > 0
+                  ? `${money(monthlyBudget)} budget minus ${money(committed)} of bills, split`
+                  : 'Split'
+              } over the ${Number(plan.weeksInMonth.toFixed(2))} weeks of this ${cycleNoun}. Overspending lowers the coming days; unspent money isn't added to them.`}
+            </AppText>
+          </View>
+        </Card>
+      ) : null}
+
+      {/* The report pads "no spending" with a placeholder slice; show the empty state instead. */}
+      {slices.some(slice => slice.id !== 'empty') ? (
         <Card style={detailsStyles.gap}>
           <AppText variant="heading" accessibilityRole="header" style={detailsStyles.cardTitle}>
             By category
@@ -237,16 +322,67 @@ export function BudgetDetailsScreen({
   );
 }
 
-const planStyles = StyleSheet.create({
+function SplitStat({value, label}: {value: string; label: string}) {
+  const detailsStyles = useDetailsStyles();
+  const planStyles = usePlanStyles();
+  return (
+    <View style={planStyles.splitItem}>
+      <AppText variant="bodyStrong" numberOfLines={1} style={detailsStyles.tabular}>
+        {value}
+      </AppText>
+      <AppText variant="caption" color={colors.muted}>
+        {label}
+      </AppText>
+    </View>
+  );
+}
+
+const usePlanStyles = makeStyles(() => ({
+  section: {
+    paddingVertical: spacing.lg,
+  },
   limit: {
-    fontSize: 28,
-    lineHeight: 34,
-    marginTop: 2,
+    fontSize: 32,
+    lineHeight: 38,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
   },
-  line: {
-    marginTop: 6,
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
-  week: {
-    marginTop: 12,
+  bar: {
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
   },
-});
+  split: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  splitItem: {
+    flex: 1,
+    gap: 2,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.tile,
+    backgroundColor: colors.ground,
+  },
+  splitNote: {
+    marginTop: spacing.md,
+  },
+  billsNote: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  billRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  last: {
+    paddingBottom: 0,
+  },
+}));

@@ -1,11 +1,11 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
 import {AppText, Card, PressableScale} from '../../components/ui';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
-import {colors, fonts} from '../../theme';
+import {colors, fonts, makeStyles} from '../../theme';
 import {shortDateLabel} from './homeInsights';
 
 type RelatedTransactionsProps = {
@@ -27,6 +27,7 @@ export function RelatedTransactions({
   emptyText,
   onSeeAll,
 }: RelatedTransactionsProps) {
+  const styles = useStyles();
   return (
     <Card style={styles.card}>
       <View style={styles.header}>
@@ -103,7 +104,7 @@ export function RelatedTransactions({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   card: {
     gap: 4,
   },
@@ -147,4 +148,4 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontVariant: ['tabular-nums'],
   },
-});
+}));

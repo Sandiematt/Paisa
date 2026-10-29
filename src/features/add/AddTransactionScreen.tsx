@@ -7,7 +7,6 @@ import {
   Platform,
   ScrollView,
   StatusBar,
-  StyleSheet,
   TextInput,
   useWindowDimensions,
   View,
@@ -41,15 +40,7 @@ import {
   localDateISO,
   updateTransaction,
 } from '../../lib/transactionsStore';
-import {
-  colors,
-  layout,
-  linearGradient,
-  radii,
-  spacing,
-  typography,
-  withAlpha,
-} from '../../theme';
+import {ColorToken, colors, layout, linearGradient, makeStyles, radii, spacing, typography, useTheme, withAlpha, palettes} from '../../theme';
 import {CATEGORIES, CURRENCIES, categoryById} from '../onboarding/constants';
 import {CategoryIconSquare} from './categoryIcons';
 import {
@@ -77,23 +68,26 @@ const KIND_OPTIONS = [
   {value: 'income', label: 'Income'},
 ] as const;
 
-const KIND_META = {
+/** `accent` is a palette role, resolved at render so it follows the scheme. */
+const KIND_META: Record<
+  AddKind,
+  {title: string; subtitle: string; verb: string; accent: ColorToken}
+> = {
   expense: {
     title: 'Add expense',
     subtitle: 'Keep track, build better habits',
     verb: 'Add expense',
-    accent: colors.roseLight,
+    accent: 'roseLight',
   },
   income: {
     title: 'Add income',
     subtitle: 'Track money coming in',
     verb: 'Add income',
-    accent: colors.mint,
+    accent: 'mint',
   },
-} as const;
+};
 
 const GLOW_HEIGHT = 300;
-const GLOW_IMAGE = linearGradient([colors.glow, colors.ground], 180);
 
 function sanitizeAmount(raw: string): string {
   const cleaned = raw.replace(/[^0-9.]/g, '');
@@ -145,6 +139,8 @@ export function AddTransactionScreen({
   onClose,
   onSaved,
 }: AddTransactionScreenProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const insets = useSafeAreaInsets();
   const {height} = useWindowDimensions();
   const compact = height < 740;
@@ -350,11 +346,10 @@ export function AddTransactionScreen({
       presentationStyle="fullScreen"
       onRequestClose={onClose}>
       <View style={styles.root}>
-        <StatusBar barStyle="light-content" />
-        <View
-          pointerEvents="none"
-          style={[styles.glow, {backgroundImage: GLOW_IMAGE}]}
+        <StatusBar
+          barStyle={scheme === 'light' ? 'dark-content' : 'light-content'}
         />
+        <View pointerEvents="none" style={styles.glow} />
         <KeyboardAvoidingView
           style={[styles.screen, {paddingTop: insets.top}]}
           behavior="padding"
@@ -415,7 +410,7 @@ export function AddTransactionScreen({
               <View style={styles.amountRow}>
                 <AppText
                   variant="numericHero"
-                  color={tone.accent}
+                  color={colors[tone.accent]}
                   style={{fontSize: heroSize, lineHeight: heroLine}}>
                   {currencySymbol}
                 </AppText>
@@ -589,7 +584,7 @@ export function AddTransactionScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(palette => ({
   root: {
     flex: 1,
     backgroundColor: colors.ground,
@@ -600,6 +595,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: GLOW_HEIGHT,
+    backgroundImage: linearGradient([colors.glow, colors.ground], 180),
   },
   screen: {
     flex: 1,
@@ -708,7 +704,8 @@ const styles = StyleSheet.create({
   },
   categoryTileOn: {
     borderColor: colors.lavender,
-    backgroundColor: colors.surfaceRaised,
+    // White on white in light; the designs fill the pick with the wash.
+    backgroundColor: palette === palettes.light ? colors.wash : colors.surfaceRaised,
   },
   field: {
     marginTop: spacing.md,
@@ -736,4 +733,4 @@ const styles = StyleSheet.create({
     top: -24,
     height: 24,
   },
-});
+}));

@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {KeyboardAvoidingView, Modal, Platform, StyleSheet, View} from 'react-native';
+import {KeyboardAvoidingView, Modal, Platform, View} from 'react-native';
 import {Envelope, Eye, EyeSlash, Lock} from 'phosphor-react-native';
 
 import {
@@ -8,12 +8,12 @@ import {
   PressableScale,
   PrimaryButton,
 } from '../../../components/ui';
-import {colors, radii, spacing} from '../../../theme';
+import {colors, makeStyles, radii, spacing} from '../../../theme';
 import {AuthField} from './AuthField';
+import {firstMissedRule} from '../../../lib/passwordRules';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const CODE_PATTERN = /^\d{6,8}$/;
-const MIN_PASSWORD = 8;
 
 type Step = 'email' | 'code' | 'password' | 'done';
 
@@ -38,7 +38,8 @@ const COPY: Record<Step, {title: string; body: (email: string) => string}> = {
   },
   password: {
     title: 'Set a new password',
-    body: () => `Code verified. Choose a password with at least ${MIN_PASSWORD} characters.`,
+    body: () =>
+      'Code verified. Use at least 8 characters with a capital letter, a small letter, a number and a symbol.',
   },
   done: {
     title: 'Password updated',
@@ -55,6 +56,7 @@ export function ForgotPasswordModal({
   onCancel,
   onFinished,
 }: ForgotPasswordModalProps) {
+  const styles = useStyles();
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -106,8 +108,9 @@ export function ForgotPasswordModal({
   };
 
   const savePassword = () => {
-    if (newPassword.length < MIN_PASSWORD) {
-      setError(`Password must be at least ${MIN_PASSWORD} characters.`);
+    const missed = firstMissedRule(newPassword);
+    if (missed) {
+      setError(`Password needs: ${missed.label.toLowerCase()}.`);
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -283,7 +286,7 @@ export function ForgotPasswordModal({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   backdrop: {
     flex: 1,
     justifyContent: 'center',
@@ -304,4 +307,4 @@ const styles = StyleSheet.create({
   linkButton: {
     alignSelf: 'center',
   },
-});
+}));

@@ -1,10 +1,5 @@
 import React, {useState} from 'react';
-import {
-  KeyboardAvoidingView,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import {KeyboardAvoidingView, ScrollView, View} from 'react-native';
 import {Envelope, Eye, EyeSlash, Lock} from 'phosphor-react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
@@ -18,7 +13,7 @@ import {
   ScreenHeader,
   Stagger,
 } from '../../components/ui';
-import {colors, layout, spacing} from '../../theme';
+import {colors, layout, makeStyles, spacing} from '../../theme';
 import {AuthField} from './components/AuthField';
 import {ForgotPasswordModal} from './components/ForgotPasswordModal';
 import {GoogleButton} from './components/GoogleButton';
@@ -46,6 +41,7 @@ export function LoginScreen({
   onGoogle,
   onBack,
 }: LoginScreenProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -253,7 +249,7 @@ export function LoginScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   fill: {
     flex: 1,
   },
@@ -306,4 +302,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingLeft: spacing.sm,
   },
-});
+}));

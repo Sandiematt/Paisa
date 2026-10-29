@@ -1,7 +1,7 @@
 import React, {useEffect, useRef} from 'react';
 import {Animated, Pressable, StyleProp, StyleSheet, ViewStyle} from 'react-native';
 
-import {colors, duration, easing} from '../../theme';
+import {colors, duration, easing, makeStyles, palettes} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 
 type ToggleSwitchProps = {
@@ -20,7 +20,7 @@ const KNOB = 22;
 const TRAVEL = TOGGLE_WIDTH - KNOB - PAD * 2; // inner width is 46 - 2*(PAD) after border+padding
 
 /**
- * 46x28 switch. On: violet track, `text` knob. Off: `surfaceRaised` track,
+ * 46x28 switch. On: violet track, `onAccent` knob. Off: `surfaceRaised` track,
  * 1px `line` border, muted knob. Exposes the `switch` role.
  */
 export function ToggleSwitch({
@@ -30,6 +30,7 @@ export function ToggleSwitch({
   accessibilityLabel,
   style,
 }: ToggleSwitchProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const progress = useRef(new Animated.Value(value ? 1 : 0)).current;
 
@@ -77,12 +78,14 @@ export function ToggleSwitch({
   );
 }
 
-const styles = StyleSheet.create({
+// Light: a sunk track with a white knob (Wonder "DX Profile Light").
+const useStyles = makeStyles(palette => ({
   track: {
     width: TOGGLE_WIDTH,
     height: TOGGLE_HEIGHT,
     borderRadius: TOGGLE_HEIGHT / 2,
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor:
+      palette === palettes.light ? colors.canvasSunk : colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.line,
     padding: PAD - 1,
@@ -103,11 +106,11 @@ const styles = StyleSheet.create({
   knobOff: {
     ...StyleSheet.absoluteFill,
     borderRadius: KNOB / 2,
-    backgroundColor: colors.muted,
+    backgroundColor: palette === palettes.light ? colors.onAccent : colors.muted,
   },
   knobOn: {
     ...StyleSheet.absoluteFill,
     borderRadius: KNOB / 2,
-    backgroundColor: colors.text,
+    backgroundColor: colors.onAccent,
   },
-});
+}));

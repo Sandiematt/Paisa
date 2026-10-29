@@ -1,8 +1,8 @@
 import React from 'react';
-import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {StyleProp, View, ViewStyle} from 'react-native';
 import {CaretRight} from 'phosphor-react-native';
 
-import {colors, radii, spacing} from '../../theme';
+import {colors, makeStyles, radii, spacing} from '../../theme';
 import {AppText} from './AppText';
 import {PressableScale} from './PressableScale';
 
@@ -17,6 +17,7 @@ type SettingsGroupProps = {
  * automatically.
  */
 export function SettingsGroup({children, style}: SettingsGroupProps) {
+  const styles = useStyles();
   const rows = React.Children.toArray(children).filter(React.isValidElement);
   return (
     <View style={[styles.group, style]}>
@@ -65,6 +66,7 @@ export function SettingsRow({
   accessibilityLabel,
   accessibilityHint,
 }: SettingsRowProps) {
+  const styles = useStyles();
   const labelColor = tone === 'danger' ? colors.roseLight : colors.text;
   const caret = showCaret ?? (onPress != null && trailing == null);
 
@@ -103,7 +105,7 @@ export function SettingsRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   group: {
     backgroundColor: colors.surface,
     borderRadius: radii.card,
@@ -134,4 +136,4 @@ const styles = StyleSheet.create({
     fontSize: 14,
     maxWidth: '45%',
   },
-});
+}));

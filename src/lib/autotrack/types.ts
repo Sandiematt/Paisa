@@ -12,7 +12,7 @@
 //   AckEntry         {id: Long, remoteId: String?}
 //   AutoTrackPrefs   {notesEnabled, blockingEnabled: Boolean}
 //   BudgetSnapshot   {monthKey: "YYYY-MM", monthlyBudget: Number, spendByDate: {"YYYY-MM-DD": Number},
-//                     dataAsOfMillis: Long}
+//                     dataAsOfMillis: Long, cycleStartDay: Int (optional, default 1)}
 //
 // Ownership: native tags every detection with the owner set by setOwner(userId). getTransactions / getPending and the
 // unsynced spend only ever cover the current owner's rows. Detections made while signed out belong to the last owner.
@@ -86,14 +86,16 @@ export const DEFAULT_AUTO_TRACK_PREFS: AutoTrackPrefs = {
 
 /** What JS knows about spending, pushed to native so the spend guard works while the app is closed. */
 export type BudgetSnapshot = {
-  /** Calendar month the snapshot describes, "YYYY-MM". */
+  /** Month the budget cycle starts in, "YYYY-MM" (the calendar month when cycleStartDay is 1). */
   monthKey: string;
-  /** profiles.monthly_budget; 0 means no budget (guard off). */
+  /** Budget left for day-to-day spending: profiles.monthly_budget minus this cycle's monthly bills. 0 means no budget (guard off). */
   monthlyBudget: number;
-  /** Expense spend per local calendar day of monthKey, from Paisa rows (manual + already-synced auto). */
+  /** Day-to-day expense spend per local day of the cycle, from Paisa rows (manual + already-synced auto); bills left out. */
   spendByDate: Record<string, number>;
   /** When the Paisa ledger behind spendByDate was read (fetch start). Rows synced after this are not in it yet. */
   dataAsOfMillis: number;
+  /** Payday the cycle starts on, 1-31 (31 = last day). Absent means 1: calendar months. */
+  cycleStartDay?: number;
 };
 
 /** Adaptive-via-week daily allowance (see src/features/autotrack/dailyAllowance.ts). */

@@ -1,5 +1,5 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
 import {Logo} from '../../components/brand/Logo';
 import {
@@ -11,7 +11,7 @@ import {
   ScreenHeader,
   Stagger,
 } from '../../components/ui';
-import {colors, layout, spacing} from '../../theme';
+import {colors, layout, makeStyles, spacing} from '../../theme';
 import {GoogleButton} from './components/GoogleButton';
 
 type AuthChoiceScreenProps = {
@@ -27,6 +27,7 @@ export function AuthChoiceScreen({
   onGoogle,
   onBack,
 }: AuthChoiceScreenProps) {
+  const styles = useStyles();
   return (
     <Screen glow={360}>
       <ScreenHeader onBack={onBack} />
@@ -84,7 +85,7 @@ export function AuthChoiceScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     flex: 1,
     paddingHorizontal: layout.screenPadding,
@@ -124,4 +125,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

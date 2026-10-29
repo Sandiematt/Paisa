@@ -1,30 +1,21 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {
-  Alert,
-  Animated,
-  Image,
-  Modal,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import {Alert, Animated, Image, Modal, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {
   ArrowRight,
   CaretRight,
   Compass,
   Coins,
+  CalendarCheck,
   CurrencyInr,
   DownloadSimple,
   FileCsv,
   Fingerprint,
-  Flag,
   Lightning,
   PencilSimple,
   PiggyBank,
   SealCheck,
   SignOut,
-  SquaresFour,
   Target,
   Trash,
   Wallet,
@@ -43,11 +34,17 @@ import {
   SectionTitle,
   SettingsGroup,
   SettingsRow,
-  ToggleSwitch,
 } from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {exportTransactionsCsv} from '../../lib/exportCsv';
 import {transactionsInMonth} from '../../lib/exportMonth';
+import {
+  automaticMonthlyBudget,
+  dayToDayBudget,
+  isAutomaticBudget,
+  monthlyBudgetOf,
+  withDayToDayBudget,
+} from '../../lib/budgetPlan';
 import {SaveProfileOptions} from '../../lib/profileStore';
 import {deleteAccount} from '../../lib/supabase/account';
 import {
@@ -55,20 +52,23 @@ import {
   walletBalanceFrom,
 } from '../../lib/transactionsStore';
 import {
+  brand,
   colors,
   duration,
   easing,
   fonts,
+  makeStyles,
   radii,
   shadows,
   spacing,
+  useTheme,
 } from '../../theme';
 import {budgetForDay, scaleMonthly, yearlyFromMonthly} from '../home/homeReport';
 import {
   currencyByCode,
-  MIN_CATEGORIES,
+  dayLabel,
 } from '../onboarding/constants';
-import {GoalId, OnboardingDraft} from '../onboarding/types';
+import {OnboardingDraft} from '../onboarding/types';
 import {useAutoTrack} from '../autotrack/AutoTrackProvider';
 import {autoTrackState} from '../autotrack/autoTrackFormat';
 import {useBiometricLock} from '../security/BiometricLockProvider';
@@ -77,10 +77,10 @@ import {useNotificationSettings} from './NotificationsSettingsSection';
 import {ProfileGoalKey, profileCompleteness} from './profileCompleteness';
 import {balanceFieldText, planProfileSave} from './profileSavePlan';
 import {
-  CategoriesSheet,
-  GoalSheet,
+  AppLockSheet,
   MoneySheet,
   NameSheet,
+  PaydaySheet,
 } from './ProfileSheets';
 
 type ProfileScreenProps = {
@@ -95,6 +95,8 @@ type ProfileScreenProps = {
   onOpenAutoTracking?: () => void;
   /** Closes Profile and plays the app tour again. */
   onReplayTutorial?: () => void;
+  /** This budget month's monthly bills; the budget shown is what is left after them. */
+  monthlyBills?: number;
   onClose: () => void;
 };
 
@@ -104,19 +106,13 @@ type SheetKey =
   | 'income'
   | 'budget'
   | 'savings'
-  | 'categories'
-  | 'goal';
+  | 'payday'
+  | 'appLock';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const TOAST_DURATION_MS = 2200;
 const APP_VERSION = 'v0.0.1 (Beta)';
 const ICON_SIZE = 24;
-
-const SHORT_GOAL: Record<GoalId, string> = {
-  track: 'Track spending',
-  save: 'Save more',
-  split: 'Split bills',
-};
 
 const NUDGE: Record<ProfileGoalKey, {text: string; sheet: SheetKey}> = {
   income: {
@@ -130,10 +126,6 @@ const NUDGE: Record<ProfileGoalKey, {text: string; sheet: SheetKey}> = {
   savings: {
     text: 'Set a savings goal so Paisa can cheer you on every month.',
     sheet: 'savings',
-  },
-  categories: {
-    text: `Pick at least ${MIN_CATEGORIES} categories to track your spending.`,
-    sheet: 'categories',
   },
 };
 
@@ -158,6 +150,7 @@ function formatDerived(amount: number, symbol: string): string {
 }
 
 function SaveToast({visible}: {visible: boolean}) {
+  const toastStyles = useToastStyles();
   const reducedMotion = useReducedMotion();
   const translateY = useRef(new Animated.Value(-64)).current;
   const opacity = useRef(new Animated.Value(0)).current;
@@ -191,7 +184,7 @@ function SaveToast({visible}: {visible: boolean}) {
   );
 }
 
-const toastStyles = StyleSheet.create({
+const useToastStyles = makeStyles(() => ({
   container: {
     position: 'absolute',
     top: 62,
@@ -210,7 +203,7 @@ const toastStyles = StyleSheet.create({
     zIndex: 100,
     ...shadows.card,
   },
-});
+}));
 
 export function ProfileScreen({
   visible,
@@ -219,22 +212,25 @@ export function ProfileScreen({
   onSignOut,
   onOpenAutoTracking,
   onReplayTutorial,
+  monthlyBills = 0,
   onClose,
 }: ProfileScreenProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const insets = useSafeAreaInsets();
 
   const [name, setName] = useState(draft.name);
   const [email, setEmail] = useState(draft.email);
   const [monthlyIncome, setMonthlyIncome] = useState(draft.monthlyIncome);
   const [monthlyBudget, setMonthlyBudget] = useState(draft.monthlyBudget);
+  const [budgetCustom, setBudgetCustom] = useState(draft.budgetCustom ?? false);
   const [monthlySavingsGoal, setMonthlySavingsGoal] = useState(
     draft.monthlySavingsGoal,
   );
   const [currentBalance, setCurrentBalance] = useState('');
   const [currentBalanceDirty, setCurrentBalanceDirty] = useState(false);
   const computedBalance = useRef(0);
-  const [goal, setGoal] = useState<GoalId | null>(draft.goal);
-  const [categoryIds, setCategoryIds] = useState<string[]>(draft.categoryIds);
+  const [payday, setPayday] = useState<number | null>(draft.payday ?? null);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(draft.avatarUrl);
   /** Real transactions this month, or null until the ledger has loaded. */
   const [monthCount, setMonthCount] = useState<number | null>(null);
@@ -244,7 +240,6 @@ export function ProfileScreen({
   const biometricLock = useBiometricLock();
   const notificationSettings = useNotificationSettings();
   const autoTrack = useAutoTrack();
-  const [biometricBusy, setBiometricBusy] = useState(false);
   const [exporting, setExporting] = useState<'month' | 'all' | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -279,10 +274,10 @@ export function ProfileScreen({
     setEmail(draft.email);
     setMonthlyIncome(draft.monthlyIncome);
     setMonthlyBudget(draft.monthlyBudget);
+    setBudgetCustom(draft.budgetCustom ?? false);
     setMonthlySavingsGoal(draft.monthlySavingsGoal);
     setCurrentBalanceDirty(false);
-    setGoal(draft.goal);
-    setCategoryIds(draft.categoryIds);
+    setPayday(draft.payday ?? null);
     setAvatarUrl(draft.avatarUrl);
     setSheet(null);
   }, [draft, visible]);
@@ -318,22 +313,31 @@ export function ProfileScreen({
   const symbol = activeCurrency.symbol;
   const emailVerified = EMAIL_PATTERN.test(email.trim());
 
+  // The budget follows income and savings until the user sets their own, and
+  // is shown, edited and judged after this month's bills.
+  const budgetFields = {monthlyIncome, monthlyBudget, monthlySavingsGoal, budgetCustom};
+  const budgetAutomatic = isAutomaticBudget(budgetFields);
+  const dayToDay = dayToDayBudget(monthlyBudgetOf(budgetFields), monthlyBills);
+  const calculatedDayToDay = dayToDayBudget(
+    automaticMonthlyBudget(budgetFields),
+    monthlyBills,
+  );
+  const budgetText = budgetAutomatic || monthlyBudget !== '' ? String(dayToDay) : '';
+
   const completeness = profileCompleteness(
-    {monthlyIncome, monthlyBudget, monthlySavingsGoal, categoryIds},
-    MIN_CATEGORIES,
+    {monthlyIncome, monthlyBudget: budgetText, monthlySavingsGoal},
   );
   const nudge = completeness.next ? NUDGE[completeness.next] : null;
 
   const dirty =
     name !== draft.name ||
     monthlyIncome !== draft.monthlyIncome ||
-    monthlyBudget !== draft.monthlyBudget ||
+    budgetCustom !== (draft.budgetCustom ?? false) ||
+    (budgetCustom && monthlyBudget !== draft.monthlyBudget) ||
     monthlySavingsGoal !== draft.monthlySavingsGoal ||
-    goal !== draft.goal ||
+    payday !== (draft.payday ?? null) ||
     avatarUrl !== draft.avatarUrl ||
-    currentBalanceDirty ||
-    categoryIds.length !== draft.categoryIds.length ||
-    categoryIds.some(id => !draft.categoryIds.includes(id));
+    currentBalanceDirty;
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -351,9 +355,12 @@ export function ProfileScreen({
         monthlyIncome,
         monthlyBudget,
         monthlySavingsGoal,
-        goal,
-        categoryIds,
+        budgetCustom,
+        // Not editable here any more; saved as they are.
+        goal: draft.goal,
+        categoryIds: draft.categoryIds,
         avatarUrl,
+        payday,
       },
       original: draft,
       computedBalance: computedBalance.current,
@@ -387,23 +394,6 @@ export function ProfileScreen({
         onPress: signOut,
       },
     ]);
-  };
-
-  const toggleBiometric = async (next: boolean) => {
-    if (biometricBusy) {
-      return;
-    }
-    setBiometricBusy(true);
-    try {
-      const result = await biometricLock.setEnabled(next);
-      if (!result.ok && result.message) {
-        Alert.alert('Biometric Lock', result.message);
-      }
-    } catch {
-      Alert.alert('Biometric Lock', 'Could not change this setting. Try again.');
-    } finally {
-      setBiometricBusy(false);
-    }
   };
 
   const runExport = async (scope: 'month' | 'all') => {
@@ -480,15 +470,16 @@ export function ProfileScreen({
 
   const closeSheet = () => setSheet(null);
 
-  const dailyHintFor = (budgetText: string): string | undefined => {
-    const budgetNumber = Number(budgetText) || 0;
+  // `typed` is the day-to-day budget; the bills come on top of it.
+  const dailyHintFor = (typed: string): string | undefined => {
+    const budgetNumber = Number(typed) || 0;
     const perDay =
-      budgetNumber > 0 ? Math.round(budgetForDay(budgetNumber, new Date())) : 0;
+      budgetNumber > 0 ? Math.round(budgetForDay(budgetNumber, new Date(), payday)) : 0;
     if (perDay <= 0) {
       return undefined;
     }
     const income = Number(monthlyIncome) || 0;
-    const leftover = income > 0 && budgetNumber > 0 ? income - budgetNumber : 0;
+    const leftover = income > 0 ? income - budgetNumber - monthlyBills : 0;
     const savingsNumber = Number(monthlySavingsGoal) || 0;
     const perDayText = `${symbol}${perDay.toLocaleString('en-IN')}`;
     if (leftover === 0) {
@@ -524,6 +515,10 @@ export function ProfileScreen({
   const perMonth = (text: string) =>
     Number(text) > 0 ? `${formatDerived(Number(text), symbol)} a month` : 'Not set';
 
+  const cardStops =
+    scheme === 'light'
+      ? [colors.surface, colors.wash]
+      : [colors.glow, colors.surface];
   const currencyIcon =
     activeCurrency.code === 'INR' ? (
       <CurrencyInr size={ICON_SIZE} color={colors.text} />
@@ -569,114 +564,123 @@ export function ProfileScreen({
           ]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          {/* Profile card */}
-          <GradientView
-            gradient={[colors.glow, colors.surface]}
-            angle={160}
-            positions={[0, 0.7]}
-            style={styles.profileCard}>
-            <View style={styles.profileMain}>
-              <View style={styles.ringWrap}>
-                <ProgressRing
-                  size={84}
-                  stroke={4}
-                  progress={completeness.ratio}
-                  gradient="primary"
-                  accessibilityLabel={`Profile setup, ${completeness.done} of ${completeness.total} goals set`}
-                />
-                <PressableScale
-                  onPress={() => setAvatarOpen(true)}
-                  scaleTo={0.94}
-                  accessibilityRole="button"
-                  accessibilityLabel="Change profile photo"
-                  containerStyle={styles.avatarSlot}
-                  style={styles.avatarPressable}>
-                  {avatarUrl ? (
-                    <Image
-                      source={{uri: avatarUrl}}
-                      style={styles.avatarImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <View style={styles.avatarInitials}>
-                      <AppText
-                        variant="title"
-                        color={colors.lavender}
-                        style={styles.initialsText}>
-                        {initials}
-                      </AppText>
-                    </View>
-                  )}
-                </PressableScale>
-                <View pointerEvents="none" style={styles.cameraBadge}>
-                  <CameraGlyph color={colors.text} size={12} />
-                </View>
-              </View>
-
-              <View style={styles.profileText}>
-                <View style={styles.nameRow}>
-                  <AppText
-                    variant="heading"
-                    numberOfLines={1}
-                    style={styles.nameText}>
-                    {name.trim() || 'Your name'}
-                  </AppText>
+          {/* Profile card: violet glow to surface on dark, white to wash with
+              a soft lift on light. */}
+          <View
+            style={[
+              styles.profileCardLift,
+              scheme === 'light' ? shadows.cardSoft : null,
+            ]}>
+            <GradientView
+              gradient={cardStops}
+              angle={160}
+              positions={[0, 0.7]}
+              style={styles.profileCard}>
+              <View style={styles.profileMain}>
+                <View style={styles.ringWrap}>
+                  <ProgressRing
+                    size={84}
+                    stroke={4}
+                    progress={completeness.ratio}
+                    gradient="primary"
+                    accessibilityLabel={`Profile setup, ${completeness.done} of ${completeness.total} goals set`}
+                  />
                   <PressableScale
-                    onPress={() => setSheet('name')}
-                    scaleTo={0.9}
-                    hitSlop={10}
+                    onPress={() => setAvatarOpen(true)}
+                    scaleTo={0.94}
                     accessibilityRole="button"
-                    accessibilityLabel="Edit name"
-                    style={styles.editNameBtn}>
-                    <PencilSimple size={14} color={colors.text} weight="bold" />
+                    accessibilityLabel="Change profile photo"
+                    containerStyle={styles.avatarSlot}
+                    style={styles.avatarPressable}>
+                    {avatarUrl ? (
+                      <Image
+                        source={{uri: avatarUrl}}
+                        style={styles.avatarImage}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.avatarInitials}>
+                        <AppText
+                          variant="title"
+                          color={colors.lavender}
+                          style={styles.initialsText}>
+                          {initials}
+                        </AppText>
+                      </View>
+                    )}
                   </PressableScale>
+                  <View
+                    pointerEvents="none"
+                    style={[styles.cameraBadge, {borderColor: cardStops[0]}]}>
+                    <CameraGlyph color={colors.onAccent} size={12} />
+                  </View>
                 </View>
-                <View style={styles.emailRow}>
+
+                <View style={styles.profileText}>
+                  <View style={styles.nameRow}>
+                    <AppText
+                      variant="heading"
+                      numberOfLines={1}
+                      style={styles.nameText}>
+                      {name.trim() || 'Your name'}
+                    </AppText>
+                    <PressableScale
+                      onPress={() => setSheet('name')}
+                      scaleTo={0.9}
+                      hitSlop={10}
+                      accessibilityRole="button"
+                      accessibilityLabel="Edit name"
+                      style={styles.editNameBtn}>
+                      <PencilSimple size={14} color={colors.text} weight="bold" />
+                    </PressableScale>
+                  </View>
+                  <View style={styles.emailRow}>
+                    <AppText
+                      variant="label"
+                      color={colors.muted}
+                      numberOfLines={1}
+                      style={styles.emailText}>
+                      {email.trim() || 'No email on this account'}
+                    </AppText>
+                    {emailVerified ? (
+                      <View
+                        accessible
+                        accessibilityLabel="Email verified"
+                        style={styles.verified}>
+                        <SealCheck size={16} color={colors.mint} weight="fill" />
+                      </View>
+                    ) : null}
+                  </View>
                   <AppText
                     variant="label"
-                    color={colors.muted}
-                    numberOfLines={1}
-                    style={styles.emailText}>
-                    {email.trim() || 'No email on this account'}
+                    color={colors.lavender}
+                    style={styles.goalsText}>
+                    {completeness.done} / {completeness.total} goals set
                   </AppText>
-                  {emailVerified ? (
-                    <View
-                      accessible
-                      accessibilityLabel="Email verified"
-                      style={styles.verified}>
-                      <SealCheck size={16} color={colors.mint} weight="fill" />
-                    </View>
-                  ) : null}
                 </View>
-                <AppText
-                  variant="label"
-                  color={colors.lavender}
-                  style={styles.goalsText}>
-                  {completeness.done} / {completeness.total} goals set
-                </AppText>
               </View>
-            </View>
 
-            {nudge ? (
-              <>
-                <View style={styles.cardDivider} />
-                <PressableScale
-                  onPress={() => setSheet(nudge.sheet)}
-                  scaleTo={0.99}
-                  accessibilityRole="button"
-                  accessibilityLabel={nudge.text}
-                  accessibilityHint="Opens the setting"
-                  style={styles.nudge}>
-                  <AppText variant="label" style={styles.nudgeText}>
-                    {nudge.text}
-                  </AppText>
-                  <View style={styles.nudgeArrow}>
-                    <ArrowRight size={16} color={colors.lavender} />
-                  </View>
-                </PressableScale>
-              </>
-            ) : null}
-          </GradientView>
+              {nudge ? (
+                <>
+                  <View style={styles.cardDivider} />
+                  <PressableScale
+                    onPress={() => setSheet(nudge.sheet)}
+                    scaleTo={0.99}
+                    accessibilityRole="button"
+                    accessibilityLabel={nudge.text}
+                    accessibilityHint="Opens the setting"
+                    style={styles.nudge}>
+                    <AppText variant="label" style={styles.nudgeText}>
+                      {nudge.text}
+                    </AppText>
+                    <View style={styles.nudgeArrow}>
+                      <ArrowRight size={16} color={colors.lavender} />
+                    </View>
+                  </PressableScale>
+                </>
+              ) : null}
+            </GradientView>
+          </View>
 
           {/* Export banner */}
           <PressableScale
@@ -688,25 +692,25 @@ export function ProfileScreen({
             accessibilityState={{disabled: exporting !== null, busy: exportingMonth}}
             containerStyle={styles.bannerWrap}>
             <GradientView
-              gradient={[colors.indigo, colors.violet, colors.lavender]}
+              gradient={[brand.indigo, brand.violet, brand.lavender]}
               angle={100}
               positions={[0, 0.6, 1]}
               style={styles.banner}>
               <View style={styles.csvSquare}>
-                <FileCsv size={26} color={colors.text} />
+                <FileCsv size={26} color={colors.onAccent} />
               </View>
               <View style={styles.bannerText}>
-                <AppText variant="heading" color={colors.text} numberOfLines={1}>
+                <AppText variant="heading" color={colors.onAccent} numberOfLines={1}>
                   Export {monthName} as CSV
                 </AppText>
-                <AppText variant="label" color={colors.text} numberOfLines={1}>
+                <AppText variant="label" color={colors.onAccent} numberOfLines={1}>
                   {exportSubtitle}
                 </AppText>
               </View>
               {exportingMonth ? (
-                <Loader size={28} />
+                <Loader size={28} color={colors.onAccent} />
               ) : (
-                <CaretRight size={20} color={colors.text} weight="bold" />
+                <CaretRight size={20} color={colors.onAccent} weight="bold" />
               )}
             </GradientView>
           </PressableScale>
@@ -736,26 +740,28 @@ export function ProfileScreen({
             <SettingsRow
               icon={<Target size={ICON_SIZE} color={colors.text} />}
               label="Budget"
-              value={perMonth(monthlyBudget)}
+              value={
+                dayToDay > 0
+                  ? `${perMonth(String(dayToDay))}${budgetAutomatic ? ' · auto' : ''}`
+                  : 'Not set'
+              }
               onPress={() => setSheet('budget')}
+            />
+            <SettingsRow
+              icon={<CalendarCheck size={ICON_SIZE} color={colors.text} />}
+              label="Pay cycle"
+              value={
+                payday && payday !== 1
+                  ? `From the ${dayLabel(payday).toLowerCase()}`
+                  : 'Calendar month'
+              }
+              onPress={() => setSheet('payday')}
             />
             <SettingsRow
               icon={<PiggyBank size={ICON_SIZE} color={colors.text} />}
               label="Savings goal"
               value={perMonth(monthlySavingsGoal)}
               onPress={() => setSheet('savings')}
-            />
-            <SettingsRow
-              icon={<SquaresFour size={ICON_SIZE} color={colors.text} />}
-              label="Categories"
-              value={`${categoryIds.length} active`}
-              onPress={() => setSheet('categories')}
-            />
-            <SettingsRow
-              icon={<Flag size={ICON_SIZE} color={colors.text} />}
-              label="Primary goal"
-              value={goal ? SHORT_GOAL[goal] : 'Not set'}
-              onPress={() => setSheet('goal')}
             />
           </SettingsGroup>
 
@@ -767,14 +773,14 @@ export function ProfileScreen({
               key="appLock"
               icon={<Fingerprint size={ICON_SIZE} color={colors.text} />}
               label="App lock"
-              trailing={
-                <ToggleSwitch
-                  value={biometricLock.enabled}
-                  onValueChange={toggleBiometric}
-                  disabled={biometricBusy}
-                  accessibilityLabel="App lock"
-                />
+              value={
+                biometricLock.method === 'pin'
+                  ? 'PIN'
+                  : biometricLock.method === 'biometric'
+                    ? 'Fingerprint'
+                    : 'Off'
               }
+              onPress={() => setSheet('appLock')}
             />
             {autoTrack.supported && onOpenAutoTracking ? (
               <SettingsRow
@@ -887,9 +893,24 @@ export function ProfileScreen({
         <MoneySheet
           visible={sheet === 'budget'}
           title="Monthly budget"
-          label="Monthly spending budget"
+          label="Monthly budget"
           symbol={symbol}
-          value={monthlyBudget}
+          value={budgetText}
+          lead={
+            Number(monthlyIncome) > 0
+              ? `Calculated automatically: income${
+                  monthlyBills > 0 ? ', less monthly bills' : ''
+                }, less your savings goal. Change it if it looks wrong.`
+              : 'What you can spend each month after bills. Add your income to have it calculated.'
+          }
+          suggestion={
+            Number(monthlyIncome) > 0
+              ? {
+                  label: `Use calculated ${formatDerived(calculatedDayToDay, symbol)}`,
+                  value: String(calculatedDayToDay),
+                }
+              : undefined
+          }
           renderExtra={draftText => {
             const hint = dailyHintFor(draftText);
             return hint ? (
@@ -898,7 +919,11 @@ export function ProfileScreen({
               </AppText>
             ) : null;
           }}
-          onDone={setMonthlyBudget}
+          onDone={typed => {
+            const next = withDayToDayBudget(budgetFields, typed, monthlyBills);
+            setMonthlyBudget(next.monthlyBudget);
+            setBudgetCustom(next.budgetCustom ?? false);
+          }}
           onClose={closeSheet}
         />
         <MoneySheet
@@ -933,16 +958,16 @@ export function ProfileScreen({
           onDone={setMonthlySavingsGoal}
           onClose={closeSheet}
         />
-        <CategoriesSheet
-          visible={sheet === 'categories'}
-          selectedIds={categoryIds}
-          onChange={setCategoryIds}
+        <AppLockSheet
+          visible={sheet === 'appLock'}
+          method={biometricLock.method}
+          onChoose={biometricLock.setLock}
           onClose={closeSheet}
         />
-        <GoalSheet
-          visible={sheet === 'goal'}
-          value={goal}
-          onSelect={setGoal}
+        <PaydaySheet
+          visible={sheet === 'payday'}
+          value={payday}
+          onSelect={setPayday}
           onClose={closeSheet}
         />
       </Screen>
@@ -950,7 +975,7 @@ export function ProfileScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   screen: {
     flex: 1,
   },
@@ -977,6 +1002,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 10,
+  },
+  profileCardLift: {
+    borderRadius: radii.cardHero,
+    backgroundColor: colors.surface,
   },
   profileCard: {
     borderRadius: radii.cardHero,
@@ -1056,7 +1085,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.track,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1158,4 +1187,4 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   },
-});
+}));

@@ -1,11 +1,11 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 import {ArrowRight} from 'phosphor-react-native';
 
 import {AppText, Card, PressableScale, ProgressBar} from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
 import {DailyAllowance} from '../../lib/autotrack/types';
-import {colors, spacing} from '../../theme';
+import {colors, makeStyles, spacing} from '../../theme';
 import {daysLabel, weekProgress} from './autoTrackFormat';
 
 type AllowanceCardProps = {
@@ -20,6 +20,7 @@ export function AllowanceCard({
   currencySymbol,
   onOpenBudget,
 }: AllowanceCardProps) {
+  const styles = useStyles();
   const money = (amount: number) =>
     formatMoney(amount, currencySymbol, {decimals: 0});
 
@@ -107,7 +108,7 @@ export function AllowanceCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   empty: {
     gap: spacing.sm,
   },
@@ -134,4 +135,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     gap: spacing.sm,
   },
-});
+}));

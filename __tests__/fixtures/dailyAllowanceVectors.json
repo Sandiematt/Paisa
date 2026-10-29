@@ -1,5 +1,5 @@
 {
-  "comment": "Shared vectors for the daily allowance split from the monthly budget (weekly = monthly / (daysInMonth / 7), daily = weekly / 7; unspent money does not roll forward). Used by __tests__/dailyAllowance.test.ts and android/app/src/test/.../BudgetPlanTest.kt. Outputs are rounded to 2 decimals (half-up); intermediates are full precision. spendByDate entries outside today's month (or a snapshot for another month) are ignored.",
+  "comment": "Shared vectors for the daily allowance split from the monthly budget (weekly = monthly / (daysInMonth / 7), daily = weekly / 7; unspent money does not roll forward). Used by __tests__/dailyAllowance.test.ts and android/app/src/test/.../BudgetPlanTest.kt. Outputs are rounded to 2 decimals (half-up); intermediates are full precision. spendByDate entries outside today's budget cycle (or a snapshot for another cycle) are ignored. cycleStartDay (payday, default 1) makes the cycle run payday to the day before the next payday; weekly = budget / (cycleDays / 7).",
   "vectors": [
     {
       "name": "mid-week, week clipped at month end",
@@ -54,6 +54,30 @@
       "today": "2026-10-28",
       "snapshot": {"monthKey": "2026-10", "monthlyBudget": 1000, "spendByDate": {"2026-10-06": 900}},
       "expected": {"date": "2026-10-28", "weekStart": "2026-10-26", "weekEnd": "2026-10-31", "weekBudget": 100, "spentWeekBeforeToday": 0, "daysLeftInWeek": 4, "dailyLimit": 25, "spentToday": 0, "remainingToday": 25, "remainingWeek": 100}
+    },
+    {
+      "name": "payday cycle: the week runs across the month change",
+      "today": "2026-10-27",
+      "snapshot": {"monthKey": "2026-10", "monthlyBudget": 31000, "cycleStartDay": 25, "spendByDate": {"2026-10-20": 999, "2026-10-25": 3000, "2026-10-26": 1500, "2026-10-27": 200}},
+      "expected": {"date": "2026-10-27", "weekStart": "2026-10-26", "weekEnd": "2026-11-01", "weekBudget": 7000, "spentWeekBeforeToday": 1500, "daysLeftInWeek": 6, "dailyLimit": 916.67, "spentToday": 200, "remainingToday": 716.67, "remainingWeek": 5300}
+    },
+    {
+      "name": "payday cycle: last-day payday in February",
+      "today": "2026-02-10",
+      "snapshot": {"monthKey": "2026-01", "monthlyBudget": 28000, "cycleStartDay": 31, "spendByDate": {"2026-01-31": 5000}},
+      "expected": {"date": "2026-02-10", "weekStart": "2026-02-09", "weekEnd": "2026-02-15", "weekBudget": 7000, "spentWeekBeforeToday": 0, "daysLeftInWeek": 6, "dailyLimit": 1000, "spentToday": 0, "remainingToday": 1000, "remainingWeek": 7000}
+    },
+    {
+      "name": "payday cycle: week clipped at the cycle's last day",
+      "today": "2026-11-24",
+      "snapshot": {"monthKey": "2026-10", "monthlyBudget": 31000, "cycleStartDay": 25, "spendByDate": {"2026-10-30": 29500, "2026-11-23": 1000}},
+      "expected": {"date": "2026-11-24", "weekStart": "2026-11-23", "weekEnd": "2026-11-24", "weekBudget": 1500, "spentWeekBeforeToday": 1000, "daysLeftInWeek": 1, "dailyLimit": 500, "spentToday": 0, "remainingToday": 500, "remainingWeek": 500}
+    },
+    {
+      "name": "payday cycle: a snapshot for the previous cycle adds no spend",
+      "today": "2026-10-27",
+      "snapshot": {"monthKey": "2026-09", "monthlyBudget": 31000, "cycleStartDay": 25, "spendByDate": {"2026-10-26": 1500}},
+      "expected": {"date": "2026-10-27", "weekStart": "2026-10-26", "weekEnd": "2026-11-01", "weekBudget": 7000, "spentWeekBeforeToday": 0, "daysLeftInWeek": 6, "dailyLimit": 1000, "spentToday": 0, "remainingToday": 1000, "remainingWeek": 7000}
     }
   ]
 }

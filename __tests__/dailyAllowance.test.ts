@@ -205,7 +205,50 @@ describe('buildBudgetSnapshot', () => {
       monthlyBudget: 30000,
       spendByDate: {'2026-10-05': 150, '2026-10-27': 20},
       dataAsOfMillis: 0,
+      cycleStartDay: 1,
     });
+  });
+
+  it('takes monthly bills off the budget and out of daily spend', () => {
+    const snapshot = buildBudgetSnapshot(
+      [
+        tx({id: 'rent', type: 'expense', amount: 18000, transactionDate: '2026-10-01', isRecurring: true}),
+        tx({
+          id: 'copy',
+          type: 'expense',
+          amount: 999,
+          transactionDate: '2026-10-10',
+          isRecurring: true,
+          externalRef: 'recurring:wifi:2026-10',
+        }),
+        tx({id: 'food', type: 'expense', amount: 250, transactionDate: '2026-10-10'}),
+      ],
+      {monthlyBudget: 30000, committed: 18999},
+      now,
+    );
+    expect(snapshot.monthlyBudget).toBe(11001);
+    expect(snapshot.spendByDate).toEqual({'2026-10-10': 250});
+  });
+
+  it('keeps a budget taken entirely by bills switched on', () => {
+    expect(
+      buildBudgetSnapshot([], {monthlyBudget: 10000, committed: 12000}, now).monthlyBudget,
+    ).toBe(0.01);
+  });
+
+  it('follows the payday cycle', () => {
+    const snapshot = buildBudgetSnapshot(
+      [
+        tx({id: 'a', type: 'expense', amount: 100, transactionDate: '2026-10-24'}),
+        tx({id: 'b', type: 'expense', amount: 40, transactionDate: '2026-10-25'}),
+        tx({id: 'c', type: 'expense', amount: 60, transactionDate: '2026-11-03'}),
+      ],
+      {monthlyBudget: 31000, payday: 25},
+      new Date(2026, 10, 3),
+    );
+    expect(snapshot.monthKey).toBe('2026-10');
+    expect(snapshot.cycleStartDay).toBe(25);
+    expect(snapshot.spendByDate).toEqual({'2026-10-25': 40, '2026-11-03': 60});
   });
 
   it('leaves out income, opening balance and adjustments', () => {

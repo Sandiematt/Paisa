@@ -1,10 +1,10 @@
 import React, {useEffect, useRef} from 'react';
-import {Animated, StyleSheet, View} from 'react-native';
+import {Animated, View} from 'react-native';
 import {Receipt} from 'phosphor-react-native';
 
 import {GradientIconSquare} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
-import {colors, duration, easing} from '../../theme';
+import {colors, duration, easing, makeStyles} from '../../theme';
 
 const SIZE = 48;
 const FLOAT = 5;
@@ -16,6 +16,7 @@ const DRIFT_MS = 2200;
  * reduced motion it simply sits still.
  */
 export function FloatingReceipt() {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const enter = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
   const drift = useRef(new Animated.Value(0)).current;
@@ -55,7 +56,7 @@ export function FloatingReceipt() {
       importantForAccessibility="no-hide-descendants">
       <Animated.View style={{transform: [{translateY: lift}, {rotate: tilt}]}}>
         <GradientIconSquare size={SIZE} glow>
-          <Receipt size={24} color={colors.text} weight="fill" />
+          <Receipt size={24} color={colors.onAccent} weight="fill" />
         </GradientIconSquare>
       </Animated.View>
       <Animated.View
@@ -72,7 +73,7 @@ export function FloatingReceipt() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     alignItems: 'center',
   },
@@ -86,4 +87,4 @@ const styles = StyleSheet.create({
   spacer: {
     height: 2,
   },
-});
+}));

@@ -1,5 +1,4 @@
 import React from 'react';
-import {StyleSheet} from 'react-native';
 import {
   Airplane,
   ArrowCounterClockwise,
@@ -22,7 +21,15 @@ import {
 import type {Icon as PhosphorIcon} from 'phosphor-react-native';
 
 import {GradientIconSquare, GradientView} from '../../components/ui';
-import {GradientKey, colors, shadows, withAlpha} from '../../theme';
+import {
+  ColorScheme,
+  GradientKey,
+  colors,
+  makeStyles,
+  shadows,
+  withAlpha,
+} from '../../theme';
+import {getActiveScheme} from '../../theme/colors';
 
 /**
  * Category look shared across the app. One lookup, `categoryVisual`, maps a
@@ -38,56 +45,87 @@ export type CategoryVisual = {
   Icon: PhosphorIcon;
   /** Named DX gradient, or explicit stops for the variants the DX set lacks. */
   gradient: GradientSource;
-  /** Icon colour that reads on the gradient (`text`, or `ground` on gold). */
+  /**
+   * Icon colour that reads on the gradient (`onAccent`, `ground` on mint and
+   * gold, `text` on the neutral wash).
+   */
   iconColor: string;
 };
 
-// Darker partner stops for the colours the DX gradient set has no pair for.
-const MINT_STOPS = [colors.mint, '#25A06A'] as const;
-const GOLD_STOPS = [colors.gold, '#B8862F'] as const;
-const VIOLET_STOPS = [colors.violet, colors.indigo] as const;
-const SKY_STOPS = [colors.sky, colors.violet] as const;
-const NEUTRAL_STOPS = [
-  withAlpha(colors.text, 0.22),
-  withAlpha(colors.text, 0.1),
-] as const;
-
-const VISUALS: Record<string, CategoryVisual> = {
-  housing: {Icon: House, gradient: VIOLET_STOPS, iconColor: colors.text},
-  dining: {Icon: ForkKnife, gradient: 'rose', iconColor: colors.text},
-  groceries: {Icon: ShoppingCart, gradient: 'primary', iconColor: colors.text},
-  transport: {Icon: Car, gradient: 'savings', iconColor: colors.text},
-  health: {Icon: Heart, gradient: 'rose', iconColor: colors.text},
-  shopping: {Icon: ShoppingBag, gradient: SKY_STOPS, iconColor: colors.text},
-  entertainment: {
-    Icon: GameController,
-    gradient: VIOLET_STOPS,
-    iconColor: colors.text,
-  },
-  bills: {Icon: Lightning, gradient: GOLD_STOPS, iconColor: colors.ground},
-  personal: {Icon: User, gradient: 'primary', iconColor: colors.text},
-  education: {
-    Icon: GraduationCap,
-    gradient: 'savings',
-    iconColor: colors.text,
-  },
-  travel: {Icon: Airplane, gradient: SKY_STOPS, iconColor: colors.text},
-  subscriptions: {Icon: Repeat, gradient: 'primary', iconColor: colors.text},
-  salary: {Icon: Briefcase, gradient: MINT_STOPS, iconColor: colors.ground},
-  freelance: {Icon: Laptop, gradient: MINT_STOPS, iconColor: colors.ground},
-  refund: {
-    Icon: ArrowCounterClockwise,
-    gradient: MINT_STOPS,
-    iconColor: colors.ground,
-  },
-  other: {Icon: DotsThree, gradient: NEUTRAL_STOPS, iconColor: colors.text},
+type Visuals = {
+  byKey: Record<string, CategoryVisual>;
+  fallback: CategoryVisual;
 };
 
-const FALLBACK: CategoryVisual = {
-  Icon: Tag,
-  gradient: NEUTRAL_STOPS,
-  iconColor: colors.text,
-};
+/**
+ * Built from the live palette, so it runs once per scheme (on first use)
+ * rather than at module load, which would freeze the boot scheme's colours.
+ */
+function buildVisuals(): Visuals {
+  // Darker partner stops for the colours the DX gradient set has no pair for.
+  const MINT_STOPS = [colors.mint, '#25A06A'] as const;
+  const GOLD_STOPS = [colors.gold, '#B8862F'] as const;
+  const VIOLET_STOPS = [colors.violet, colors.indigo] as const;
+  const SKY_STOPS = [colors.sky, colors.violet] as const;
+  const NEUTRAL_STOPS = [
+    withAlpha(colors.text, 0.22),
+    withAlpha(colors.text, 0.1),
+  ] as const;
+
+  const onAccent = colors.onAccent;
+  const byKey: Record<string, CategoryVisual> = {
+    housing: {Icon: House, gradient: VIOLET_STOPS, iconColor: onAccent},
+    dining: {Icon: ForkKnife, gradient: 'rose', iconColor: onAccent},
+    groceries: {Icon: ShoppingCart, gradient: 'primary', iconColor: onAccent},
+    transport: {Icon: Car, gradient: 'savings', iconColor: onAccent},
+    health: {Icon: Heart, gradient: 'rose', iconColor: onAccent},
+    shopping: {Icon: ShoppingBag, gradient: SKY_STOPS, iconColor: onAccent},
+    entertainment: {
+      Icon: GameController,
+      gradient: VIOLET_STOPS,
+      iconColor: onAccent,
+    },
+    bills: {Icon: Lightning, gradient: GOLD_STOPS, iconColor: colors.ground},
+    personal: {Icon: User, gradient: 'primary', iconColor: onAccent},
+    education: {
+      Icon: GraduationCap,
+      gradient: 'savings',
+      iconColor: onAccent,
+    },
+    travel: {Icon: Airplane, gradient: SKY_STOPS, iconColor: onAccent},
+    subscriptions: {Icon: Repeat, gradient: 'primary', iconColor: onAccent},
+    salary: {Icon: Briefcase, gradient: MINT_STOPS, iconColor: colors.ground},
+    freelance: {Icon: Laptop, gradient: MINT_STOPS, iconColor: colors.ground},
+    refund: {
+      Icon: ArrowCounterClockwise,
+      gradient: MINT_STOPS,
+      iconColor: colors.ground,
+    },
+    // A wash of the text colour, so the glyph takes the text colour too.
+    other: {Icon: DotsThree, gradient: NEUTRAL_STOPS, iconColor: colors.text},
+  };
+
+  return {
+    byKey,
+    fallback: {
+      Icon: Tag,
+      gradient: NEUTRAL_STOPS,
+      iconColor: colors.text,
+    },
+  };
+}
+
+const visualsByScheme: Partial<Record<ColorScheme, Visuals>> = {};
+
+function visuals(): Visuals {
+  const scheme = getActiveScheme();
+  let built = visualsByScheme[scheme];
+  if (!built) {
+    built = buildVisuals();
+    visualsByScheme[scheme] = built;
+  }
+  return built;
+}
 
 /** Free-form names (custom categories, profile presets) to a known slug. */
 const ALIASES: [RegExp, string][] = [
@@ -111,16 +149,17 @@ const ALIASES: [RegExp, string][] = [
 export function categoryVisual(
   slugOrName?: string | null,
 ): CategoryVisual {
+  const {byKey, fallback} = visuals();
   const key = slugOrName?.trim().toLowerCase();
   if (!key) {
-    return VISUALS.other;
+    return byKey.other;
   }
-  const direct = VISUALS[key];
+  const direct = byKey[key];
   if (direct) {
     return direct;
   }
   const alias = ALIASES.find(([pattern]) => pattern.test(key));
-  return alias ? VISUALS[alias[1]] : FALLBACK;
+  return alias ? byKey[alias[1]] : fallback;
 }
 
 type CategoryIconSquareProps = {
@@ -138,6 +177,7 @@ export function CategoryIconSquare({
   glow = false,
   iconSize,
 }: CategoryIconSquareProps) {
+  const styles = useStyles();
   const {Icon, gradient, iconColor} = categoryVisual(id);
   const glyph = (
     <Icon
@@ -187,9 +227,9 @@ export function CategoryIcon({id, size = 20}: {id: string; size?: number}) {
   return <CategoryIconSquare id={id} size={40} iconSize={size} />;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   square: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

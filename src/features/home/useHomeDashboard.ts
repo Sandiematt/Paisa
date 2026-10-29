@@ -3,6 +3,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useAuth} from '../auth/AuthProvider';
 import {CategoryRow, loadCategories} from '../../lib/categoriesStore';
 import {saveDueRecurring} from '../../lib/recurring';
+import {applyScheduledSetup} from '../../lib/scheduledSetup';
 import {
   TransactionRow,
   loadTransactions,
@@ -73,6 +74,15 @@ export function useHomeDashboard(
     setError(null);
     let fetchStartedAt = Date.now();
     try {
+      // Bills and salary picked at sign-up whose first date has come become
+      // ledger rows (their monthly copies follow below) on every refresh, not
+      // only at launch.
+      try {
+        await applyScheduledSetup(user);
+      } catch {
+        // Tried again on the next reload.
+      }
+      fetchStartedAt = Date.now();
       const [nextCategories, loaded] = await Promise.all([
         loadCategories(),
         loadTransactions(),

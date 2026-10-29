@@ -1,7 +1,7 @@
 import React, {useEffect, useRef} from 'react';
-import {Animated, StyleSheet, View} from 'react-native';
+import {Animated, View} from 'react-native';
 
-import {colors, duration, easing, radii, spacing} from '../../theme';
+import {colors, duration, easing, makeStyles, radii, spacing} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {AppText} from './AppText';
 import {PressableScale} from './PressableScale';
@@ -22,6 +22,7 @@ export function SelectCard({
   selected,
   onSelect,
 }: SelectCardProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const fill = useRef(new Animated.Value(selected ? 1 : 0)).current;
 
@@ -59,7 +60,7 @@ export function SelectCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -103,4 +104,4 @@ const styles = StyleSheet.create({
     borderRadius: radii.pill,
     backgroundColor: colors.accent,
   },
-});
+}));

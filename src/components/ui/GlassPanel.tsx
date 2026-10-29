@@ -2,7 +2,7 @@ import React from 'react';
 import {Platform, StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
 import {BlurView} from '@react-native-community/blur';
 
-import {colors} from '../../theme';
+import {colors, makeStyles, useTheme} from '../../theme';
 
 type GlassIntensity = 'md' | 'xl' | '2xl';
 
@@ -24,7 +24,7 @@ type GlassPanelProps = {
 };
 
 /**
- * Dark glass: native blur under a `glass` tint with a 1px `line` border.
+ * Glass: native blur (dark or light to match the scheme) under a `glass` tint with a 1px `line` border.
  * Shadow belongs on the outer wrap so overflow clipping does not eat it.
  */
 export function GlassPanel({
@@ -35,6 +35,8 @@ export function GlassPanel({
   overlayColor = colors.glass,
   radius,
 }: GlassPanelProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const amount = Math.min(BLUR_AMOUNT[intensity], MAX_BLUR_RADIUS);
 
   return (
@@ -43,7 +45,7 @@ export function GlassPanel({
         <BlurView
           pointerEvents="none"
           style={StyleSheet.absoluteFill}
-          blurType="dark"
+          blurType={scheme === 'light' ? 'light' : 'dark'}
           blurAmount={amount}
           {...(Platform.OS === 'android'
             ? {blurRadius: amount, overlayColor: 'transparent'}
@@ -59,7 +61,7 @@ export function GlassPanel({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   clip: {
     overflow: 'hidden',
     borderWidth: 1,
@@ -71,4 +73,4 @@ const styles = StyleSheet.create({
   content: {
     zIndex: 1,
   },
-});
+}));

@@ -1,13 +1,17 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
 import {GhostButton, PrimaryButton} from '../../../components/ui';
-import {colors, layout, spacing} from '../../../theme';
+import {colors, layout, makeStyles, spacing} from '../../../theme';
 
 type OnboardingFooterProps = {
   primaryLabel: string;
   onPrimary: () => void;
+  /** Shows a spinner on the primary button while the step checks something. */
+  loading?: boolean;
   skippable: boolean;
+  /** Replaces "Skip for now". */
+  skipLabel?: string;
   onSkip: () => void;
 };
 
@@ -19,18 +23,22 @@ type OnboardingFooterProps = {
 export function OnboardingFooter({
   primaryLabel,
   onPrimary,
+  loading = false,
   skippable,
+  skipLabel = 'Skip for now',
   onSkip,
 }: OnboardingFooterProps) {
+  const styles = useStyles();
   return (
     <View style={styles.root}>
       <PrimaryButton
         label={primaryLabel}
         trailing={'→'}
         onPress={onPrimary}
+        loading={loading}
       />
       {skippable ? (
-        <GhostButton label="Skip for now" onPress={onSkip} style={styles.skip} />
+        <GhostButton label={skipLabel} onPress={onSkip} style={styles.skip} />
       ) : (
         <View style={styles.skipSpacer} />
       )}
@@ -38,7 +46,7 @@ export function OnboardingFooter({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.lg,
@@ -56,4 +64,4 @@ const styles = StyleSheet.create({
   skipSpacer: {
     height: 46,
   },
-});
+}));

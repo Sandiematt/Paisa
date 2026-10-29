@@ -1,9 +1,9 @@
 import React, {useId} from 'react';
-import {StatusBar, StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {StatusBar, StyleProp, View, ViewStyle} from 'react-native';
 import {Edge, SafeAreaView} from 'react-native-safe-area-context';
 import Svg, {Defs, LinearGradient, Rect, Stop} from 'react-native-svg';
 
-import {colors} from '../../theme';
+import {colors, makeStyles, useTheme} from '../../theme';
 
 type ScreenProps = {
   children: React.ReactNode;
@@ -30,6 +30,7 @@ const GLOW_STOPS = [0, 0.15, 0.3, 0.45, 0.6, 0.75, 0.9, 1].map(offset => ({
 }));
 
 function ScreenGlow({height}: {height: number}) {
+  const styles = useStyles();
   const id = `screen-glow-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   return (
     <Svg
@@ -54,7 +55,7 @@ function ScreenGlow({height}: {height: number}) {
   );
 }
 
-/** Ground background, light status bar, optional violet glow at the top. */
+/** Ground background, scheme-matched status bar, optional violet glow at the top. */
 export function Screen({
   children,
   edges = ['top', 'bottom'],
@@ -63,13 +64,17 @@ export function Screen({
   bottomInset = 0,
   glow = false,
 }: ScreenProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const glowHeight = typeof glow === 'number' ? glow : GLOW_HEIGHT;
 
   return (
     <View style={styles.root} collapsable={false}>
       {/* Android is edge-to-edge from RN 0.87, so the ground behind the bar
           comes from the root view rather than a status bar colour. */}
-      <StatusBar barStyle="light-content" />
+      <StatusBar
+        barStyle={scheme === 'light' ? 'dark-content' : 'light-content'}
+      />
       {glow ? <ScreenGlow height={glowHeight} /> : null}
       {backdrop}
       <SafeAreaView
@@ -81,7 +86,7 @@ export function Screen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     flex: 1,
     backgroundColor: colors.ground,
@@ -96,4 +101,4 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-});
+}));

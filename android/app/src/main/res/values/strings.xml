@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Paisa</string>
+    <!-- Resolved to the native fingerprint at build time (runtimeVersion policy "fingerprint"). -->
+    <string name="expo_runtime_version" translatable="false">file:fingerprint</string>
 
     <!-- UPI payment auto-tracking (accessibility service, notification listener, note prompt, spend guard). -->
     <string name="accessibility_service_label">Paisa auto-tracking</string>

@@ -31,3 +31,4 @@ export {Text} from './Text';
 export {TextField} from './TextField';
 export {TogglePill} from './TogglePill';
 export {ToggleSwitch, TOGGLE_HEIGHT, TOGGLE_WIDTH} from './ToggleSwitch';
+export {ThemeToggle} from './ThemeToggle';

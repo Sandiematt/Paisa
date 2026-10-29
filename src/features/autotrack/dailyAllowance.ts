@@ -8,9 +8,10 @@ import {
   isLedgerSpecial,
   localDateISO,
 } from '../../lib/transactionsStore';
+import {BudgetCycle, cycleFor, cycleStartDay} from '../../lib/budgetCycle';
+import {isBillRow} from '../../lib/recurring';
 import {
   addDays,
-  daysInMonth,
   parseCalendarDate,
   startOfDay,
   startOfWeekMonday,
@@ -30,47 +31,50 @@ function daysBetween(from: Date, to: Date): number {
   return Math.round((to.getTime() - from.getTime()) / DAY_MS);
 }
 
-function monthKeyOf(date: Date): string {
-  return localDateISO(date).slice(0, 7);
+/** The month a cycle starts in, "YYYY-MM": the snapshot's identity. */
+function cycleKeyOf(cycle: BudgetCycle): string {
+  return localDateISO(cycle.start).slice(0, 7);
 }
 
 /**
- * How a monthly budget splits into weeks and days. A month holds
- * daysInMonth / 7 weeks (4.43 for October), so the weekly budget is the
- * monthly budget over that, and the daily budget is a seventh of a week.
- * Seven daily budgets make a week and the days of the month add back up to
- * the monthly budget.
+ * How a budget splits into weeks and days over its cycle (the calendar month,
+ * or payday to payday). A cycle holds length / 7 weeks (4.43 for October),
+ * so the weekly budget is the budget over that, and the daily budget is a
+ * seventh of a week. Seven daily budgets make a week and the days of the cycle
+ * add back up to the budget.
  */
 export function budgetAllocation(
   monthlyBudget: number,
   day: Date,
+  payday?: number | null,
 ): {weeksInMonth: number; weeklyBudget: number; dailyBudget: number} {
-  const monthDays = daysInMonth(day.getFullYear(), day.getMonth());
+  const cycleDays = cycleFor(day, payday).length;
   const budget =
     Number.isFinite(monthlyBudget) && monthlyBudget > 0 ? monthlyBudget : 0;
-  const weeklyBudget = (budget * 7) / monthDays;
+  const weeklyBudget = (budget * 7) / cycleDays;
   return {
-    weeksInMonth: monthDays / 7,
+    weeksInMonth: cycleDays / 7,
     weeklyBudget,
     dailyBudget: weeklyBudget / 7,
   };
 }
 
 /**
- * Daily allowance from the monthly budget. Weeks run Monday to Sunday,
- * clipped to the calendar month. Each week gets its share of the monthly
- * budget (see budgetAllocation; a clipped week gets a daily budget per day it
- * has), capped by what is left of the month. Today's limit is the daily
- * budget, lowered when earlier overspending this week leaves less than that
- * per remaining day. Money you skip is not added to later days, so a quiet
- * start of the month never turns into a whole month's budget in one week.
+ * Daily allowance from the budget. Weeks run Monday to Sunday, clipped to the
+ * budget cycle (the calendar month, or payday to payday when
+ * `snapshot.cycleStartDay` is set). Each week gets its share of the budget
+ * (see budgetAllocation; a clipped week gets a daily budget per day it has),
+ * capped by what is left of the cycle. Today's limit is the daily budget,
+ * lowered when earlier overspending this week leaves less than that per
+ * remaining day. Money you skip is not added to later days, so a quiet start
+ * never turns into a whole cycle's budget in one week.
  *
  * Mirrors the Kotlin BudgetPlan; both run the vectors in
  * __tests__/fixtures/dailyAllowanceVectors.json.
  *
  * `extraSpendByDate` is spend not in the snapshot yet (detections that have
- * not synced). Entries outside today's month, and a snapshot for another
- * month, are ignored. Returns null when there is no budget.
+ * not synced). Entries outside today's cycle, and a snapshot for another
+ * cycle, are ignored. Returns null when there is no budget.
  */
 export function dailyAllowance(
   snapshot: BudgetSnapshot,
@@ -89,15 +93,14 @@ export function dailyAllowance(
     return null;
   }
 
-  const year = day.getFullYear();
-  const month = day.getMonth();
-  const monthKey = monthKeyOf(day);
-  const monthEnd = new Date(year, month, daysInMonth(year, month));
+  const payday = snapshot.cycleStartDay ?? 1;
+  const cycle = cycleFor(day, payday);
+  const cycleStartKey = localDateISO(cycle.start);
+  const cycleEndKey = localDateISO(cycle.end);
   const monday = startOfWeekMonday(day);
-  const monthStart = new Date(year, month, 1);
-  const weekStart = monday < monthStart ? monthStart : monday;
+  const weekStart = monday < cycle.start ? cycle.start : monday;
   const sunday = addDays(monday, 6);
-  const weekEnd = sunday > monthEnd ? monthEnd : sunday;
+  const weekEnd = sunday > cycle.end ? cycle.end : sunday;
 
   const todayKey = localDateISO(day);
   const weekStartKey = localDateISO(weekStart);
@@ -108,7 +111,7 @@ export function dailyAllowance(
   const add = (spend: Record<string, number>) => {
     for (const [date, value] of Object.entries(spend)) {
       const amount = Number(value);
-      if (!date.startsWith(`${monthKey}-`) || !Number.isFinite(amount)) {
+      if (date < cycleStartKey || date > cycleEndKey || !Number.isFinite(amount)) {
         continue;
       }
       if (date < weekStartKey) {
@@ -120,17 +123,17 @@ export function dailyAllowance(
       }
     }
   };
-  if (snapshot.monthKey === monthKey) {
+  if (snapshot.monthKey === cycleKeyOf(cycle)) {
     add(snapshot.spendByDate);
   }
   add(extraSpendByDate);
 
-  const weekDaysInMonth = daysBetween(weekStart, weekEnd) + 1;
+  const weekDaysInCycle = daysBetween(weekStart, weekEnd) + 1;
   const daysLeftInWeek = daysBetween(day, weekEnd) + 1;
 
-  const {dailyBudget} = budgetAllocation(budget, day);
+  const {dailyBudget} = budgetAllocation(budget, day, payday);
   const weekBudget = Math.min(
-    dailyBudget * weekDaysInMonth,
+    dailyBudget * weekDaysInCycle,
     Math.max(0, budget - spentBeforeWeek),
   );
   const dailyLimit = Math.min(
@@ -152,10 +155,21 @@ export function dailyAllowance(
   };
 }
 
+export type BudgetPlanInputs = {
+  /** The budget as set, bills included. */
+  monthlyBudget: number;
+  /** Payday; null keeps calendar months. */
+  payday?: number | null;
+  /** Monthly bills due this cycle, set aside before day-to-day spending. */
+  committed?: number;
+};
+
 /**
- * Per-day expense spend for the month of `now`, the same rows the dashboard
- * counts as spent: regular expenses only, with opening-balance and balance
- * adjustment rows left out (see walletParts in homeReport).
+ * Per-day day-to-day spend for the cycle holding `now`: regular expenses,
+ * with opening-balance and balance adjustment rows left out (see walletParts
+ * in homeReport), and monthly bills left out too, since their money is taken
+ * off the budget up front (`committed`) rather than out of the day they land
+ * on. The snapshot's budget is what remains for day-to-day spending.
  *
  * `dataAsOfMillis` is when the ledger fetch behind `transactions` started.
  * Detections saved after it are not in the ledger yet, so they still count as
@@ -163,27 +177,37 @@ export function dailyAllowance(
  */
 export function buildBudgetSnapshot(
   transactions: TransactionRow[],
-  monthlyBudget: number,
+  plan: number | BudgetPlanInputs,
   now = new Date(),
   dataAsOfMillis = 0,
 ): BudgetSnapshot {
-  const monthKey = monthKeyOf(now);
+  const inputs = typeof plan === 'number' ? {monthlyBudget: plan} : plan;
+  const payday = cycleStartDay(inputs.payday);
+  const cycle = cycleFor(now, payday);
+  const startKey = localDateISO(cycle.start);
+  const endKey = localDateISO(cycle.end);
   const spendByDate: Record<string, number> = {};
   for (const row of transactions) {
-    if (row.type !== 'expense' || isLedgerSpecial(row)) {
+    if (row.type !== 'expense' || isLedgerSpecial(row) || isBillRow(row)) {
       continue;
     }
     const date = row.transactionDate.slice(0, 10);
-    if (!date.startsWith(`${monthKey}-`)) {
+    if (date < startKey || date > endKey) {
       continue;
     }
     spendByDate[date] = round2((spendByDate[date] ?? 0) + row.amount);
   }
+  const budget = Number.isFinite(inputs.monthlyBudget) ? inputs.monthlyBudget : 0;
+  const committed =
+    inputs.committed && Number.isFinite(inputs.committed) ? inputs.committed : 0;
   return {
-    monthKey,
-    monthlyBudget: Number.isFinite(monthlyBudget) ? monthlyBudget : 0,
+    monthKey: cycleKeyOf(cycle),
+    // Bills can eat the whole budget; zero would switch the guard off, so a
+    // budget fully taken by bills keeps a token cent of day-to-day room.
+    monthlyBudget: budget > 0 ? round2(Math.max(0.01, budget - committed)) : 0,
     spendByDate,
     dataAsOfMillis,
+    cycleStartDay: payday,
   };
 }
 

@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {AppState, StyleSheet, View} from 'react-native';
+import {AppState, View} from 'react-native';
 import {
   Lightning,
   LockSimple,
@@ -17,7 +17,7 @@ import {
 } from '../../../components/ui';
 import {getStatus} from '../../../lib/autotrack/nativeUpiDetector';
 import {DetectorStatus} from '../../../lib/autotrack/types';
-import {colors, radii, spacing} from '../../../theme';
+import {colors, makeStyles, radii, spacing} from '../../../theme';
 import {PermissionsGroup} from '../../autotrack/PermissionsGroup';
 import {STEP_TITLES} from '../constants';
 import {StepLayout} from '../components/StepLayout';
@@ -40,6 +40,7 @@ const ICON_SIZE = 24;
  * account once it exists.
  */
 export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
+  const styles = useStyles();
   const copy = STEP_TITLES.autotrack;
   const [status, setStatus] = useState<DetectorStatus | null>(null);
 
@@ -69,7 +70,7 @@ export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
       <Stagger index={1}>
         <View style={styles.banner}>
           <GradientIconSquare size={40} gradient={ready ? 'primary' : 'savings'}>
-            <Lightning size={20} color={colors.text} weight="fill" />
+            <Lightning size={20} color={colors.onAccent} weight="fill" />
           </GradientIconSquare>
           <View style={styles.bannerText}>
             <AppText variant="bodyStrong">
@@ -133,7 +134,7 @@ export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -168,4 +169,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingHorizontal: spacing.xs,
   },
-});
+}));

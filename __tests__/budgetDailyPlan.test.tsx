@@ -120,11 +120,12 @@ describe('BudgetDetailsScreen daily plan', () => {
     expect(text).toContain('Daily plan');
     expect(text).toContain('Today you can spend');
     expect(text).toContain('Today you can spend₹1,000');
-    expect(text).toContain('Spent today ₹600 · ₹400 left today');
-    expect(text).toContain('This week ₹7,000 · ₹5,950 left · 5 days to go');
-    expect(text).toContain('₹31,000 a month over 4.43 weeks: ₹7,000 a week, ₹1,000 a day');
+    expect(text).toContain('Spent ₹600₹400 left today');
+    expect(text).toContain('This week₹5,950 left');
+    expect(text).toContain('₹7,000 for this week · 5 days to go');
+    expect(text).toContain('₹31,000a month₹7,000a week₹1,000a day');
     expect(text).toContain(
-      'Your monthly budget is shared across the weeks of the month. Overspending lowers the coming days; unspent money is not added to them.',
+      "Split over the 4.43 weeks of this month. Overspending lowers the coming days; unspent money isn't added to them.",
     );
     expect(text).not.toContain("Over today's limit");
     expect(planBars(tree)[0].props.gradient).toBe('primary');
@@ -138,9 +139,9 @@ describe('BudgetDetailsScreen daily plan', () => {
       }),
     );
     const text = textOf(tree);
-    expect(text).toContain("Spent today ₹2,000 · Over today's limit by ₹1,000");
+    expect(text).toContain('Spent ₹2,000₹1,000 over today');
     // The week as a whole still has room: 7,000 - 450 - 2,000.
-    expect(text).toContain('This week ₹7,000 · ₹4,550 left');
+    expect(text).toContain('This week₹4,550 left');
     expect(planBars(tree)[0].props.gradient).toBe('primary');
   });
 
@@ -151,7 +152,7 @@ describe('BudgetDetailsScreen daily plan', () => {
         transactions: [...LEDGER, expense('c', 7450, '2026-10-14')],
       }),
     );
-    expect(textOf(tree)).toContain('This week ₹7,000 · ₹900 over · 5 days to go');
+    expect(textOf(tree)).toContain('This week₹900 over₹7,000 for this week · 5 days to go');
     expect(planBars(tree)[0].props.gradient).toBe('rose');
   });
 
@@ -163,7 +164,7 @@ describe('BudgetDetailsScreen daily plan', () => {
         extraSpendByDate: {'2026-10-14': 300},
       }),
     );
-    expect(textOf(tree)).toContain('Spent today ₹300 · ₹700 left today');
+    expect(textOf(tree)).toContain('Spent ₹300₹700 left today');
   });
 
   it('is hidden when no monthly budget is set', async () => {
@@ -205,8 +206,8 @@ describe('BudgetDetailsScreen daily plan', () => {
     );
     const text = textOf(tree);
     expect(text).toContain('Today you can spend₹1,000');
-    expect(text).toContain('This week ₹6,000 · ₹5,000 left · 3 days to go');
-    expect(text).toContain('Spent today ₹0 · ₹1,000 left today');
+    expect(text).toContain('This week₹5,000 left₹6,000 for this week · 3 days to go');
+    expect(text).toContain('Spent ₹0₹1,000 left today');
   });
 
   it('splits the monthly budget into weeks, not one week of the whole month', async () => {
@@ -224,8 +225,10 @@ describe('BudgetDetailsScreen daily plan', () => {
     );
     const text = textOf(tree);
     expect(text).toContain('Today you can spend₹32');
-    expect(text).toContain('This week ₹194 · ₹194 left · 4 days to go');
-    expect(text).toContain('₹1,000 a month over 4.43 weeks: ₹226 a week, ₹32 a day');
+    expect(text).toContain('This week₹194 left₹194 for this week · 4 days to go');
+    expect(text).toContain('₹1,000a month₹226a week₹32a day');
+    // No spending: the empty state, not a "Nothing yet ₹0 100%" category row.
+    expect(text).toContain('No spending yet');
   });
 
   it('says 1 day to go on the last day of the week', async () => {

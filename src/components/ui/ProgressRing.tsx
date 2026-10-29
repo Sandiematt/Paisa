@@ -2,7 +2,7 @@ import React, {useEffect, useRef} from 'react';
 import {Animated, StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
 import Svg, {Circle, Defs, LinearGradient, Stop} from 'react-native-svg';
 
-import {GradientKey, colors, dataReveal, easing, gradients} from '../../theme';
+import {GradientKey, colors, dataReveal, easing, gradients, makeStyles} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -16,7 +16,7 @@ type ProgressRingProps = {
   progress: number;
   /** Named gradient for the arc. Default `'primary'`. */
   gradient?: GradientKey;
-  /** Track colour. Default `#FFFFFF14` (`colors.line`). */
+  /** Track colour. Default `colors.line`. */
   trackColor?: string;
   /** Rendered in the middle, e.g. a percentage and a caption. */
   children?: React.ReactNode;
@@ -51,6 +51,7 @@ export function ProgressRing({
   accessibilityLabel,
   animated = true,
 }: ProgressRingProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const clamped = Math.max(0, Math.min(1, progress));
   const still = !animated || reducedMotion;
@@ -139,10 +140,10 @@ export function ProgressRing({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   center: {
     ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

@@ -1,7 +1,6 @@
 import React, {useState} from 'react';
 import {
   StyleProp,
-  StyleSheet,
   TextInput,
   TextInputProps,
   View,
@@ -9,7 +8,14 @@ import {
 } from 'react-native';
 
 import {AppText} from '../../../components/ui';
-import {colors, layout, radii, spacing, typography} from '../../../theme';
+import {
+  colors,
+  layout,
+  makeStyles,
+  radii,
+  spacing,
+  typography,
+} from '../../../theme';
 
 type AuthFieldProps = Omit<TextInputProps, 'style'> & {
   /** Muted label above the field. Omit inside compact dialogs. */
@@ -43,6 +49,7 @@ export function AuthField({
   onBlur,
   ...rest
 }: AuthFieldProps) {
+  const styles = useStyles();
   const [focused, setFocused] = useState(false);
 
   const borderColor = invalid
@@ -86,7 +93,7 @@ export function AuthField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   label: {
     marginBottom: spacing.sm,
     marginLeft: 2,
@@ -124,4 +131,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: colors.text,
   },
-});
+}));

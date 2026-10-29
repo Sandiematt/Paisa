@@ -23,11 +23,14 @@ import {
   gradients,
   layout,
   linearGradient,
+  makeStyles,
   radii,
   shadows,
   spacing,
   spring,
+  useTheme,
 } from '../../theme';
+import type {ColorScheme} from '../../theme';
 
 export const TABS = ['home', 'activity', 'insights'] as const;
 export type TabId = (typeof TABS)[number];
@@ -49,6 +52,14 @@ const ACTIVE_PILL_WIDTH = 70;
 const ADD_SIZE = layout.addButton;
 const FAB_IMAGE = linearGradient(gradients.fab, 140, [0, 0.55, 1]);
 
+/**
+ * The active tab's pill. Opaque so the glass blur behind the bar cannot show
+ * through unevenly: a raised chip on dark, the violet `wash` on light.
+ */
+const activeFill = (scheme: ColorScheme) => ({
+  backgroundColor: scheme === 'light' ? colors.wash : colors.surfaceRaised,
+});
+
 function NavSlot({
   label,
   active,
@@ -67,7 +78,10 @@ function NavSlot({
   accessibilityLabel: string;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const reducedMotion = useReducedMotion();
+  const activeTint = scheme === 'light' ? colors.indigo : colors.text;
   const pop = useRef(new Animated.Value(1)).current;
   const wasActive = useRef(active);
 
@@ -99,11 +113,11 @@ function NavSlot({
       accessibilityState={accessibilityRole === 'tab' ? {selected: active} : undefined}
       accessibilityLabel={accessibilityLabel}
       containerStyle={styles.slot}
-      style={[styles.item, active && showFill && styles.itemActive]}>
+      style={[styles.item, active && showFill && activeFill(scheme)]}>
       <Animated.View style={glyphMotion}>{children}</Animated.View>
       <AppText
         variant="caption"
-        color={active ? colors.text : colors.muted}
+        color={active ? activeTint : colors.muted}
         numberOfLines={1}
         style={active ? styles.labelActive : styles.label}>
         {label}
@@ -118,6 +132,8 @@ export function NavBar({
   onAddPress,
   addOpen = false,
 }: NavBarProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const navVisible = useFloatingNavVisible();
@@ -214,6 +230,7 @@ export function NavBar({
               pointerEvents="none"
               style={[
                 styles.indicator,
+                activeFill(scheme),
                 {
                   left: FLOATING_NAV_PILL_PAD_V + (slotWidth - ACTIVE_PILL_WIDTH) / 2,
                   transform: [{translateX: indicatorX}],
@@ -250,7 +267,7 @@ export function NavBar({
             <Animated.View
               pointerEvents="none"
               style={{transform: [{rotate: spin}]}}>
-              <Plus color={colors.text} size={24} weight="bold" />
+              <Plus color={colors.onAccent} size={24} weight="bold" />
             </Animated.View>
           </PressableScale>
         </View>
@@ -259,7 +276,7 @@ export function NavBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   dock: {
     position: 'absolute',
     left: 0,
@@ -307,18 +324,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
 
-  // Opaque so the glass blur behind the bar cannot show through unevenly.
-  itemActive: {
-    backgroundColor: colors.surfaceRaised,
-  },
-
   indicator: {
     position: 'absolute',
     top: FLOATING_NAV_PILL_PAD_V,
     width: ACTIVE_PILL_WIDTH,
     height: FLOATING_NAV_ITEM_HEIGHT,
     borderRadius: radii.pill,
-    backgroundColor: colors.surfaceRaised,
   },
 
   label: {
@@ -345,4 +356,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

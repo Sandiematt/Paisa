@@ -1,8 +1,16 @@
 import React, {useMemo} from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
 import {AppText, Stagger, TextField, TogglePill} from '../../../components/ui';
-import {colors, radii, spacing} from '../../../theme';
+import {cycleFor} from '../../../lib/budgetCycle';
+import {
+  automaticMonthlyBudget,
+  dayToDayBudget,
+  isAutomaticBudget,
+  monthlyBudgetOf,
+  withDayToDayBudget,
+} from '../../../lib/budgetPlan';
+import {colors, makeStyles, radii, spacing} from '../../../theme';
 import {STEP_TITLES, currencyByCode} from '../constants';
 import {StepLayout} from '../components/StepLayout';
 import {OnboardingDraft} from '../types';
@@ -15,28 +23,16 @@ type BudgetStepProps = {
   ) => void;
 };
 
-/** Fractions of stated income, so the suggestions mean something. */
-const INCOME_FRACTIONS = [0.5, 0.6, 0.7];
-const FLAT_SUGGESTIONS = [20000, 40000, 60000];
+/** Without an income there is nothing to calculate from; these are starting points. */
+const FLAT_SUGGESTIONS = [5000, 10000, 20000];
 const SAVINGS_FRACTIONS = [0.1, 0.2, 0.3];
 
 export function BudgetStep({draft, onChange}: BudgetStepProps) {
+  const styles = useStyles();
   const copy = STEP_TITLES.budget;
   const currency = currencyByCode(draft.currency);
   const income = Number(draft.monthlyIncome) || 0;
-
-  const suggestions = useMemo(() => {
-    if (income > 500) {
-      const calculated = INCOME_FRACTIONS.map(fraction =>
-        Math.round((income * fraction) / 500) * 500,
-      );
-      const unique = Array.from(new Set(calculated)).filter(amt => amt > 0);
-      if (unique.length > 0) {
-        return unique;
-      }
-    }
-    return FLAT_SUGGESTIONS;
-  }, [income]);
+  const money = (amount: number) => `${currency.symbol}${amount.toLocaleString('en-IN')}`;
 
   const savingsSuggestions = useMemo(() => {
     if (income > 500) {
@@ -48,45 +44,38 @@ export function BudgetStep({draft, onChange}: BudgetStepProps) {
     return [2000, 5000, 10000];
   }, [income]);
 
-  const budget = Number(draft.monthlyBudget) || 0;
   const savingsGoal = Number(draft.monthlySavingsGoal) || 0;
-  const leftover = income > 0 && budget > 0 ? income - budget : 0;
-  const perDay = budget > 0 ? Math.round(budget / 30) : 0;
+  const committed = (draft.bills ?? []).reduce(
+    (sum, bill) => sum + (Number(bill.amount) || 0),
+    0,
+  );
+  const automatic = isAutomaticBudget(draft);
+  // The field shows the day-to-day budget: what is left once bills are paid.
+  const budget = monthlyBudgetOf(draft);
+  const dayToDay = dayToDayBudget(budget, committed);
+  const calculated = dayToDayBudget(automaticMonthlyBudget(draft), committed);
+  const fieldValue = automatic || draft.monthlyBudget !== '' ? String(dayToDay) : '';
+  const cycleDays = cycleFor(new Date(), draft.payday).length;
+  const perDay = Math.round(dayToDay / cycleDays);
+  const leftForSavings = income > 0 ? income - budget : 0;
+
+  const setBudget = (typed: string) => {
+    const next = withDayToDayBudget(draft, typed, committed);
+    onChange('budgetCustom', next.budgetCustom);
+    onChange('monthlyBudget', next.monthlyBudget);
+  };
+
+  const helper = automatic
+    ? calculated > 0
+      ? 'Calculated automatically from your income, bills and savings goal. Change it if it looks wrong.'
+      : `Bills and savings take all of your ${money(income)} income. Lower the savings goal, or set a budget yourself.`
+    : income > 0
+      ? `You set this yourself. The calculated budget is ${money(calculated)}.`
+      : 'What you can spend each month after bills. Add your income to have it calculated.';
 
   return (
     <StepLayout title={copy.title} subtitle={copy.subtitle}>
       <Stagger index={1}>
-        <TextField
-          label="Monthly spending budget"
-          placeholder="0"
-          prefix={currency.symbol}
-          value={draft.monthlyBudget}
-          onChangeText={value =>
-            onChange('monthlyBudget', value.replace(/[^0-9]/g, ''))
-          }
-          keyboardType="number-pad"
-          returnKeyType="done"
-          helper="The most you plan to spend this month."
-        />
-      </Stagger>
-
-      <Stagger index={2} style={styles.spaced}>
-        <AppText variant="label" color={colors.muted}>
-          {income > 500 ? 'Based on your income' : 'Common starting points'}
-        </AppText>
-        <View style={styles.pills}>
-          {suggestions.map((amount, index) => (
-            <TogglePill
-              key={`suggestion-${amount}-${index}`}
-              label={`${currency.symbol}${amount.toLocaleString('en-IN')}`}
-              selected={draft.monthlyBudget === String(amount)}
-              onPress={() => onChange('monthlyBudget', String(amount))}
-            />
-          ))}
-        </View>
-      </Stagger>
-
-      <Stagger index={3} style={styles.spaced}>
         <TextField
           label="Monthly savings goal"
           placeholder="0"
@@ -97,16 +86,16 @@ export function BudgetStep({draft, onChange}: BudgetStepProps) {
           }
           keyboardType="number-pad"
           returnKeyType="done"
-          helper="How much you want left after spending."
+          helper="Set aside from your income first. Income above your plan is saved too."
         />
       </Stagger>
 
-      <Stagger index={4} style={styles.spaced}>
+      <Stagger index={2} style={styles.spaced}>
         <View style={styles.pills}>
           {savingsSuggestions.map((amount, index) => (
             <TogglePill
               key={`save-${amount}-${index}`}
-              label={`${currency.symbol}${amount.toLocaleString('en-IN')}`}
+              label={money(amount)}
               selected={draft.monthlySavingsGoal === String(amount)}
               onPress={() => onChange('monthlySavingsGoal', String(amount))}
             />
@@ -114,27 +103,78 @@ export function BudgetStep({draft, onChange}: BudgetStepProps) {
         </View>
       </Stagger>
 
-      {perDay > 0 ? (
+      <Stagger index={3} style={styles.spaced}>
+        <TextField
+          label="Monthly budget"
+          placeholder="0"
+          prefix={currency.symbol}
+          value={fieldValue}
+          onChangeText={value => setBudget(value.replace(/[^0-9]/g, ''))}
+          keyboardType="number-pad"
+          returnKeyType="done"
+          helper={helper}
+        />
+      </Stagger>
+
+      {income > 0 && !automatic ? (
+        <Stagger index={4} style={styles.spaced}>
+          <View style={styles.pills}>
+            <TogglePill
+              label={`Use calculated ${money(calculated)}`}
+              selected={false}
+              onPress={() => setBudget(String(calculated))}
+            />
+          </View>
+        </Stagger>
+      ) : income <= 0 ? (
+        <Stagger index={4} style={styles.spaced}>
+          <View style={styles.pills}>
+            {FLAT_SUGGESTIONS.map((amount, index) => (
+              <TogglePill
+                key={`suggestion-${amount}-${index}`}
+                label={money(amount)}
+                selected={fieldValue === String(amount)}
+                onPress={() => setBudget(String(amount))}
+              />
+            ))}
+          </View>
+        </Stagger>
+      ) : null}
+
+      {dayToDay > 0 ? (
         <Stagger index={5} style={styles.spaced}>
           <View style={styles.readout}>
+            {income > 0 ? (
+              <View style={styles.committed} testID="budget-breakdown">
+                <BreakdownRow label="Income" value={money(income)} />
+                {committed > 0 ? (
+                  <BreakdownRow label="Monthly bills" value={`−${money(committed)}`} negative />
+                ) : null}
+                <BreakdownRow
+                  label={automatic ? 'Savings goal' : 'Left for savings'}
+                  value={`−${money(Math.max(0, automatic ? savingsGoal : leftForSavings))}`}
+                  negative
+                />
+                <View style={[styles.committedRow, styles.committedTotal]}>
+                  <AppText variant="body" color={colors.muted}>
+                    Monthly budget
+                  </AppText>
+                  <AppText variant="bodyStrong">{money(dayToDay)}</AppText>
+                </View>
+              </View>
+            ) : null}
             <AppText variant="caption" color={colors.muted}>
               That works out to
             </AppText>
             <AppText variant="numericHero" style={styles.readoutValue}>
-              {currency.symbol}
-              {perDay.toLocaleString('en-IN')}
+              {money(perDay)}
             </AppText>
             <AppText variant="body" color={colors.muted}>
-              a day across 30 days.
+              {`a day across ${cycleDays} days${draft.payday ? ', payday to payday' : ''}.`}
             </AppText>
-            {leftover !== 0 ? (
-              <AppText
-                variant="body"
-                color={leftover < savingsGoal ? colors.roseLight : colors.muted}
-                style={styles.leftover}>
-                {leftover >= savingsGoal
-                  ? `Income minus budget leaves ${currency.symbol}${leftover.toLocaleString('en-IN')} for savings.`
-                  : `Income minus budget leaves ${currency.symbol}${leftover.toLocaleString('en-IN')}, below the savings goal.`}
+            {!automatic && income > 0 && leftForSavings < savingsGoal ? (
+              <AppText variant="body" color={colors.roseLight} style={styles.leftover}>
+                {`This budget leaves ${money(Math.max(0, leftForSavings))} for savings, below the ${money(savingsGoal)} goal.`}
               </AppText>
             ) : null}
           </View>
@@ -144,7 +184,29 @@ export function BudgetStep({draft, onChange}: BudgetStepProps) {
   );
 }
 
-const styles = StyleSheet.create({
+function BreakdownRow({
+  label,
+  value,
+  negative = false,
+}: {
+  label: string;
+  value: string;
+  negative?: boolean;
+}) {
+  const styles = useStyles();
+  return (
+    <View style={styles.committedRow}>
+      <AppText variant="body" color={colors.muted}>
+        {label}
+      </AppText>
+      <AppText variant="bodyStrong" color={negative ? colors.roseLight : undefined}>
+        {value}
+      </AppText>
+    </View>
+  );
+}
+
+const useStyles = makeStyles(() => ({
   spaced: {
     marginTop: spacing.xxl,
   },
@@ -170,4 +232,21 @@ const styles = StyleSheet.create({
   leftover: {
     marginTop: spacing.md,
   },
-});
+  committed: {
+    gap: spacing.sm,
+    paddingBottom: spacing.lg,
+    marginBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  committedRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  committedTotal: {
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
+  },
+}));

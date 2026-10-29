@@ -25,11 +25,21 @@ import {useHomeDashboard} from '../home/useHomeDashboard';
 import {FloatingNavScrollProvider} from '../NavBar/FloatingNavScroll';
 import {NavBar, TabId} from '../NavBar/NavBar';
 import {TabStage} from '../NavBar/TabStage';
-import {currencyByCode, MIN_CATEGORIES} from '../onboarding/constants';
+import {currencyByCode} from '../onboarding/constants';
 import {OnboardingDraft} from '../onboarding/types';
 import {formatMoney} from '../../lib/formatMoney';
+import {setActivePayday} from '../../lib/budgetCycle';
+import {
+  automaticMonthlyBudget,
+  dayToDayBudget,
+  isAutomaticBudget,
+  monthlyBudgetOf,
+  withDayToDayBudget,
+} from '../../lib/budgetPlan';
 import {SaveProfileOptions} from '../../lib/profileStore';
-import {TransactionRow} from '../../lib/transactionsStore';
+import {pendingBillsFromUser} from '../../lib/scheduledSetup';
+import {TransactionRow, localDateISO} from '../../lib/transactionsStore';
+import {firstLedgerDay} from '../home/homeReport';
 import {useAutoTrack} from '../autotrack/AutoTrackProvider';
 import {AutoTrackingScreen} from '../autotrack/AutoTrackingScreen';
 import {unsyncedSpendByDate} from '../autotrack/dailyAllowance';
@@ -79,16 +89,24 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
   }, [draft]);
 
   const currency = currencyByCode(profileDraft.currency);
+  const payday = profileDraft.payday ?? null;
+  // Set during render, before anything below reads it: the dashboard helpers
+  // that are not handed the payday fall back to this one.
+  setActivePayday(payday);
+  const pendingBills = useMemo(() => pendingBillsFromUser(user), [user]);
   const moneyPlan = useMemo(
     () => ({
       monthlyIncome: Number(profileDraft.monthlyIncome) || 0,
-      monthlyBudget: Number(profileDraft.monthlyBudget) || 0,
+      // Income less savings unless the user set their own; bills come off it later.
+      monthlyBudget: monthlyBudgetOf(profileDraft),
       monthlySavingsGoal: Number(profileDraft.monthlySavingsGoal) || 0,
+      payday,
+      pendingBills,
     }),
     [
-      profileDraft.monthlyBudget,
-      profileDraft.monthlyIncome,
-      profileDraft.monthlySavingsGoal,
+      payday,
+      pendingBills,
+      profileDraft,
     ],
   );
   const {
@@ -110,6 +128,15 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     Number(profileDraft.startingBalance) || 0,
     moneyPlan,
   );
+  // The budget is edited as what is left after this month's bills.
+  const calculatedDayToDay = dayToDayBudget(
+    automaticMonthlyBudget(profileDraft),
+    report.monthlyCommitted,
+  );
+  const budgetText =
+    isAutomaticBudget(profileDraft) || profileDraft.monthlyBudget !== ''
+      ? String(dayToDayBudget(moneyPlan.monthlyBudget, report.monthlyCommitted))
+      : '';
 
   const {setSnapshot, pendingTarget, consumeTarget} = useNotifications();
   const {
@@ -123,6 +150,15 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     () => unsyncedSpendByDate(detectedPayments, ledgerAsOf),
     [detectedPayments, ledgerAsOf],
   );
+  // The day tracking began: account creation, or an earlier backdated entry.
+  // Insights treats periods before it as "no data" rather than zero spend.
+  const trackingSince = useMemo(() => {
+    const created = user?.created_at ? new Date(user.created_at) : null;
+    const first = firstLedgerDay(transactions);
+    const valid = created && !Number.isNaN(created.getTime()) ? created : null;
+    const since = valid && first ? (first < valid ? first : valid) : (valid ?? first);
+    return since ? localDateISO(since) : null;
+  }, [transactions, user?.created_at]);
   const handoffTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const historyClosedAt = useRef(0);
 
@@ -153,9 +189,19 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
     setBudgetInputs({
       transactions,
       monthlyBudget: moneyPlan.monthlyBudget,
+      payday,
+      committed: report.monthlyCommitted,
       dataAsOfMillis: ledgerAsOf,
     });
-  }, [ledgerAsOf, moneyPlan.monthlyBudget, setBudgetInputs, status, transactions]);
+  }, [
+    ledgerAsOf,
+    moneyPlan.monthlyBudget,
+    payday,
+    report.monthlyCommitted,
+    setBudgetInputs,
+    status,
+    transactions,
+  ]);
 
   // Payments auto-tracking just saved are new rows to show.
   useEffect(() => {
@@ -334,7 +380,9 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
         name={profileDraft.name}
         avatarUrl={profileDraft.avatarUrl}
         currencySymbol={currency.symbol}
-        profileProgress={profileCompleteness(profileDraft, MIN_CATEGORIES).ratio}
+        profileProgress={
+          profileCompleteness({...profileDraft, monthlyBudget: budgetText}).ratio
+        }
         onBudgetPress={() => setBudgetOpen(true)}
         onSavingsPress={() => setSavingsOpen(true)}
         onEditBudgetPress={() => setBudgetEditOpen(true)}
@@ -383,6 +431,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       <InsightsScreen
         currencySymbol={currency.symbol}
         monthlyBudget={moneyPlan.monthlyBudget}
+        trackingSince={trackingSince}
       />
     );
   }
@@ -460,21 +509,40 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
             transactions={transactions}
             categories={categories}
             monthlyBudget={moneyPlan.monthlyBudget}
+            payday={payday}
+            bills={report.bills}
+            committed={report.monthlyCommitted}
             extraSpendByDate={unsyncedSpend}
           />
 
           <MoneySheet
             visible={budgetEditOpen}
             title={moneyPlan.monthlyBudget > 0 ? 'Edit budget' : 'Add budget'}
-            label="Monthly spending budget"
+            label="Monthly budget"
             symbol={currency.symbol}
-            value={profileDraft.monthlyBudget}
-            lead="The most you plan to spend each month. Week and day limits follow from it."
+            value={budgetText}
+            lead={
+              Number(profileDraft.monthlyIncome) > 0
+                ? 'Calculated automatically: income, less monthly bills and your savings goal. Change it if it looks wrong. Week and day limits follow from it.'
+                : 'What you can spend each month after bills. Week and day limits follow from it.'
+            }
+            suggestion={
+              Number(profileDraft.monthlyIncome) > 0
+                ? {
+                    label: `Use calculated ${formatMoney(calculatedDayToDay, currency.symbol, {decimals: 0})}`,
+                    value: String(calculatedDayToDay),
+                  }
+                : undefined
+            }
             onDone={value => {
-              if (value === profileDraft.monthlyBudget) {
+              if (value === budgetText) {
                 return;
               }
-              const updated = {...profileDraft, monthlyBudget: value};
+              const updated = withDayToDayBudget(
+                profileDraft,
+                value,
+                report.monthlyCommitted,
+              );
               setProfileDraft(updated);
               onProfileSave(updated, {keepCurrency: true});
               setRefreshNonce(n => n + 1);
@@ -492,8 +560,11 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
             periodSavingsTarget={report.periodSavingsTarget ?? 0}
             actualSavings={report.actualSavings ?? 0}
             savingsVsTarget={report.savingsVsTarget ?? 0}
+            savingsTargetToDate={report.savingsTargetToDate ?? 0}
             savingsState={report.savingsState ?? {kind: 'no-income'}}
+            fromPlan={report.savingsFromPlan}
             range={report.range ?? 'month'}
+            lastMonth={report.lastMonthSavings}
             transactions={transactions}
             categories={categories}
           />
@@ -519,6 +590,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
               setProfileOpen(false);
               openAfterHandoff(() => setAutoTrackOpen(true));
             }}
+            monthlyBills={report.monthlyCommitted}
             onReplayTutorial={() => {
               setProfileOpen(false);
               openAfterHandoff(() => setTutorialRestart(value => value + 1));

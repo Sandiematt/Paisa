@@ -49,6 +49,62 @@ export function elapsedDays(period: InsightsPeriod, referenceDate: string): numb
   return days;
 }
 
+function shiftIso(iso: string, days: number): string {
+  const {year, month, day} = parseIsoDate(iso);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+/** First day of the current window, `YYYY-MM-DD`. */
+export function windowStart(period: InsightsPeriod, referenceDate: string): string {
+  if (period === 'week') return shiftIso(referenceDate, -6);
+  const {year, month} = parseIsoDate(referenceDate);
+  return period === 'month' ? `${year}-${String(month).padStart(2, '0')}-01` : `${year}-01-01`;
+}
+
+/** Last day of the previous window that is compared against, `YYYY-MM-DD`. */
+export function previousWindowEnd(period: InsightsPeriod, referenceDate: string): string {
+  if (period === 'week') return shiftIso(referenceDate, -7);
+  const {year, month, day} = parseIsoDate(referenceDate);
+  if (period === 'year') {
+    return `${year - 1}-${String(month).padStart(2, '0')}-${String(Math.min(day, daysInMonth(year - 1, month))).padStart(2, '0')}`;
+  }
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevDay = Math.min(day, daysInMonth(prevYear, prevMonth));
+  return `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(prevDay).padStart(2, '0')}`;
+}
+
+/** Whole days from `from` through `to`, inclusive. */
+function daysThrough(from: string, to: string): number {
+  const a = parseIsoDate(from);
+  const b = parseIsoDate(to);
+  return Math.round((Date.UTC(b.year, b.month - 1, b.day) - Date.UTC(a.year, a.month - 1, a.day)) / 86_400_000) + 1;
+}
+
+/**
+ * Days of the current window the user was tracking: from the window start,
+ * or `trackingSince` when that is later, through `referenceDate`.
+ */
+export function trackedDays(period: InsightsPeriod, referenceDate: string, trackingSince: string | null): number {
+  const start = windowStart(period, referenceDate);
+  const from = trackingSince && trackingSince > start ? trackingSince : start;
+  return Math.max(1, daysThrough(from, referenceDate));
+}
+
+/**
+ * Drops the leading buckets that end before tracking started, so the chart
+ * does not draw empty weeks or months from before the app was set up. The
+ * bucket tracking started in is kept.
+ */
+export function bucketsSince(buckets: SpendBucket[], trackingSince: string | null): SpendBucket[] {
+  if (!trackingSince) return buckets;
+  let first = 0;
+  buckets.forEach((bucket, index) => {
+    if (bucket.date <= trackingSince) first = index;
+  });
+  return first > 0 ? buckets.slice(first) : buckets;
+}
+
 export function averagePerDay(total: number, period: InsightsPeriod, referenceDate: string): number {
   const days = Math.max(1, elapsedDays(period, referenceDate));
   return Math.round((total / days) * 100) / 100;
@@ -147,11 +203,14 @@ export type DeltaDescriptor = {
  * so a decrease is mint/down and an increase is roseLight/up.
  */
 export function describeDelta(
-  input: {changeKind: ChangeKind; deltaAmount: number; changePct: number | null},
+  input: {changeKind: ChangeKind; deltaAmount: number; changePct: number | null; hasPrevious?: boolean},
   target: string,
   money: (value: number) => string,
 ): DeltaDescriptor {
   const {changeKind, deltaAmount, changePct} = input;
+  if (input.hasPrevious === false) {
+    return {tone: 'neutral', direction: 'flat', text: `Nothing to compare yet, you started tracking after ${target}`};
+  }
   if (changeKind === 'no-change') {
     return {tone: 'neutral', direction: 'flat', text: `About the same as ${target}`};
   }
@@ -302,7 +361,7 @@ export function buildShareText(
   data: Pick<
     InsightsData,
     'period' | 'referenceDate' | 'currentTotal' | 'changeKind' | 'deltaAmount' | 'changePct' | 'categories'
-  >,
+  > & {hasPrevious?: boolean},
   money: (value: number) => string,
 ): string {
   const labels = periodLabels(data.period, data.referenceDate);

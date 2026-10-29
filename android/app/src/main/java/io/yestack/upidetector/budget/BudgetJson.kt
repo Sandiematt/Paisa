@@ -26,7 +26,13 @@ object BudgetJson {
                 }
             }
         }
-        BudgetSnapshot(monthKey, budget, spend, o.optLong("dataAsOfMillis", 0L).coerceAtLeast(0L))
+        BudgetSnapshot(
+            monthKey,
+            budget,
+            spend,
+            o.optLong("dataAsOfMillis", 0L).coerceAtLeast(0L),
+            o.optInt("cycleStartDay", 1).takeIf { it in 1..31 } ?: 1,
+        )
     } catch (e: Exception) {
         null
     }
@@ -39,6 +45,7 @@ object BudgetJson {
             .put("monthlyBudget", s.monthlyBudget.toDouble())
             .put("spendByDate", spend)
             .put("dataAsOfMillis", s.dataAsOfMillis)
+            .put("cycleStartDay", s.cycleStartDay)
             .toString()
     }
 

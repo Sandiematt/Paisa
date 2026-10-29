@@ -1,5 +1,5 @@
 import React from 'react';
-import {Modal, ScrollView, StyleSheet, View} from 'react-native';
+import {Modal, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {
@@ -10,10 +10,34 @@ import {
   GradientView,
   Screen,
 } from '../../components/ui';
-import {colors, layout, radii, spacing, withAlpha} from '../../theme';
+import {
+  ColorScheme,
+  colors,
+  layout,
+  makeStyles,
+  radii,
+  spacing,
+  useTheme,
+  withAlpha,
+} from '../../theme';
 
-const HERO_GRADIENT = [colors.surfaceRaised, colors.surface, withAlpha(colors.glow, 0.77)];
-const HERO_POSITIONS = [0, 0.62, 1];
+/**
+ * Spotlight card fill (home balance card, details heroes), read at render.
+ * Dark: raised surface into a violet glow. Light: surface → surface (55%) →
+ * wash at 160°.
+ */
+export function spotlightGradient(scheme: ColorScheme): {
+  stops: string[];
+  positions: number[];
+} {
+  if (scheme === 'light') {
+    return {stops: [colors.surface, colors.surface, colors.wash], positions: [0, 0.55, 1]};
+  }
+  return {
+    stops: [colors.surfaceRaised, colors.surface, withAlpha(colors.glow, 0.77)],
+    positions: [0, 0.62, 1],
+  };
+}
 
 type DetailsFrameProps = {
   visible: boolean;
@@ -24,6 +48,7 @@ type DetailsFrameProps = {
 
 /** Full-screen DX details page: glow, back button, centred title, scroll. */
 export function DetailsFrame({visible, title, onClose, children}: DetailsFrameProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   return (
     <Modal
@@ -62,12 +87,15 @@ type HeroCardProps = {
 
 /** Spotlight-style hero: caption, big tabular amount, meter underneath. */
 export function HeroCard({label, amount, amountColor = colors.text, children}: HeroCardProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
+  const fill = spotlightGradient(scheme);
   return (
     <View style={styles.hero}>
       <GradientView
-        gradient={HERO_GRADIENT}
+        gradient={fill.stops}
         angle={160}
-        positions={HERO_POSITIONS}
+        positions={fill.positions}
         style={styles.heroBody}>
         <AppText variant="label" color={colors.muted}>
           {label}
@@ -95,6 +123,7 @@ type StatCardProps = {
 };
 
 export function StatCard({label, value, dotColor, valueColor = colors.text}: StatCardProps) {
+  const styles = useStyles();
   return (
     <Card style={styles.stat} padding={16}>
       <View style={[styles.statDot, {backgroundColor: dotColor}]} />
@@ -115,10 +144,12 @@ export function StatCard({label, value, dotColor, valueColor = colors.text}: Sta
 }
 
 export function StatRow({children}: {children: React.ReactNode}) {
+  const styles = useStyles();
   return <View style={styles.statRow}>{children}</View>;
 }
 
-export const detailsStyles = StyleSheet.create({
+/** Shared details-page styles; call as `const detailsStyles = useDetailsStyles();`. */
+export const useDetailsStyles = makeStyles(() => ({
   gap: {
     marginTop: spacing.lg,
   },
@@ -197,9 +228,9 @@ export const detailsStyles = StyleSheet.create({
     gap: spacing.md,
     padding: spacing.xxl,
   },
-});
+}));
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -254,4 +285,4 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 28,
   },
-});
+}));

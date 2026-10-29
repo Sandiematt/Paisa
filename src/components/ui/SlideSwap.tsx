@@ -1,7 +1,7 @@
 import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
-import {Animated, StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {Animated, StyleProp, View, ViewStyle} from 'react-native';
 
-import {colors, duration, easing, travel} from '../../theme';
+import {colors, duration, easing, makeStyles, travel} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {SwapInFlightContext} from './SwapContext';
 
@@ -44,6 +44,7 @@ export function SlideSwap({
   fill = true,
   style,
 }: SlideSwapProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const layers = useRef(new Map<string, Layer>()).current;
   const running = useRef<Animated.CompositeAnimation | null>(null);
@@ -168,7 +169,7 @@ export function SlideSwap({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   stage: {
     backgroundColor: colors.canvas,
     overflow: 'hidden',
@@ -191,4 +192,4 @@ const styles = StyleSheet.create({
     right: 0,
     left: 0,
   },
-});
+}));

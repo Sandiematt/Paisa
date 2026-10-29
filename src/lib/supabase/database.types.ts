@@ -150,6 +150,10 @@ export type Database = {
         Args: {p_function: string};
         Returns: boolean;
       };
+      email_registered: {
+        Args: {p_email: string};
+        Returns: boolean;
+      };
     };
     Enums: {
       money_flow: MoneyFlow;

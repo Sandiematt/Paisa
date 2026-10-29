@@ -1,9 +1,8 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
 
-import {AppText, Stagger, TextField, TogglePill} from '../../../components/ui';
-import {colors, spacing} from '../../../theme';
-import {CURRENCIES, STEP_TITLES, currencyByCode} from '../constants';
+import {Stagger, TextField} from '../../../components/ui';
+import {makeStyles, spacing} from '../../../theme';
+import {STEP_TITLES, currencyByCode} from '../constants';
 import {StepLayout} from '../components/StepLayout';
 import {OnboardingDraft} from '../types';
 
@@ -16,28 +15,13 @@ type CurrencyIncomeStepProps = {
 };
 
 export function CurrencyIncomeStep({draft, onChange}: CurrencyIncomeStepProps) {
+  const styles = useStyles();
   const copy = STEP_TITLES.money;
   const currency = currencyByCode(draft.currency);
 
   return (
     <StepLayout title={copy.title} subtitle={copy.subtitle}>
       <Stagger index={1}>
-        <AppText variant="label" color={colors.muted}>
-          Currency
-        </AppText>
-        <View style={styles.pills}>
-          {CURRENCIES.map(item => (
-            <TogglePill
-              key={item.code}
-              label={`${item.symbol}  ${item.code}`}
-              selected={draft.currency === item.code}
-              onPress={() => onChange('currency', item.code)}
-            />
-          ))}
-        </View>
-      </Stagger>
-
-      <Stagger index={2} style={styles.spaced}>
         <TextField
           label="Starting balance"
           placeholder="0"
@@ -52,7 +36,7 @@ export function CurrencyIncomeStep({draft, onChange}: CurrencyIncomeStepProps) {
         />
       </Stagger>
 
-      <Stagger index={3} style={styles.spaced}>
+      <Stagger index={2} style={styles.spaced}>
         <TextField
           label="Monthly income"
           placeholder="0"
@@ -70,14 +54,8 @@ export function CurrencyIncomeStep({draft, onChange}: CurrencyIncomeStepProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  pills: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
+const useStyles = makeStyles(() => ({
   spaced: {
     marginTop: spacing.xxl,
   },
-});
+}));

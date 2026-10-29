@@ -1,7 +1,7 @@
 import React from 'react';
-import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {StyleProp, View, ViewStyle} from 'react-native';
 
-import {colors, layout, radii, spacing} from '../../theme';
+import {colors, layout, makeStyles, radii, spacing} from '../../theme';
 import {AppText} from './AppText';
 import {PressableScale} from './PressableScale';
 
@@ -21,6 +21,7 @@ export function SecondaryButton({
   style,
   accessibilityHint,
 }: SecondaryButtonProps) {
+  const styles = useStyles();
   return (
     <PressableScale
       onPress={onPress}
@@ -39,7 +40,7 @@ export function SecondaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   surface: {
     height: layout.controlHeight,
     borderRadius: radii.pill,
@@ -57,4 +58,4 @@ const styles = StyleSheet.create({
   leading: {
     marginRight: spacing.md,
   },
-});
+}));

@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {Animated, LayoutChangeEvent, StyleSheet, View} from 'react-native';
+import {Animated, LayoutChangeEvent, View} from 'react-native';
 
-import {GradientKey, colors, duration, easing, linearGradient, radii} from '../../theme';
+import {GradientKey, colors, duration, easing, linearGradient, makeStyles, radii} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 
 type ProgressBarProps = {
@@ -29,6 +29,7 @@ export function ProgressBar({
   gradient,
   height = 6,
 }: ProgressBarProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const [trackWidth, setTrackWidth] = useState(0);
   const clamped = Math.max(0, Math.min(1, progress));
@@ -74,10 +75,10 @@ export function ProgressBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   track: {
     backgroundColor: colors.line,
     overflow: 'hidden',
     borderRadius: radii.pill,
   },
-});
+}));

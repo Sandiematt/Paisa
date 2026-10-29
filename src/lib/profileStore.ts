@@ -3,6 +3,12 @@ import {User} from '@supabase/supabase-js';
 
 import {DEFAULT_CATEGORY_IDS} from '../features/onboarding/constants';
 import {GoalId, OnboardingDraft} from '../features/onboarding/types';
+import {isAutomaticBudget, monthlyBudgetOf} from './budgetPlan';
+import {
+  SETUP_VERSION,
+  scheduleFromDraft,
+  scheduledMetadata,
+} from './scheduledSetup';
 import {supabase} from './supabase/client';
 import {
   applyWalletAdjustment,
@@ -31,6 +37,12 @@ type ProfileRow = {
 function asGoal(value: unknown): GoalId | null {
   return typeof value === 'string' && GOALS.includes(value as GoalId)
     ? (value as GoalId)
+    : null;
+}
+
+function asPayday(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 31
+    ? value
     : null;
 }
 
@@ -88,7 +100,10 @@ function draftToRow(userId: string, draft: OnboardingDraft) {
     currency: draft.currency,
     starting_balance: textToMoney(draft.startingBalance),
     monthly_income: textToMoney(draft.monthlyIncome),
-    monthly_budget: textToMoney(draft.monthlyBudget),
+    // The budget in effect, so a calculated one is stored as it stands.
+    monthly_budget: isAutomaticBudget(draft)
+      ? monthlyBudgetOf(draft)
+      : textToMoney(draft.monthlyBudget),
     monthly_savings_goal: textToMoney(draft.monthlySavingsGoal),
     goal: draft.goal,
     category_ids: draft.categoryIds,
@@ -118,6 +133,10 @@ export function draftFromUser(
       stored?.monthlySavingsGoal ?? asString(meta.monthlySavingsGoal),
     goal: stored?.goal ?? asGoal(meta.goal),
     categoryIds: stored?.categoryIds ?? asCategories(meta.categoryIds),
+    // The profiles table has no payday column; it lives on the auth user.
+    payday: stored?.payday ?? asPayday(meta.payday),
+    // Same for whether the budget is the user's own: without it, it is calculated.
+    budgetCustom: stored?.budgetCustom ?? meta.budgetCustom === true,
     avatarUrl:
       stored?.avatarUrl ||
       asString(meta.avatar_url) ||
@@ -138,6 +157,11 @@ export function profilePayload(draft: OnboardingDraft) {
     goal: draft.goal,
     categoryIds: draft.categoryIds,
     avatarUrl: draft.avatarUrl ?? null,
+    payday: draft.payday ?? null,
+    budgetCustom: draft.budgetCustom ?? false,
+    // A new account goes through every current step, so it is never caught up later.
+    setupVersion: SETUP_VERSION,
+    ...scheduledMetadata(scheduleFromDraft(draft)),
   };
 }
 
@@ -172,8 +196,16 @@ export async function saveProfile(
   draft: OnboardingDraft,
   options?: SaveProfileOptions,
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const {password: _password, ...rest} = draft;
+  // Secrets typed during onboarding never reach the cache or the server.
+  const {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    password: _password,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    confirmPassword: _confirm,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    appLockPin: _pin,
+    ...rest
+  } = draft;
   await AsyncStorage.setItem(cacheKey(userId), JSON.stringify(rest));
 
   const row: Omit<ReturnType<typeof draftToRow>, 'currency'> & {
@@ -188,6 +220,7 @@ export async function saveProfile(
   }
 
   await trySeedOpeningBalance(rest.startingBalance);
+  await trySaveAccountFields(rest.payday, rest.budgetCustom);
 
   const target = options?.targetWalletBalance;
   if (target === null || target === undefined || !Number.isFinite(target)) {
@@ -196,6 +229,27 @@ export async function saveProfile(
 
   const rows = await loadTransactions();
   await applyWalletAdjustment(target, walletBalanceFrom(rows));
+}
+
+async function trySaveAccountFields(
+  payday: number | null | undefined,
+  budgetCustom: boolean | undefined,
+) {
+  const data: Record<string, unknown> = {};
+  if (payday !== undefined) {
+    data.payday = payday ?? null;
+  }
+  if (budgetCustom !== undefined) {
+    data.budgetCustom = budgetCustom;
+  }
+  if (Object.keys(data).length === 0) {
+    return;
+  }
+  try {
+    await supabase.auth.updateUser({data});
+  } catch {
+    // The cached draft still holds it; the next save retries.
+  }
 }
 
 async function trySeedOpeningBalance(startingBalance: string) {

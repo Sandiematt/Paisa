@@ -78,6 +78,10 @@ export type AutoTrackValue = {
   setBudgetInputs: (inputs: {
     transactions: TransactionRow[];
     monthlyBudget: number;
+    /** Payday the budget month starts on; null keeps calendar months. */
+    payday?: number | null;
+    /** Monthly bills due this budget month, taken off before day-to-day spending. */
+    committed?: number;
     /** When the ledger fetch behind `transactions` started; 0 if unknown. */
     dataAsOfMillis?: number;
   }) => void;
@@ -356,11 +360,17 @@ export function AutoTrackProvider({children}: {children: React.ReactNode}) {
     (inputs: {
       transactions: TransactionRow[];
       monthlyBudget: number;
+      payday?: number | null;
+      committed?: number;
       dataAsOfMillis?: number;
     }) => {
       const next = buildBudgetSnapshot(
         inputs.transactions,
-        inputs.monthlyBudget,
+        {
+          monthlyBudget: inputs.monthlyBudget,
+          payday: inputs.payday,
+          committed: inputs.committed,
+        },
         new Date(),
         inputs.dataAsOfMillis ?? 0,
       );

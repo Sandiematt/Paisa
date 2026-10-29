@@ -3,6 +3,7 @@ import {RouteName} from './routes';
 export const LOADING_KEY = 'loading';
 export const SETUP_KEY = 'setup';
 export const HOME_KEY = 'home';
+export const UPGRADE_KEY = 'upgrade';
 
 /**
  * Which screen is on stage. While a fresh sign-in loads its profile, the
@@ -16,6 +17,8 @@ export function swapKeyFor(state: {
   profileReady: boolean;
   hasDraft: boolean;
   needsSetup: boolean;
+  /** An account from before the latest setup steps, not caught up yet. */
+  needsUpgrade?: boolean;
   route: RouteName;
 }): string {
   const loading = !state.ready || (state.signedIn && !state.profileReady);
@@ -23,7 +26,10 @@ export function swapKeyFor(state: {
     return state.route === 'splash' ? LOADING_KEY : state.route;
   }
   if (state.signedIn && state.hasDraft) {
-    return state.needsSetup ? SETUP_KEY : HOME_KEY;
+    if (state.needsSetup) {
+      return SETUP_KEY;
+    }
+    return state.needsUpgrade ? UPGRADE_KEY : HOME_KEY;
   }
   return state.route;
 }

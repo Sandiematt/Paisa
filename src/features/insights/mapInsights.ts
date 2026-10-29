@@ -1,5 +1,5 @@
 import type {InsightDirection, InsightsResponse} from '../../lib/supabase/insights';
-import {averagePerDay, topWeekdayFromBuckets} from './insightsMath';
+import {bucketsSince, previousWindowEnd, topWeekdayFromBuckets, trackedDays} from './insightsMath';
 import type {AiHighlight, CategoryMovement, CategorySpend, InsightsData} from './insightsTypes';
 
 function highlightTone(direction: InsightDirection): 'positive' | 'warning' {
@@ -49,11 +49,23 @@ function buildTopWeekday(stats: Stats): string | null {
 /**
  * Converts the generate-insights Edge Function response into the screen's
  * display shape. `fallbackBudget` is the profile budget, used only when the
- * backend did not report one.
+ * backend did not report one. `trackingSince` (`YYYY-MM-DD`, the day the
+ * account was created) hides the comparison, chart buckets and per-day
+ * average days from before the user started tracking.
  */
-export function buildInsightsDataFromResponse(response: InsightsResponse, fallbackBudget: number | null = null): InsightsData {
+export function buildInsightsDataFromResponse(
+  response: InsightsResponse,
+  fallbackBudget: number | null = null,
+  trackingSince: string | null = null,
+): InsightsData {
   const {stats} = response;
   const {periodComparison} = stats;
+  const hasPrevious =
+    !trackingSince ||
+    trackingSince <= previousWindowEnd(stats.period, stats.referenceDate) ||
+    periodComparison.previousTotal > 0;
+  const startedInWindow = trackedDays(stats.period, stats.referenceDate, null) !==
+    trackedDays(stats.period, stats.referenceDate, trackingSince);
 
   const highlights: AiHighlight[] = response.highlights.map((highlight, index) => ({
     id: `${index + 1}`,
@@ -75,23 +87,32 @@ export function buildInsightsDataFromResponse(response: InsightsResponse, fallba
     isPeriodComplete: stats.isPeriodComplete,
     currentTotal: periodComparison.currentTotal,
     previousTotal: periodComparison.previousTotal,
+    hasPrevious,
     changePct:
       periodComparison.changeKind === 'increase' || periodComparison.changeKind === 'decrease'
         ? periodComparison.changePercent
         : null,
     changeKind: periodComparison.changeKind,
     deltaAmount: Math.abs(periodComparison.changeAmount),
+    // The backend averages over the whole window; a user who joined part way
+    // through is averaged over the days they were tracking.
     dailyAverage:
-      stats.dailyAverage ?? averagePerDay(periodComparison.currentTotal, stats.period, stats.referenceDate),
+      stats.dailyAverage !== undefined && !startedInWindow
+        ? stats.dailyAverage
+        : Math.round((periodComparison.currentTotal / trackedDays(stats.period, stats.referenceDate, trackingSince)) * 100) /
+          100,
     transactionCount: stats.transactionCount ?? null,
     topWeekday: buildTopWeekday(stats),
-    buckets: stats.trendBuckets.map(bucket => ({date: bucket.date, label: bucket.label, amount: bucket.amount})),
+    buckets: bucketsSince(
+      stats.trendBuckets.map(bucket => ({date: bucket.date, label: bucket.label, amount: bucket.amount})),
+      trackingSince,
+    ),
     monthlyBudget: stats.monthlyBudget ?? fallbackBudget,
     categories: buildCategories(stats),
     aiSummary: response.summary,
     aiHighlights:
       highlights.length > 0 ? highlights : [{id: '1', tone: 'positive', text: 'No notable changes this period.'}],
-    movements,
+    movements: hasPrevious ? movements : [],
     generatedAt: response.generatedAt,
   };
 }

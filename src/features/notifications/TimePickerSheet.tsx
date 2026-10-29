@@ -1,12 +1,12 @@
 import React, {useEffect, useState} from 'react';
-import {Platform, StyleSheet, View} from 'react-native';
+import {Platform, View} from 'react-native';
 import DateTimePicker, {
   DateTimePickerAndroid,
 } from '@react-native-community/datetimepicker';
 
 import {AppText, PrimaryButton} from '../../components/ui';
 import {formatReminderTime} from '../../lib/notifications/reminders';
-import {colors, spacing} from '../../theme';
+import {colors, makeStyles, spacing, useTheme} from '../../theme';
 import {SheetFrame} from '../profile/ProfileSheets';
 
 type TimePickerSheetProps = {
@@ -37,6 +37,8 @@ export function TimePickerSheet({
   onSelect,
   onClose,
 }: TimePickerSheetProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const [chosen, setChosen] = useState(minutes);
 
   useEffect(() => {
@@ -85,7 +87,7 @@ export function TimePickerSheet({
       <DateTimePicker
         mode="time"
         display="spinner"
-        themeVariant="dark"
+        themeVariant={scheme}
         textColor={colors.text}
         value={dateAt(chosen)}
         onChange={(_event, date) => {
@@ -107,7 +109,7 @@ export function TimePickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   lead: {
     marginBottom: spacing.lg,
     marginHorizontal: spacing.xs,
@@ -119,4 +121,4 @@ const styles = StyleSheet.create({
   action: {
     marginTop: spacing.md,
   },
-});
+}));

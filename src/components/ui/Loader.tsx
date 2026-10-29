@@ -1,11 +1,28 @@
 import React from 'react';
-import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {StyleProp, View, ViewStyle} from 'react-native';
 import LottieView from 'lottie-react-native';
 
+import {colors, makeStyles, useTheme} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {AppText} from './AppText';
+import {tintLottie} from './LottieIcons';
 
 const SOURCE = require('../../../assets/animations/loading.json');
+
+const tinted = new Map<string, typeof SOURCE>();
+
+/** Repaints the document itself; `colorFilters` washes it out on device. */
+function sourceFor(color: string | undefined) {
+  if (!color) {
+    return SOURCE;
+  }
+  let source = tinted.get(color);
+  if (!source) {
+    source = tintLottie(SOURCE, color);
+    tinted.set(color, source);
+  }
+  return source;
+}
 
 /** The artwork fills only the middle of its 300 canvas, so it is drawn larger. */
 const CANVAS_SCALE = 1.5;
@@ -15,17 +32,23 @@ const STILL_PROGRESS = 0.4;
 type LoaderProps = {
   /** Visible size of the animation. */
   size?: number;
+  /** Recolours the artwork. Default: as drawn (white) on dark, `text` on light. */
+  color?: string;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 };
 
 /**
- * The app's one loading animation (white, looping). Everything that waits on
+ * The app's one loading animation (white on dark, ink on light, looping). Everything that waits on
  * data or a save uses this, so a spinner never differs from screen to screen.
  * With reduced motion it holds a still frame instead of looping.
  */
-export function Loader({size = 48, style, accessibilityLabel}: LoaderProps) {
+export function Loader({size = 48, color, style, accessibilityLabel}: LoaderProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const reducedMotion = useReducedMotion();
+  // The artwork is white for the dark ground; on light it is inked instead.
+  const tint = color ?? (scheme === 'light' ? colors.text : undefined);
   const drawn = Math.round(size * CANVAS_SCALE);
   return (
     <View
@@ -35,7 +58,7 @@ export function Loader({size = 48, style, accessibilityLabel}: LoaderProps) {
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{busy: true}}>
       <LottieView
-        source={SOURCE}
+        source={sourceFor(tint)}
         autoPlay={!reducedMotion}
         loop
         progress={reducedMotion ? STILL_PROGRESS : undefined}
@@ -55,6 +78,7 @@ type LoadingStateProps = {
 
 /** Centred loader for a screen or section that has nothing to show yet. */
 export function LoadingState({label, caption = false, size = 96, style}: LoadingStateProps) {
+  const styles = useStyles();
   return (
     <View
       style={[styles.state, style]}
@@ -72,7 +96,7 @@ export function LoadingState({label, caption = false, size = 96, style}: Loading
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   slot: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -83,4 +107,4 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 40,
   },
-});
+}));

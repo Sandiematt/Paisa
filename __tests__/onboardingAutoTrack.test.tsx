@@ -30,10 +30,10 @@ describe('onboarding auto-tracking step', () => {
     jest.replaceProperty(Platform, 'OS', 'ios');
   });
 
-  it('adds a last auto-tracking step on Android with both toggles on', () => {
+  it('adds an auto-tracking step on Android with both toggles on', () => {
     jest.replaceProperty(Platform, 'OS', 'android');
     mount();
-    expect(flow.stepCount).toBe(6);
+    expect(flow.stepCount).toBe(8);
     expect(flow.draft.autoTrackNotes).toBe(true);
     expect(flow.draft.autoTrackBlocking).toBe(true);
   });
@@ -41,6 +41,6 @@ describe('onboarding auto-tracking step', () => {
   it('leaves the flow unchanged where auto-tracking is unsupported', () => {
     jest.replaceProperty(Platform, 'OS', 'ios');
     mount();
-    expect(flow.stepCount).toBe(5);
+    expect(flow.stepCount).toBe(7);
   });
 });

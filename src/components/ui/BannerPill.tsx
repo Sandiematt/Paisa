@@ -1,13 +1,13 @@
 import React from 'react';
-import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {StyleProp, View, ViewStyle} from 'react-native';
 
-import {GradientKey, colors, radii, spacing} from '../../theme';
+import {GradientKey, colors, makeStyles, radii, spacing} from '../../theme';
 import {AppText} from './AppText';
 import {GradientIconSquare} from './GradientIconSquare';
 import {PressableScale} from './PressableScale';
 
 type BannerPillProps = {
-  /** Icon drawn inside the 40px gradient square (~20px, `colors.text`). */
+  /** Icon drawn inside the 40px gradient square (~20px, `colors.onAccent`). */
   icon: React.ReactNode;
   title: string;
   subtitle?: string;
@@ -37,6 +37,7 @@ export function BannerPill({
   accessibilityLabel,
   accessibilityHint,
 }: BannerPillProps) {
+  const styles = useStyles();
   const body = (
     <View style={[styles.pill, style]}>
       <GradientIconSquare size={40} gradient={iconGradient}>
@@ -71,7 +72,7 @@ export function BannerPill({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -87,4 +88,4 @@ const styles = StyleSheet.create({
   text: {
     flex: 1,
   },
-});
+}));

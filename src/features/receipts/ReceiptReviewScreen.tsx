@@ -8,7 +8,6 @@ import {
   Platform,
   ScrollView,
   StatusBar,
-  StyleSheet,
   TextInput,
   View,
 } from 'react-native';
@@ -68,15 +67,7 @@ import {
   TransactionRow,
   updateTransaction,
 } from '../../lib/transactionsStore';
-import {
-  colors,
-  layout,
-  linearGradient,
-  radii,
-  spacing,
-  typography,
-  withAlpha,
-} from '../../theme';
+import {colors, layout, linearGradient, makeStyles, radii, spacing, typography, useTheme, withAlpha, palettes} from '../../theme';
 import {CategoryIconSquare} from '../add/categoryIcons';
 import {
   CategoryOption,
@@ -109,7 +100,6 @@ const KIND_OPTIONS = [
 ] as const;
 
 const GLOW_HEIGHT = 300;
-const GLOW_IMAGE = linearGradient([colors.glow, colors.ground], 180);
 const THUMB_WIDTH = 64;
 const SLOW_READ_MS = 8000;
 
@@ -179,6 +169,8 @@ export function ReceiptReviewScreen({
   onClose,
   onSaved,
 }: ReceiptReviewScreenProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const insets = useSafeAreaInsets();
   const visible = image !== null;
 
@@ -438,11 +430,10 @@ export function ReceiptReviewScreen({
       presentationStyle="fullScreen"
       onRequestClose={onClose}>
       <View style={styles.root}>
-        <StatusBar barStyle="light-content" />
-        <View
-          pointerEvents="none"
-          style={[styles.glow, {backgroundImage: GLOW_IMAGE}]}
+        <StatusBar
+          barStyle={scheme === 'light' ? 'dark-content' : 'light-content'}
         />
+        <View pointerEvents="none" style={styles.glow} />
         <KeyboardAvoidingView
           style={[styles.screen, {paddingTop: insets.top}]}
           behavior="padding"
@@ -810,6 +801,7 @@ function DuplicateBanner({
   onDifferent: () => void;
   onMerge: () => void;
 }) {
+  const styles = useStyles();
   const copy = duplicateCopy(match, money);
   const exact = match.strength === 'exact';
   return (
@@ -866,6 +858,7 @@ function TotalCheck({
   money: (cents: number) => string;
   onUse: (cents: number) => void;
 }) {
+  const styles = useStyles();
   const selection =
     excluded.size > 0
       ? selectedTotalCents(receipt.lineItems, receipt.extrasCents, excluded)
@@ -966,6 +959,7 @@ function LineItems({
   money: (cents: number) => string;
   onToggle: (item: ReceiptLineItem) => void;
 }) {
+  const styles = useStyles();
   const selected = receipt.lineItems.filter(item => !excluded.has(item.id));
   const net = itemsNetCents(selected);
   return (
@@ -1062,7 +1056,7 @@ function LineItems({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(palette => ({
   root: {
     flex: 1,
     backgroundColor: colors.ground,
@@ -1073,6 +1067,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: GLOW_HEIGHT,
+    backgroundImage: linearGradient([colors.glow, colors.ground], 180),
   },
   screen: {
     flex: 1,
@@ -1236,7 +1231,8 @@ const styles = StyleSheet.create({
   },
   categoryChipOn: {
     borderColor: colors.lavender,
-    backgroundColor: colors.surfaceRaised,
+    // White on white in light; the designs fill the pick with the wash.
+    backgroundColor: palette === palettes.light ? colors.wash : colors.surfaceRaised,
   },
   itemsCard: {
     borderRadius: radii.card,
@@ -1296,4 +1292,4 @@ const styles = StyleSheet.create({
     top: -24,
     height: 24,
   },
-});
+}));

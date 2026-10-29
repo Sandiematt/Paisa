@@ -1,7 +1,7 @@
 import React from 'react';
 import {StyleProp, Text, TextProps, TextStyle} from 'react-native';
 
-import {colors, typography, TypographyVariant} from '../../theme';
+import {colors, typography, TypographyVariant, useTheme} from '../../theme';
 
 type AppTextProps = TextProps & {
   variant?: TypographyVariant;
@@ -17,6 +17,8 @@ export function AppText({
   style,
   ...rest
 }: AppTextProps) {
+  // Subscribes to the scheme so the default colour follows a theme switch.
+  useTheme();
   return (
     <Text
       {...rest}

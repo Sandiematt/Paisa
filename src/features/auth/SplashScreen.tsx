@@ -1,9 +1,9 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
 import {Logo} from '../../components/brand/Logo';
 import {AppText, PrimaryButton, Screen, Stagger} from '../../components/ui';
-import {colors, layout, spacing} from '../../theme';
+import {colors, layout, makeStyles, spacing} from '../../theme';
 
 type SplashScreenProps = {
   onGetStarted: () => void;
@@ -18,6 +18,7 @@ export function SplashScreen({
   onGetStarted,
   ready = true,
 }: SplashScreenProps) {
+  const styles = useStyles();
   return (
     <Screen glow={360}>
       <View style={styles.root}>
@@ -57,7 +58,7 @@ export function SplashScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     flex: 1,
     paddingHorizontal: layout.screenPadding,
@@ -87,4 +88,4 @@ const styles = StyleSheet.create({
   ctaSlot: {
     height: 56,
   },
-});
+}));

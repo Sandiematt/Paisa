@@ -45,6 +45,119 @@ function isSeriesStart(row: TransactionRow): boolean {
   );
 }
 
+/** A monthly expense the budget sets aside before day-to-day spending. */
+export type BillCommitment = {
+  key: string;
+  label: string;
+  amount: number;
+  /** Day of the month it falls on. */
+  day: number;
+  /** Comes due inside the cycle at all (a series starting later does not). */
+  dueThisCycle: boolean;
+  /** Already saved as a row inside the cycle. */
+  paidThisCycle: boolean;
+};
+
+/** A row that belongs to a monthly expense series: the marked row or one of its copies. */
+export function isBillRow(row: TransactionRow): boolean {
+  return (
+    row.type === 'expense' &&
+    row.kind === 'regular' &&
+    (row.isRecurring || recurringRootId(row) !== null)
+  );
+}
+
+/** A bill that is picked but not in the ledger yet (see scheduledSetup). */
+export type PendingBill = {
+  key: string;
+  label: string;
+  amount: number;
+  /** First date, `YYYY-MM-DD`. */
+  date: string;
+};
+
+/**
+ * Every monthly expense series in the ledger, plus bills still waiting for
+ * their first date, judged against one budget cycle (`start`/`end` as
+ * `YYYY-MM-DD`). A series is listed at its latest amount.
+ */
+export function billCommitments(
+  rows: TransactionRow[],
+  cycle: {start: string; end: string},
+  pending: PendingBill[] = [],
+): BillCommitment[] {
+  const series = new Map<string, TransactionRow[]>();
+  for (const row of rows) {
+    if (!isBillRow(row)) {
+      continue;
+    }
+    const rootId = isSeriesStart(row) ? row.id : recurringRootId(row);
+    if (!rootId) {
+      continue;
+    }
+    const list = series.get(rootId) ?? [];
+    list.push(row);
+    series.set(rootId, list);
+  }
+
+  const commitments: BillCommitment[] = [];
+  for (const [rootId, list] of series) {
+    const root = list.find(row => row.id === rootId);
+    // Copies whose marked row was deleted or unmarked are no longer a series.
+    if (!root || !root.isRecurring) {
+      continue;
+    }
+    const dates = list.map(row => calendarDateISO(row.transactionDate)).sort();
+    const latest = list.reduce((a, b) =>
+      calendarDateISO(b.transactionDate) > calendarDateISO(a.transactionDate) ? b : a,
+    );
+    const first = calendarDateISO(root.transactionDate);
+    commitments.push({
+      key: rootId,
+      label:
+        latest.description ||
+        latest.merchant ||
+        root.description ||
+        root.merchant ||
+        'Monthly bill',
+      amount: latest.amount,
+      day: Number(first.slice(8, 10)),
+      dueThisCycle: first <= cycle.end,
+      paidThisCycle: dates.some(date => date >= cycle.start && date <= cycle.end),
+    });
+  }
+  for (const bill of pending) {
+    commitments.push({
+      key: bill.key,
+      label: bill.label,
+      amount: bill.amount,
+      day: Number(bill.date.slice(8, 10)),
+      dueThisCycle: bill.date <= cycle.end,
+      paidThisCycle: false,
+    });
+  }
+  return commitments.sort((a, b) => a.day - b.day);
+}
+
+/** What the cycle's bills take out of the budget, and what of that is still to come. */
+export function committedTotals(commitments: BillCommitment[]): {
+  committed: number;
+  upcoming: number;
+} {
+  let committed = 0;
+  let upcoming = 0;
+  for (const bill of commitments) {
+    if (!bill.dueThisCycle) {
+      continue;
+    }
+    committed += bill.amount;
+    if (!bill.paidThisCycle) {
+      upcoming += bill.amount;
+    }
+  }
+  return {committed: Number(committed.toFixed(2)), upcoming: Number(upcoming.toFixed(2))};
+}
+
 /** Copies of marked rows that are due on or before `today` and not saved yet. */
 export function dueRecurringTransactions(
   rows: TransactionRow[],

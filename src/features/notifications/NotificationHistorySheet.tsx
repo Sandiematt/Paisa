@@ -1,10 +1,10 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
 import {Bell} from 'phosphor-react-native';
 import {AppText, PressableScale} from '../../components/ui';
 import {NotificationItem} from '../../lib/notifications/types';
-import {colors, fonts, radii, spacing} from '../../theme';
+import {colors, fonts, makeStyles, palettes, radii, spacing} from '../../theme';
 import {SheetFrame} from '../profile/ProfileSheets';
 import {useNotifications} from './NotificationsProvider';
 
@@ -48,6 +48,7 @@ function Row({
   item: NotificationItem;
   onPress: (item: NotificationItem) => void;
 }) {
+  const styles = useStyles();
   return (
     <PressableScale
       onPress={() => onPress(item)}
@@ -82,6 +83,7 @@ export function NotificationHistorySheet({
   visible,
   onClose,
 }: NotificationHistorySheetProps) {
+  const styles = useStyles();
   const {items, unreadCount, markAllRead, openItem} = useNotifications();
 
   const markAll = (
@@ -141,7 +143,7 @@ export function NotificationHistorySheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(palette => ({
   list: {
     gap: spacing.sm,
   },
@@ -150,7 +152,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     padding: spacing.md,
     borderRadius: radii.tile,
-    backgroundColor: colors.surface,
+    // The sheet panel is white in light mode; a white row would vanish on it.
+    backgroundColor: palette === palettes.light ? colors.ground : colors.surface,
     borderWidth: 1,
     borderColor: colors.line,
   },
@@ -198,7 +201,7 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.surface,
+    backgroundColor: palette === palettes.light ? colors.canvasSunk : colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.xs,
@@ -206,4 +209,4 @@ const styles = StyleSheet.create({
   emptyText: {
     maxWidth: 260,
   },
-});
+}));
