@@ -1,12 +1,9 @@
 import React, {useState} from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import {Envelope, Eye, EyeSlash, Lock} from 'phosphor-react-native';
+import {KeyboardAvoidingView, ScrollView, View} from 'react-native';
+import {Envelope} from 'phosphor-react-native/src/icons/Envelope';
+import {Eye} from 'phosphor-react-native/src/icons/Eye';
+import {EyeSlash} from 'phosphor-react-native/src/icons/EyeSlash';
+import {Lock} from 'phosphor-react-native/src/icons/Lock';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {Logo} from '../../components/brand/Logo';
@@ -19,7 +16,7 @@ import {
   ScreenHeader,
   Stagger,
 } from '../../components/ui';
-import {colors, layout, spacing} from '../../theme';
+import {colors, layout, makeStyles, spacing} from '../../theme';
 import {AuthField} from './components/AuthField';
 import {ForgotPasswordModal} from './components/ForgotPasswordModal';
 import {GoogleButton} from './components/GoogleButton';
@@ -47,6 +44,7 @@ export function LoginScreen({
   onGoogle,
   onBack,
 }: LoginScreenProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -80,9 +78,9 @@ export function LoginScreen({
 
   return (
     <Screen glow={360}>
-      <KeyboardAvoidingView
-        style={styles.fill}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* Android too: the app is edge-to-edge, so adjustResize no longer
+          shrinks the window and the keyboard would cover the password. */}
+      <KeyboardAvoidingView style={styles.fill} behavior="padding">
         <ScreenHeader onBack={onBack} />
 
         <ScrollView
@@ -254,7 +252,7 @@ export function LoginScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   fill: {
     flex: 1,
   },
@@ -307,4 +305,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingLeft: spacing.sm,
   },
-});
+}));

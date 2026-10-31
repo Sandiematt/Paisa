@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Animated, StyleSheet, View} from 'react-native';
 import LottieView from 'lottie-react-native';
 
-import {colors, duration, easing} from '../../theme';
+import {colors, duration, easing, makeStyles} from '../../theme';
 
 const MARK_SIZE = 200;
 
@@ -14,6 +14,7 @@ type LaunchSplashProps = {
 
 /** Animated Paisa mark shown over the app while it boots. */
 export function LaunchSplash({ready, onDone}: LaunchSplashProps) {
+  const styles = useStyles();
   const [played, setPlayed] = useState(false);
   const exit = useRef(new Animated.Value(1)).current;
 
@@ -49,7 +50,7 @@ export function LaunchSplash({ready, onDone}: LaunchSplashProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     ...StyleSheet.absoluteFill,
     backgroundColor: colors.ground,
@@ -63,4 +64,4 @@ const styles = StyleSheet.create({
     width: MARK_SIZE,
     height: MARK_SIZE,
   },
-});
+}));

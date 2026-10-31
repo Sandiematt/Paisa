@@ -9,7 +9,10 @@ import {
   DetectedTxn,
   DetectorChangeReason,
   DetectorStatus,
+  DEFAULT_TRACKING_METHOD,
   PendingTxn,
+  ShizukuState,
+  TrackingMethod,
   UPI_DETECTOR_EVENT,
 } from './types';
 
@@ -21,6 +24,8 @@ import {
  */
 type NativeUpiDetector = {
   getStatus(): Promise<string | null>;
+  /** Android Developer options are on. */
+  isDeveloperModeEnabled(): Promise<boolean>;
   openAccessibilitySettings(): Promise<void>;
   openNotificationAccessSettings(): Promise<void>;
   getTransactions(): Promise<string | null>;
@@ -45,12 +50,43 @@ type NativeUpiDetector = {
   clearUserData(purgeHistory: boolean): Promise<void>;
   /** Native only emits log changes while this is on. */
   setLogStreaming(enabled: boolean): Promise<void>;
+  /** Resolves the saved method. */
+  setTrackingMethod(method: TrackingMethod): Promise<string | null>;
+  /** Resolves whether Shizuku's permission dialog was shown. */
+  requestShizukuPermission(): Promise<boolean>;
+  openShizuku(): Promise<void>;
+  /** Resolves whether capture is running. */
+  startShizukuCapture(): Promise<boolean>;
+  stopShizukuCapture(): Promise<void>;
 };
+
+const SHIZUKU_STATES: ShizukuState[] = [
+  'not_installed',
+  'not_running',
+  'too_old',
+  'no_permission',
+  'ready',
+];
+
+function asTrackingMethod(value: unknown): TrackingMethod {
+  return value === 'shizuku' || value === 'accessibility'
+    ? value
+    : DEFAULT_TRACKING_METHOD;
+}
+
+function asShizukuState(value: unknown): ShizukuState {
+  return SHIZUKU_STATES.includes(value as ShizukuState)
+    ? (value as ShizukuState)
+    : 'not_installed';
+}
 
 const EMPTY_STATUS: DetectorStatus = {
   accessibilityEnabled: false,
   notificationAccessEnabled: false,
   installedApps: [],
+  trackingMethod: DEFAULT_TRACKING_METHOD,
+  shizukuState: 'not_installed',
+  shizukuCaptureRunning: false,
 };
 
 function nativeModule(): NativeUpiDetector | null {
@@ -105,8 +141,48 @@ export function getStatus(): Promise<DetectorStatus> {
       installedApps: Array.isArray(status.installedApps)
         ? status.installedApps
         : [],
+      trackingMethod: asTrackingMethod(status.trackingMethod),
+      shizukuState: asShizukuState(status.shizukuState),
+      shizukuCaptureRunning: status.shizukuCaptureRunning === true,
     };
   }, EMPTY_STATUS);
+}
+
+/**
+ * Picks how screens are read. Native starts or stops Shizuku capture to
+ * match. Resolves the method native saved (the default when it is missing).
+ */
+export function setTrackingMethod(
+  method: TrackingMethod,
+): Promise<TrackingMethod> {
+  return call(
+    async m => asTrackingMethod(await m.setTrackingMethod(method)),
+    DEFAULT_TRACKING_METHOD,
+  );
+}
+
+/** Shows Shizuku's "allow Paisa?" dialog. Resolves false when it was not shown. */
+export function requestShizukuPermission(): Promise<boolean> {
+  return call(async m => (await m.requestShizukuPermission()) === true, false);
+}
+
+/** Opens Shizuku (to start it), or its store page when it is not installed. */
+export function openShizuku(): Promise<void> {
+  return call(m => m.openShizuku(), undefined);
+}
+
+/** Resumes Shizuku capture after it was stopped. Resolves whether it runs. */
+export function startShizukuCapture(): Promise<boolean> {
+  return call(async m => (await m.startShizukuCapture()) === true, false);
+}
+
+export function stopShizukuCapture(): Promise<void> {
+  return call(m => m.stopShizukuCapture(), undefined);
+}
+
+/** Whether Android Developer options are on; false elsewhere or on error. */
+export function isDeveloperModeEnabled(): Promise<boolean> {
+  return call(async m => (await m.isDeveloperModeEnabled()) === true, false);
 }
 
 export function openAccessibilitySettings(): Promise<void> {

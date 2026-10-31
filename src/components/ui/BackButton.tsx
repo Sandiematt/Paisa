@@ -1,7 +1,7 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
-import {colors, radii} from '../../theme';
+import {colors, makeStyles, radii} from '../../theme';
 import {PressableScale} from './PressableScale';
 
 type BackButtonProps = {
@@ -9,11 +9,12 @@ type BackButtonProps = {
 };
 
 /**
- * Round #FFFFFF14 glass button with a geometric chevron. Unicode arrows sit
+ * Round `track` glass button with a geometric chevron. Unicode arrows sit
  * left of optical centre and Android adds font padding, so the glyph is drawn
  * from two bars.
  */
 export function BackButton({onPress}: BackButtonProps) {
+  const styles = useStyles();
   return (
     <PressableScale
       onPress={onPress}
@@ -36,7 +37,7 @@ export const BACK_BUTTON_SIZE = 44;
 const ARM_LENGTH = 11;
 const ARM_THICKNESS = 2;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   hit: {
     width: BACK_BUTTON_SIZE,
     height: BACK_BUTTON_SIZE,
@@ -45,7 +46,7 @@ const styles = StyleSheet.create({
     width: BACK_BUTTON_SIZE,
     height: BACK_BUTTON_SIZE,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: colors.track,
     borderWidth: 1,
     borderColor: colors.line,
     alignItems: 'center',
@@ -74,4 +75,4 @@ const styles = StyleSheet.create({
     bottom: 3,
     transform: [{rotate: '42deg'}],
   },
-});
+}));

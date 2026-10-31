@@ -8,7 +8,7 @@ import {
   useAutoTrack,
 } from '../src/features/autotrack/AutoTrackProvider';
 import {PendingTxn} from '../src/lib/autotrack/types';
-import {upsertDetectedTransaction} from '../src/lib/transactionsStore';
+import {localDateISO, upsertDetectedTransaction} from '../src/lib/transactionsStore';
 
 let mockUser: {id: string} | null = {id: 'user-1'};
 jest.mock('../src/features/auth/AuthProvider', () => ({
@@ -151,14 +151,14 @@ describe('AutoTrackProvider', () => {
     expect(current.allowance).toBeNull();
 
     await act(async () => {
-      current.setBudgetInputs({transactions: [], monthlyBudget: 31000});
+      current.setBudgetSnapshot({monthKey: localDateISO(new Date()).slice(0, 7), monthlyBudget: 31000, spendByDate: {}, dataAsOfMillis: 0, cycleStartDay: 1});
     });
     expect(stub.setBudgetSnapshot).toHaveBeenCalledTimes(1);
     expect(current.allowance?.spentToday).toBe(0);
 
     // Identical inputs are not pushed again.
     await act(async () => {
-      current.setBudgetInputs({transactions: [], monthlyBudget: 31000});
+      current.setBudgetSnapshot({monthKey: localDateISO(new Date()).slice(0, 7), monthlyBudget: 31000, spendByDate: {}, dataAsOfMillis: 0, cycleStartDay: 1});
     });
     expect(stub.setBudgetSnapshot).toHaveBeenCalledTimes(1);
   });
@@ -337,20 +337,12 @@ describe('AutoTrackProvider', () => {
     );
     await mount();
     await act(async () => {
-      current.setBudgetInputs({
-        transactions: [],
-        monthlyBudget: 31000,
-        dataAsOfMillis: now - 5000,
-      });
+      current.setBudgetSnapshot({monthKey: localDateISO(new Date()).slice(0, 7), monthlyBudget: 31000, spendByDate: {}, dataAsOfMillis: now - 5000, cycleStartDay: 1});
     });
     expect(current.allowance?.spentToday).toBe(100);
 
     await act(async () => {
-      current.setBudgetInputs({
-        transactions: [],
-        monthlyBudget: 31000,
-        dataAsOfMillis: now,
-      });
+      current.setBudgetSnapshot({monthKey: localDateISO(new Date()).slice(0, 7), monthlyBudget: 31000, spendByDate: {}, dataAsOfMillis: now, cycleStartDay: 1});
     });
     expect(current.allowance?.spentToday).toBe(0);
     stub.getTransactions.mockResolvedValue('[]');

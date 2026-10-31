@@ -1,7 +1,7 @@
 import React from 'react';
-import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {StyleProp, View, ViewStyle} from 'react-native';
 
-import {colors, spacing} from '../../theme';
+import {colors, makeStyles, spacing} from '../../theme';
 import {AppText} from './AppText';
 import {PressableScale} from './PressableScale';
 
@@ -24,6 +24,7 @@ export function SectionTitle({
   onActionPress,
   style,
 }: SectionTitleProps) {
+  const styles = useStyles();
   return (
     <View style={[styles.row, style]}>
       <AppText
@@ -48,7 +49,7 @@ export function SectionTitle({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -58,4 +59,4 @@ const styles = StyleSheet.create({
   title: {
     flexShrink: 1,
   },
-});
+}));

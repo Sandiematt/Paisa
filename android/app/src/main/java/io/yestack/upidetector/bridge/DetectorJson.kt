@@ -38,11 +38,25 @@ object DetectorJson {
             .put("externalRef", p.externalRef)
             .put("alreadySynced", p.alreadySynced)
 
-    fun status(accessibilityEnabled: Boolean, notificationAccessEnabled: Boolean, installedApps: List<String>): JSONObject =
+    /**
+     * DetectorStatus. [trackingMethod] is a [io.yestack.upidetector.TrackingMethod] key; [shizukuState] one of
+     * "not_installed", "not_running", "too_old", "no_permission", "ready" (see SystemStatus.shizukuState).
+     */
+    fun status(
+        accessibilityEnabled: Boolean,
+        notificationAccessEnabled: Boolean,
+        installedApps: List<String>,
+        trackingMethod: String = "accessibility",
+        shizukuState: String = "not_installed",
+        shizukuCaptureRunning: Boolean = false,
+    ): JSONObject =
         JSONObject()
             .put("accessibilityEnabled", accessibilityEnabled)
             .put("notificationAccessEnabled", notificationAccessEnabled)
             .put("installedApps", JSONArray(installedApps))
+            .put("trackingMethod", trackingMethod)
+            .put("shizukuState", shizukuState)
+            .put("shizukuCaptureRunning", shizukuCaptureRunning)
 
     fun prefs(notesEnabled: Boolean, blockingEnabled: Boolean): JSONObject = JSONObject()
         .put("notesEnabled", notesEnabled)

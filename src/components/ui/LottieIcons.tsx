@@ -1,8 +1,9 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {Animated, Easing, StyleSheet, View} from 'react-native';
+import {Animated, Easing, View} from 'react-native';
 import LottieView from 'lottie-react-native';
 
 import {useReducedMotion} from '../../hooks/useReducedMotion';
+import {ColorScheme, makeStyles, palettes, useTheme} from '../../theme';
 
 const AnimatedLottie = Animated.createAnimatedComponent(LottieView);
 
@@ -27,6 +28,115 @@ const TILE_SOURCES = {
 export type NavIconId = keyof typeof NAV_SOURCES;
 export type TileIconKind = keyof typeof TILE_SOURCES;
 
+type LottieSource = (typeof NAV_SOURCES)[NavIconId];
+
+const toRgb = (hex: string) =>
+  [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16) / 255);
+
+/**
+ * Returns a copy of a Lottie document with its fill and stroke colours (`c`
+ * values, static or keyframed) swapped by RGB; alpha is kept.
+ */
+function recolor(source: LottieSource, swaps: [string, string][]): LottieSource {
+  const pairs = swaps.map(([from, to]) => [toRgb(from), toRgb(to)]);
+  const swap = (rgba: number[]) => {
+    const hit = pairs.find(([from]) =>
+      from.every((channel, i) => Math.abs(channel - rgba[i]) < 0.004),
+    );
+    return hit ? [...hit[1], rgba[3]] : rgba;
+  };
+  const walk = (node: unknown, inColor: boolean): unknown => {
+    if (Array.isArray(node)) {
+      if (inColor && node.length === 4 && node.every(n => typeof n === 'number')) {
+        return swap(node);
+      }
+      return node.map(child => walk(child, inColor));
+    }
+    if (node && typeof node === 'object') {
+      return Object.fromEntries(
+        Object.entries(node).map(([key, child]) => [
+          key,
+          walk(child, inColor || key === 'c'),
+        ]),
+      );
+    }
+    return node;
+  };
+  return walk(source, false) as LottieSource;
+}
+
+/** Returns a copy of a Lottie document with every fill and stroke in `hex`. */
+export function tintLottie<T>(source: T, hex: string): T {
+  const rgb = toRgb(hex);
+  const walk = (node: unknown, inColor: boolean): unknown => {
+    if (Array.isArray(node)) {
+      // Exporters write colours as RGBA or plain RGB (loading.json is RGB).
+      if (
+        inColor &&
+        (node.length === 3 || node.length === 4) &&
+        node.every(n => typeof n === 'number')
+      ) {
+        return node.length === 4 ? [...rgb, node[3]] : rgb;
+      }
+      return node.map(child => walk(child, inColor));
+    }
+    if (node && typeof node === 'object') {
+      return Object.fromEntries(
+        Object.entries(node).map(([key, child]) => [
+          key,
+          walk(child, inColor || key === 'c'),
+        ]),
+      );
+    }
+    return node;
+  };
+  return walk(source, false) as T;
+}
+
+const tintedTiles = new Map<string, LottieSource>();
+
+/**
+ * Tile artwork is baked near-white for gradient squares. Any other colour is
+ * written into the document itself rather than through `colorFilters`, which
+ * native Lottie applies unevenly (icons came out washed out on light).
+ */
+function tileSource(kind: TileIconKind, color: string | undefined): LottieSource {
+  if (!color) {
+    return TILE_SOURCES[kind];
+  }
+  const key = `${kind}:${color}`;
+  let source = tintedTiles.get(key);
+  if (!source) {
+    source = tintLottie(TILE_SOURCES[kind], color);
+    tintedTiles.set(key, source);
+  }
+  return source;
+}
+
+/**
+ * The nav artwork is baked for the dark bar: a muted outline, a `text` fill
+ * and a door cutout in `surfaceRaised`, the active pill behind it. The light
+ * bar repaints those as muted, indigo and the `wash` pill.
+ */
+const lightNavSources: Partial<Record<NavIconId, LottieSource>> = {};
+
+function navSource(id: NavIconId, scheme: ColorScheme): LottieSource {
+  if (scheme === 'dark') {
+    return NAV_SOURCES[id];
+  }
+  let source = lightNavSources[id];
+  if (!source) {
+    const {dark, light} = palettes;
+    source = recolor(NAV_SOURCES[id], [
+      [dark.muted, light.muted],
+      [dark.text, light.indigo],
+      [dark.surfaceRaised, light.wash],
+    ]);
+    lightNavSources[id] = source;
+  }
+  return source;
+}
+
 type NavLottieIconProps = {
   id: NavIconId;
   active: boolean;
@@ -41,6 +151,8 @@ type NavLottieIconProps = {
  * mount simply starts on its last frame.
  */
 export function NavLottieIcon({id, active, size}: NavLottieIconProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const reducedMotion = useReducedMotion();
   const progress = useRef(new Animated.Value(active ? 1 : 0)).current;
   const wasActive = useRef(active);
@@ -68,7 +180,7 @@ export function NavLottieIcon({id, active, size}: NavLottieIconProps) {
   return (
     <View style={[styles.slot, {width: size, height: size}]} pointerEvents="none">
       <AnimatedLottie
-        source={NAV_SOURCES[id]}
+        source={navSource(id, scheme)}
         progress={progress}
         style={{width: drawn, height: drawn}}
       />
@@ -81,7 +193,7 @@ type TileLottieIconProps = {
   size: number;
   /** Replays the animation whenever this changes (e.g. the amount shown). */
   replayKey?: string | number | boolean;
-  /** Recolours the artwork (it is light by default). */
+  /** Recolours the artwork (it is white by default, for gradient squares). */
   color?: string;
   /** Off: rest on the finished frame and only play when `replayKey` changes. */
   playOnMount?: boolean;
@@ -99,6 +211,7 @@ export function TileLottieIcon({
   color,
   playOnMount = true,
 }: TileLottieIconProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const player = useRef<LottieView>(null);
   const firstKey = useRef(replayKey);
@@ -127,10 +240,9 @@ export function TileLottieIcon({
     <View style={[styles.slot, {width: size, height: size}]} pointerEvents="none">
       <LottieView
         ref={player}
-        source={TILE_SOURCES[kind]}
+        source={tileSource(kind, color)}
         autoPlay={!resting}
         loop={false}
-        colorFilters={color ? [{keypath: '**', color}] : undefined}
         progress={resting ? 1 : undefined}
         style={{width: drawn, height: drawn}}
       />
@@ -138,9 +250,9 @@ export function TileLottieIcon({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   slot: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

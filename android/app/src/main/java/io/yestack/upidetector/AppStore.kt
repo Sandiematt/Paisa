@@ -122,7 +122,7 @@ object AppStore {
     var trackingStartedAt: Long? = null
         private set
 
-    /** Set by the accessibility service: forgets the note questions waiting behind the one on screen. */
+    /** Set by the service reading screens: forgets the note questions waiting behind the one on screen. */
     var noteQueueDropper: (() -> Unit)? = null
 
     /** What [pending] handed out, to tell whether a record changed again before its ack. */
@@ -142,7 +142,7 @@ object AppStore {
         private set
 
     /**
-     * Set by the accessibility service while it runs: asks about a record over whatever is on screen. Returns false
+     * Set by the service reading screens while it runs: asks about a record over whatever is on screen. Returns false
      * when it could not; the note activity is then started instead.
      */
     var notePrompter: ((Long) -> Boolean)? = null
@@ -230,6 +230,11 @@ object AppStore {
     fun log(message: String, now: Long = System.currentTimeMillis()) {
         appendLog(now, message)
         notifyChanged()
+    }
+
+    /** Something the status depends on changed outside the store (Shizuku capture started or stopped). */
+    fun statusChanged() {
+        notifyChanged(REASON_STATUS)
     }
 
     fun onScreenChanged(packageName: String, screenClass: String?, windowId: Int?, now: Long) {
@@ -518,6 +523,15 @@ object AppStore {
                     transactionsChanged = true
                 } catch (t: Throwable) {
                     appendLog(now, "ERROR deleting the user's history: $t")
+                }
+                // The account is gone: later detections must not be stamped with it, or no future user could adopt them.
+                if (lastOwner == owner) {
+                    lastOwner = null
+                    try {
+                        db?.putSetting(ExpenseDb.KEY_LAST_OWNER, null)
+                    } catch (t: Throwable) {
+                        appendLog(now, "ERROR clearing the last owner: $t")
+                    }
                 }
             }
         }

@@ -1,7 +1,7 @@
 import React, {useEffect, useRef} from 'react';
-import {Animated, StyleSheet, View} from 'react-native';
+import {Animated, View} from 'react-native';
 
-import {colors, duration, easing, radii, spring} from '../../theme';
+import {colors, duration, easing, makeStyles, radii, spring} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {AppText} from './AppText';
 
@@ -11,6 +11,7 @@ import {AppText} from './AppText';
  * a single halo pulse.
  */
 export function CelebrationBadge() {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const badge = useRef(new Animated.Value(reducedMotion ? 1 : 0.9)).current;
   const glyph = useRef(new Animated.Value(reducedMotion ? 1 : 0)).current;
@@ -87,7 +88,7 @@ export function CelebrationBadge() {
 
 const SIZE = 64;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     width: SIZE,
     height: SIZE,
@@ -109,4 +110,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

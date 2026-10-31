@@ -1,7 +1,7 @@
 import React, {useEffect, useRef} from 'react';
-import {Animated, StyleSheet, View} from 'react-native';
+import {Animated, View} from 'react-native';
 
-import {colors, radii, spacing, spring} from '../../theme';
+import {colors, makeStyles, radii, spacing, spring} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {AppText} from './AppText';
 import {PressableScale} from './PressableScale';
@@ -15,6 +15,7 @@ type ChipProps = {
 };
 
 export function Chip({label, dotColor, selected, onToggle}: ChipProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const pop = useRef(new Animated.Value(1)).current;
   const firstRender = useRef(true);
@@ -69,7 +70,7 @@ export function Chip({label, dotColor, selected, onToggle}: ChipProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -93,4 +94,4 @@ const styles = StyleSheet.create({
   dotDim: {
     opacity: 0.35,
   },
-});
+}));

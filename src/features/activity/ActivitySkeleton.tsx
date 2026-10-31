@@ -1,8 +1,7 @@
 import React from 'react';
-import {StyleSheet} from 'react-native';
 
 import {Card, LoadingState} from '../../components/ui';
-import {radii} from '../../theme';
+import {makeStyles, radii} from '../../theme';
 
 /**
  * Shown in place of a ledger section while its first load is in flight. The
@@ -16,6 +15,7 @@ export function ActivitySkeleton({
   rows?: number;
   label?: string;
 }) {
+  const styles = useStyles();
   return (
     <Card padding={0} radius={radii.card} style={styles.card}>
       <LoadingState label={label} size={rows <= 3 ? 80 : 96} />
@@ -23,8 +23,8 @@ export function ActivitySkeleton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   card: {
     overflow: 'hidden',
   },
-});
+}));

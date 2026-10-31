@@ -1,5 +1,5 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
 import {
   AppText,
@@ -7,7 +7,7 @@ import {
   BackButton,
   ProgressBar,
 } from '../../../components/ui';
-import {colors, layout, spacing} from '../../../theme';
+import {colors, layout, makeStyles, spacing} from '../../../theme';
 
 type OnboardingHeaderProps = {
   stepIndex: number;
@@ -24,6 +24,7 @@ export function OnboardingHeader({
   canGoBack,
   onBack,
 }: OnboardingHeaderProps) {
+  const styles = useStyles();
   return (
     <View style={styles.root}>
       <View style={styles.row}>
@@ -46,7 +47,7 @@ export function OnboardingHeader({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     paddingHorizontal: layout.screenPadding,
     paddingTop: spacing.md,
@@ -62,4 +63,4 @@ const styles = StyleSheet.create({
     width: BACK_BUTTON_SIZE,
     height: BACK_BUTTON_SIZE,
   },
-});
+}));

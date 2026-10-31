@@ -1,17 +1,17 @@
 {
-  "comment": "Shared vectors for the adaptive-via-week daily allowance. Used by __tests__/dailyAllowance.test.ts and android/app/src/test/.../BudgetPlanTest.kt. Outputs are rounded to 2 decimals (half-up); intermediates are full precision. spendByDate entries outside today's month (or a snapshot for another month) are ignored.",
+  "comment": "Shared vectors for the rolling daily allowance: dailyLimit = max(0, monthlyBudget - spentBeforeToday) / daysLeft, daysLeft counting today, rounded down to the paisa. Every amount is taken to the paisa (half up) before it is added. Used by __tests__/dailyAllowance.test.ts and android/app/src/test/.../BudgetPlanTest.kt. spendByDate entries outside today's budget cycle or before trackingStart (or a snapshot for another cycle) are ignored; before trackingStart there is no allowance. cycleStartDay (payday, default 1) makes the cycle run payday to the day before the next payday.",
   "vectors": [
     {
-      "name": "mid-week, week clipped at month end",
+      "name": "late in the month, what is left over the days left",
       "today": "2026-10-27",
       "snapshot": {"monthKey": "2026-10", "monthlyBudget": 31000, "spendByDate": {"2026-10-05": 20000, "2026-10-26": 1500, "2026-10-27": 200}},
-      "expected": {"date": "2026-10-27", "weekStart": "2026-10-26", "weekEnd": "2026-10-31", "weekBudget": 11000, "spentWeekBeforeToday": 1500, "daysLeftInWeek": 5, "dailyLimit": 1900, "spentToday": 200, "remainingToday": 1700, "remainingWeek": 9300}
+      "expected": {"date": "2026-10-27", "cycleStart": "2026-10-01", "cycleEnd": "2026-10-31", "daysLeft": 5, "budget": 31000, "spentBeforeToday": 21500, "dailyLimit": 1900, "spentToday": 200, "remainingToday": 1700, "remainingMonth": 9300}
     },
     {
-      "name": "overspent Monday lowers the rest of the week",
+      "name": "a big day lowers every day after it",
       "today": "2026-11-03",
       "snapshot": {"monthKey": "2026-11", "monthlyBudget": 30000, "spendByDate": {"2026-11-02": 1500}},
-      "expected": {"date": "2026-11-03", "weekStart": "2026-11-02", "weekEnd": "2026-11-08", "weekBudget": 7241.38, "spentWeekBeforeToday": 1500, "daysLeftInWeek": 6, "dailyLimit": 956.9, "spentToday": 0, "remainingToday": 956.9, "remainingWeek": 5741.38}
+      "expected": {"date": "2026-11-03", "cycleStart": "2026-11-01", "cycleEnd": "2026-11-30", "daysLeft": 28, "budget": 30000, "spentBeforeToday": 1500, "dailyLimit": 1017.85, "spentToday": 0, "remainingToday": 1017.85, "remainingMonth": 28500}
     },
     {
       "name": "no budget means no allowance",
@@ -20,28 +20,94 @@
       "expected": null
     },
     {
-      "name": "week clipped at month start, over today's limit",
+      "name": "first day of the month, over today's limit",
       "today": "2026-10-01",
       "snapshot": {"monthKey": "2026-10", "monthlyBudget": 10000, "spendByDate": {"2026-10-01": 500}},
-      "expected": {"date": "2026-10-01", "weekStart": "2026-10-01", "weekEnd": "2026-10-04", "weekBudget": 1290.32, "spentWeekBeforeToday": 0, "daysLeftInWeek": 4, "dailyLimit": 322.58, "spentToday": 500, "remainingToday": -177.42, "remainingWeek": 790.32}
+      "expected": {"date": "2026-10-01", "cycleStart": "2026-10-01", "cycleEnd": "2026-10-31", "daysLeft": 31, "budget": 10000, "spentBeforeToday": 0, "dailyLimit": 322.58, "spentToday": 500, "remainingToday": -177.42, "remainingMonth": 9500}
     },
     {
-      "name": "month already overspent before the week",
+      "name": "an overspent month shows a 0 limit, never a negative one",
       "today": "2026-10-14",
       "snapshot": {"monthKey": "2026-10", "monthlyBudget": 5000, "spendByDate": {"2026-10-03": 6000}},
-      "expected": {"date": "2026-10-14", "weekStart": "2026-10-12", "weekEnd": "2026-10-18", "weekBudget": 0, "spentWeekBeforeToday": 0, "daysLeftInWeek": 5, "dailyLimit": 0, "spentToday": 0, "remainingToday": 0, "remainingWeek": 0}
+      "expected": {"date": "2026-10-14", "cycleStart": "2026-10-01", "cycleEnd": "2026-10-31", "daysLeft": 18, "budget": 5000, "spentBeforeToday": 6000, "dailyLimit": 0, "spentToday": 0, "remainingToday": 0, "remainingMonth": -1000}
     },
     {
-      "name": "Sunday is the last day of the week",
-      "today": "2026-10-25",
-      "snapshot": {"monthKey": "2026-10", "monthlyBudget": 31000, "spendByDate": {"2026-10-02": 10000, "2026-10-20": 3000, "2026-10-25": 100}},
-      "expected": {"date": "2026-10-25", "weekStart": "2026-10-19", "weekEnd": "2026-10-25", "weekBudget": 11307.69, "spentWeekBeforeToday": 3000, "daysLeftInWeek": 1, "dailyLimit": 8307.69, "spentToday": 100, "remainingToday": 8207.69, "remainingWeek": 8207.69}
+      "name": "the last day gets everything left",
+      "today": "2026-10-31",
+      "snapshot": {"monthKey": "2026-10", "monthlyBudget": 31000, "spendByDate": {"2026-10-02": 10000, "2026-10-20": 3000, "2026-10-31": 100}},
+      "expected": {"date": "2026-10-31", "cycleStart": "2026-10-01", "cycleEnd": "2026-10-31", "daysLeft": 1, "budget": 31000, "spentBeforeToday": 13000, "dailyLimit": 18000, "spentToday": 100, "remainingToday": 17900, "remainingMonth": 17900}
     },
     {
       "name": "stale snapshot from last month counts no spend",
       "today": "2026-10-27",
       "snapshot": {"monthKey": "2026-09", "monthlyBudget": 31000, "spendByDate": {"2026-09-30": 5000}},
-      "expected": {"date": "2026-10-27", "weekStart": "2026-10-26", "weekEnd": "2026-10-31", "weekBudget": 31000, "spentWeekBeforeToday": 0, "daysLeftInWeek": 5, "dailyLimit": 6200, "spentToday": 0, "remainingToday": 6200, "remainingWeek": 31000}
+      "expected": {"date": "2026-10-27", "cycleStart": "2026-10-01", "cycleEnd": "2026-10-31", "daysLeft": 5, "budget": 31000, "spentBeforeToday": 0, "dailyLimit": 6200, "spentToday": 0, "remainingToday": 6200, "remainingMonth": 31000}
+    },
+    {
+      "name": "a quiet month spreads what is left evenly over the days left",
+      "today": "2026-10-28",
+      "snapshot": {"monthKey": "2026-10", "monthlyBudget": 1000, "spendByDate": {}},
+      "expected": {"date": "2026-10-28", "cycleStart": "2026-10-01", "cycleEnd": "2026-10-31", "daysLeft": 4, "budget": 1000, "spentBeforeToday": 0, "dailyLimit": 250, "spentToday": 0, "remainingToday": 250, "remainingMonth": 1000}
+    },
+    {
+      "name": "limits round down to the paisa",
+      "today": "2026-11-01",
+      "snapshot": {"monthKey": "2026-11", "monthlyBudget": 2000, "spendByDate": {}},
+      "expected": {"date": "2026-11-01", "cycleStart": "2026-11-01", "cycleEnd": "2026-11-30", "daysLeft": 30, "budget": 2000, "spentBeforeToday": 0, "dailyLimit": 66.66, "spentToday": 0, "remainingToday": 66.66, "remainingMonth": 2000}
+    },
+    {
+      "name": "payday cycle: spending outside the cycle is ignored",
+      "today": "2026-10-27",
+      "snapshot": {"monthKey": "2026-10", "monthlyBudget": 31000, "cycleStartDay": 25, "spendByDate": {"2026-10-24": 5000, "2026-10-25": 1000, "2026-10-26": 2000, "2026-11-25": 999}},
+      "expected": {"date": "2026-10-27", "cycleStart": "2026-10-25", "cycleEnd": "2026-11-24", "daysLeft": 29, "budget": 31000, "spentBeforeToday": 3000, "dailyLimit": 965.51, "spentToday": 0, "remainingToday": 965.51, "remainingMonth": 28000}
+    },
+    {
+      "name": "payday 31 falls on the last day of a short month",
+      "today": "2026-11-30",
+      "snapshot": {"monthKey": "2026-11", "monthlyBudget": 3100, "cycleStartDay": 31, "spendByDate": {}},
+      "expected": {"date": "2026-11-30", "cycleStart": "2026-11-30", "cycleEnd": "2026-12-30", "daysLeft": 31, "budget": 3100, "spentBeforeToday": 0, "dailyLimit": 100, "spentToday": 0, "remainingToday": 100, "remainingMonth": 3100}
+    },
+    {
+      "name": "a 28-day February",
+      "today": "2027-02-01",
+      "snapshot": {"monthKey": "2027-02", "monthlyBudget": 2800, "spendByDate": {}},
+      "expected": {"date": "2027-02-01", "cycleStart": "2027-02-01", "cycleEnd": "2027-02-28", "daysLeft": 28, "budget": 2800, "spentBeforeToday": 0, "dailyLimit": 100, "spentToday": 0, "remainingToday": 100, "remainingMonth": 2800}
+    },
+    {
+      "name": "a 29-day February",
+      "today": "2028-02-01",
+      "snapshot": {"monthKey": "2028-02", "monthlyBudget": 2900, "spendByDate": {}},
+      "expected": {"date": "2028-02-01", "cycleStart": "2028-02-01", "cycleEnd": "2028-02-29", "daysLeft": 29, "budget": 2900, "spentBeforeToday": 0, "dailyLimit": 100, "spentToday": 0, "remainingToday": 100, "remainingMonth": 2900}
+    },
+    {
+      "name": "joined mid-month: days before tracking are not counted",
+      "today": "2026-10-15",
+      "snapshot": {"monthKey": "2026-10", "monthlyBudget": 1700, "trackingStart": "2026-10-15", "spendByDate": {"2026-10-05": 900, "2026-10-15": 25}},
+      "expected": {"date": "2026-10-15", "cycleStart": "2026-10-01", "cycleEnd": "2026-10-31", "daysLeft": 17, "budget": 1700, "spentBeforeToday": 0, "dailyLimit": 100, "spentToday": 25, "remainingToday": 75, "remainingMonth": 1675}
+    },
+    {
+      "name": "no allowance while the budget waits for the 1st",
+      "today": "2026-10-30",
+      "snapshot": {"monthKey": "2026-11", "monthlyBudget": 3000, "trackingStart": "2026-11-01", "spendByDate": {}},
+      "expected": null
+    },
+    {
+      "name": "the waiting budget starts on the 1st by itself",
+      "today": "2026-11-01",
+      "snapshot": {"monthKey": "2026-11", "monthlyBudget": 3000, "trackingStart": "2026-11-01", "spendByDate": {"2026-10-30": 400}},
+      "expected": {"date": "2026-11-01", "cycleStart": "2026-11-01", "cycleEnd": "2026-11-30", "daysLeft": 30, "budget": 3000, "spentBeforeToday": 0, "dailyLimit": 100, "spentToday": 0, "remainingToday": 100, "remainingMonth": 3000}
+    },
+    {
+      "name": "float noise is rounded to the paisa before it is added",
+      "today": "2026-11-03",
+      "snapshot": {"monthKey": "2026-11", "monthlyBudget": 1000, "spendByDate": {"2026-11-01": 0.30000000000000004, "2026-11-02": 33.335}},
+      "expected": {"date": "2026-11-03", "cycleStart": "2026-11-01", "cycleEnd": "2026-11-30", "daysLeft": 28, "budget": 1000, "spentBeforeToday": 33.64, "dailyLimit": 34.51, "spentToday": 0, "remainingToday": 34.51, "remainingMonth": 966.36}
+    },
+    {
+      "name": "a token paisa keeps the guard on with a 0 limit",
+      "today": "2026-11-10",
+      "snapshot": {"monthKey": "2026-11", "monthlyBudget": 0.01, "spendByDate": {}},
+      "expected": {"date": "2026-11-10", "cycleStart": "2026-11-01", "cycleEnd": "2026-11-30", "daysLeft": 21, "budget": 0.01, "spentBeforeToday": 0, "dailyLimit": 0, "spentToday": 0, "remainingToday": 0, "remainingMonth": 0.01}
     }
   ]
 }

@@ -11,8 +11,9 @@ import android.view.accessibility.AccessibilityManager
 import io.yestack.upidetector.SupportedApps
 import io.yestack.upidetector.service.UpiAccessibilityService
 import io.yestack.upidetector.service.UpiNotificationListener
+import io.yestack.upidetector.shizuku.ShizukuShell
 
-/** Which of the detector's permissions are on and which UPI apps are installed. Read-only; main thread. */
+/** Which of the detector's permissions are on, where Shizuku stands and which UPI apps are installed. Read-only; main thread. */
 object SystemStatus {
 
     fun isAccessibilityServiceEnabled(context: Context): Boolean {
@@ -45,6 +46,19 @@ object SystemStatus {
             return context.getSystemService(NotificationManager::class.java)?.isNotificationListenerAccessGranted(mine) == true
         }
         return false
+    }
+
+    const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+
+    /**
+     * Where the Shizuku tracking method stands: "not_installed" (no Shizuku app), "not_running" (installed, service not
+     * started), "too_old", "no_permission" (Paisa not allowed to use it yet) or "ready".
+     */
+    fun shizukuState(context: Context): String = when (ShizukuShell.status()) {
+        ShizukuShell.Status.READY -> "ready"
+        ShizukuShell.Status.NO_PERMISSION -> "no_permission"
+        ShizukuShell.Status.TOO_OLD -> "too_old"
+        ShizukuShell.Status.NOT_RUNNING -> if (isInstalled(context, SHIZUKU_PACKAGE)) "not_running" else "not_installed"
     }
 
     /** Package names of the supported UPI apps installed on this phone. */

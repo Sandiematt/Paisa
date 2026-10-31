@@ -288,6 +288,17 @@ Deno.serve(async req => {
     return jsonResponse({error: 'Invalid or expired session.'}, 401);
   }
 
+  // Per-user hourly cap on OCR spend (consume_function_quota migration). If
+  // the quota check itself fails, scanning stays available rather than broken.
+  const {data: withinQuota, error: quotaError} = await supabase.rpc('consume_function_quota', {
+    p_function: 'scan-receipt',
+  });
+  if (quotaError) {
+    console.error('scan-receipt: quota check failed', quotaError);
+  } else if (withinQuota === false) {
+    return jsonResponse({error: 'Too many receipts scanned just now. Wait a while and try again.'}, 429);
+  }
+
   let body: z.infer<typeof requestBodySchema>;
   try {
     const parsed = requestBodySchema.safeParse(await req.json());

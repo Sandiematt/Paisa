@@ -7,13 +7,13 @@ import {
   Platform,
   ScrollView,
   StatusBar,
-  StyleSheet,
   TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {CalendarBlank, CaretDown} from 'phosphor-react-native';
+import {CalendarBlank} from 'phosphor-react-native/src/icons/CalendarBlank';
+import {CaretDown} from 'phosphor-react-native/src/icons/CaretDown';
 
 import {
   AppText,
@@ -23,6 +23,7 @@ import {
   PrimaryButton,
   SegmentedControl,
   TextField,
+  ToggleSwitch,
 } from '../../components/ui';
 import {formatAmountInput, parseAmountInput} from '../../lib/formatMoney';
 import {buildTransactionPayload} from './transactionPayload';
@@ -40,15 +41,7 @@ import {
   localDateISO,
   updateTransaction,
 } from '../../lib/transactionsStore';
-import {
-  colors,
-  layout,
-  linearGradient,
-  radii,
-  spacing,
-  typography,
-  withAlpha,
-} from '../../theme';
+import {ColorToken, colors, layout, linearGradient, makeStyles, radii, spacing, typography, useTheme, withAlpha, palettes} from '../../theme';
 import {CATEGORIES, CURRENCIES, categoryById} from '../onboarding/constants';
 import {CategoryIconSquare} from './categoryIcons';
 import {
@@ -76,23 +69,26 @@ const KIND_OPTIONS = [
   {value: 'income', label: 'Income'},
 ] as const;
 
-const KIND_META = {
+/** `accent` is a palette role, resolved at render so it follows the scheme. */
+const KIND_META: Record<
+  AddKind,
+  {title: string; subtitle: string; verb: string; accent: ColorToken}
+> = {
   expense: {
     title: 'Add expense',
     subtitle: 'Keep track, build better habits',
     verb: 'Add expense',
-    accent: colors.roseLight,
+    accent: 'roseLight',
   },
   income: {
     title: 'Add income',
     subtitle: 'Track money coming in',
     verb: 'Add income',
-    accent: colors.mint,
+    accent: 'mint',
   },
-} as const;
+};
 
 const GLOW_HEIGHT = 300;
-const GLOW_IMAGE = linearGradient([colors.glow, colors.ground], 180);
 
 function sanitizeAmount(raw: string): string {
   const cleaned = raw.replace(/[^0-9.]/g, '');
@@ -144,6 +140,8 @@ export function AddTransactionScreen({
   onClose,
   onSaved,
 }: AddTransactionScreenProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const insets = useSafeAreaInsets();
   const {height} = useWindowDimensions();
   const compact = height < 740;
@@ -153,6 +151,8 @@ export function AddTransactionScreen({
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [customCategory, setCustomCategory] = useState('');
   const [note, setNote] = useState('');
+  const [repeatMonthly, setRepeatMonthly] = useState(false);
+  const [fixedCost, setFixedCost] = useState(false);
   const [occurredOn, setOccurredOn] = useState(() => new Date());
   const [dateOpen, setDateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -169,6 +169,8 @@ export function AddTransactionScreen({
     setCategoryId(null);
     setCustomCategory('');
     setNote(existing?.notes ?? '');
+    setRepeatMonthly(existing?.isRecurring ?? false);
+    setFixedCost(existing?.isFixed ?? false);
     setOccurredOn(
       existing ? dateFromCalendarISO(existing.transactionDate) : new Date(),
     );
@@ -306,6 +308,9 @@ export function AddTransactionScreen({
         categoryName: categoryRow?.name ?? categoryName,
         transactionDate: localDateISO(occurredOn),
         note,
+        isRecurring: repeatMonthly,
+        // A monthly expense is a bill already; it cannot also be a one-off.
+        isFixed: kind === 'expense' && !repeatMonthly && fixedCost,
         existing,
         oldCategoryName:
           dbCategories.find(row => row.id === existing?.categoryId)?.name ??
@@ -346,11 +351,10 @@ export function AddTransactionScreen({
       presentationStyle="fullScreen"
       onRequestClose={onClose}>
       <View style={styles.root}>
-        <StatusBar barStyle="light-content" />
-        <View
-          pointerEvents="none"
-          style={[styles.glow, {backgroundImage: GLOW_IMAGE}]}
+        <StatusBar
+          barStyle={scheme === 'light' ? 'dark-content' : 'light-content'}
         />
+        <View pointerEvents="none" style={styles.glow} />
         <KeyboardAvoidingView
           style={[styles.screen, {paddingTop: insets.top}]}
           behavior="padding"
@@ -411,7 +415,7 @@ export function AddTransactionScreen({
               <View style={styles.amountRow}>
                 <AppText
                   variant="numericHero"
-                  color={tone.accent}
+                  color={colors[tone.accent]}
                   style={{fontSize: heroSize, lineHeight: heroLine}}>
                   {currencySymbol}
                 </AppText>
@@ -533,6 +537,37 @@ export function AddTransactionScreen({
               underlineColorAndroid="transparent"
               style={styles.field}
             />
+
+            <View style={styles.repeatRow}>
+              <View style={styles.repeatCopy}>
+                <AppText variant="bodyStrong">Repeat every month</AppText>
+                <AppText variant="caption" color={colors.inkSecondary}>
+                  Adds this {kind} again on the same day each month.
+                </AppText>
+              </View>
+              <ToggleSwitch
+                value={repeatMonthly}
+                onValueChange={setRepeatMonthly}
+                accessibilityLabel="Repeat every month"
+              />
+            </View>
+
+            {kind === 'expense' && !repeatMonthly ? (
+              <View style={styles.repeatRow}>
+                <View style={styles.repeatCopy}>
+                  <AppText variant="bodyStrong">One-off fixed cost</AppText>
+                  <AppText variant="caption" color={colors.inkSecondary}>
+                    Fees, repairs and the like. Set aside from this month's budget instead of
+                    today's limit.
+                  </AppText>
+                </View>
+                <ToggleSwitch
+                  value={fixedCost}
+                  onValueChange={setFixedCost}
+                  accessibilityLabel="One-off fixed cost"
+                />
+              </View>
+            ) : null}
           </ScrollView>
 
           <View
@@ -571,7 +606,7 @@ export function AddTransactionScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(palette => ({
   root: {
     flex: 1,
     backgroundColor: colors.ground,
@@ -582,6 +617,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: GLOW_HEIGHT,
+    backgroundImage: linearGradient([colors.glow, colors.ground], 180),
   },
   screen: {
     flex: 1,
@@ -690,10 +726,22 @@ const styles = StyleSheet.create({
   },
   categoryTileOn: {
     borderColor: colors.lavender,
-    backgroundColor: colors.surfaceRaised,
+    // White on white in light; the designs fill the pick with the wash.
+    backgroundColor: palette === palettes.light ? colors.wash : colors.surfaceRaised,
   },
   field: {
     marginTop: spacing.md,
+  },
+  repeatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    marginTop: spacing.lg,
+  },
+  repeatCopy: {
+    flex: 1,
+    gap: 2,
   },
   dock: {
     paddingHorizontal: layout.screenPadding,
@@ -707,4 +755,4 @@ const styles = StyleSheet.create({
     top: -24,
     height: 24,
   },
-});
+}));

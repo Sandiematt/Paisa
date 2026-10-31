@@ -115,6 +115,8 @@ class UpiAccessibilityService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         event ?: return
+        // The user picked Shizuku and its capture is reading the UPI apps: stay idle so no screen is read twice.
+        if (DumpCaptureService.running) return
         val type = event.eventType
         val eventPackage = event.packageName?.toString()
         // A window being added or removed (a result window over the chat, or the app being covered) may carry no

@@ -42,7 +42,7 @@ function cell(value: string | number | null | undefined): string {
   return text;
 }
 
-function rowKind(row: TransactionRow): string {
+export function rowKind(row: TransactionRow): string {
   if (isOpeningBalance(row)) {
     return 'Opening balance';
   }

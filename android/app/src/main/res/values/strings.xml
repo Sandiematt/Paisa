@@ -1,10 +1,18 @@
 <resources>
     <string name="app_name">Paisa</string>
+    <!-- Resolved to the native fingerprint at build time (runtimeVersion policy "fingerprint"). -->
+    <string name="expo_runtime_version" translatable="false">file:fingerprint</string>
 
     <!-- UPI payment auto-tracking (accessibility service, notification listener, note prompt, spend guard). -->
     <string name="accessibility_service_label">Paisa auto-tracking</string>
     <string name="accessibility_service_description">Reads the on-screen text of Google Pay, PhonePe and Paytm only, to detect the amount, status and payee of a UPI payment so Paisa can track it for you. It does not read any other app or the UPI PIN screen, skips password fields, and keeps what it reads on this phone. If you have a monthly budget, it can show a warning over the Pay screen when a payment would go over today\'s allowance; its only action on screen is pressing Back when you tap Cancel on that warning.</string>
     <string name="notification_listener_label">Paisa payment check</string>
+
+    <!-- Shizuku tracking method (DumpCaptureService): its foreground notification. -->
+    <string name="capture_channel_name">UPI screen reading</string>
+    <string name="capture_notification_title">Paisa is tracking UPI payments</string>
+    <string name="capture_notification_text">Reads screens via Shizuku, only while Google Pay, PhonePe or Paytm is in front.</string>
+    <string name="capture_stop">Stop</string>
 
     <string name="save">Save</string>
 

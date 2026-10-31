@@ -4,7 +4,7 @@ import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import Svg, {Circle, Line, Path, Polyline} from 'react-native-svg';
 
-import {colors, radii} from '../../theme';
+import {colors, radii, useTheme} from '../../theme';
 
 type GlyphProps = {
   color: string;
@@ -24,6 +24,8 @@ export type NavGlyphProps = GlyphProps & {
  * Clean house silhouette with an arched doorway, crisp eaves, and active fill.
  */
 export function HomeGlyph({color, size = 22, active}: NavGlyphProps) {
+  // The active fill reads palette colours; follow a scheme switch.
+  useTheme();
   const roofH = size * 0.46;
   const bodyW = size * 0.72;
   const bodyH = size * 0.48;
@@ -85,6 +87,7 @@ export function HomeGlyph({color, size = 22, active}: NavGlyphProps) {
  * A stylish card/ledger with spending pulse lines and a corner indicator badge.
  */
 export function ActivityGlyph({color, size = 22, active}: NavGlyphProps) {
+  useTheme();
   return (
     <View
       style={{
@@ -157,6 +160,7 @@ export function ActivityGlyph({color, size = 22, active}: NavGlyphProps) {
  * Ascending analytics bar chart with an upward trend arrow trajectory.
  */
 export function InsightsGlyph({color, size = 22, active}: NavGlyphProps) {
+  useTheme();
   const barW = size * 0.18;
   return (
     <View

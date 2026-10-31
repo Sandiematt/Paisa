@@ -1,7 +1,7 @@
 import React from 'react';
-import {StyleProp, StyleSheet, ViewStyle} from 'react-native';
+import {StyleProp, ViewStyle} from 'react-native';
 
-import {colors, spacing} from '../../theme';
+import {colors, makeStyles, spacing} from '../../theme';
 import {AppText} from './AppText';
 import {PressableScale} from './PressableScale';
 
@@ -21,6 +21,7 @@ export function GhostButton({
   disabled = false,
   style,
 }: GhostButtonProps) {
+  const styles = useStyles();
   return (
     <PressableScale
       onPress={onPress}
@@ -40,7 +41,7 @@ export function GhostButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   disabled: {
     opacity: 0.5,
   },
@@ -50,4 +51,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

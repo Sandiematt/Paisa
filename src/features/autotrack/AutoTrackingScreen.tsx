@@ -1,28 +1,24 @@
 import React, {useEffect, useState} from 'react';
-import {Alert, Modal, ScrollView, StyleSheet, View} from 'react-native';
+import {Alert, Modal, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {NotePencil, ShieldWarning} from 'phosphor-react-native';
 
 import {
   AppText,
   BackButton,
   Screen,
   SectionTitle,
-  SettingsGroup,
-  SettingsRow,
   Stagger,
-  ToggleSwitch,
 } from '../../components/ui';
-import {colors, spacing} from '../../theme';
+import {isDeveloperModeEnabled} from '../../lib/autotrack/nativeUpiDetector';
+import {makeStyles, spacing} from '../../theme';
 import {ActivitySkeleton} from '../activity/ActivitySkeleton';
 import {useLoadingGate} from '../insights/loadingGate';
 import {AllowanceCard} from './AllowanceCard';
 import {useAutoTrack} from './AutoTrackProvider';
-import {autoTrackState, groupPayments} from './autoTrackFormat';
+import {AutoTrackSetup} from './AutoTrackSetup';
+import {groupPayments, lastDetectedAt} from './autoTrackFormat';
 import {DetectedPayments} from './DetectedPayments';
 import {DiagnosticsSection} from './DiagnosticsSection';
-import {PermissionsGroup} from './PermissionsGroup';
-import {StatusHero} from './StatusHero';
 
 type AutoTrackingScreenProps = {
   visible: boolean;
@@ -32,21 +28,25 @@ type AutoTrackingScreenProps = {
   onOpenBudget: () => void;
 };
 
-const ICON_SIZE = 24;
-
-/** Dashboard for UPI auto-tracking: status, permissions, allowance, toggles, payments. */
+/**
+ * Dashboard for UPI auto-tracking: the same setup as onboarding
+ * ([AutoTrackSetup]), then today's allowance and the detected payments.
+ * Auto-tracking stays optional: nothing here blocks the rest of Paisa.
+ */
 export function AutoTrackingScreen({
   visible,
   onClose,
   currencySymbol,
   onOpenBudget,
 }: AutoTrackingScreenProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const {
     supported,
     loading,
     status,
     refreshStatus,
+    setTrackingMethod,
     prefs,
     prefsLoaded,
     updatePrefs,
@@ -56,19 +56,21 @@ export function AutoTrackingScreen({
     allowance,
     syncNow,
     syncing,
-    lastSyncAt,
     keep,
     merge,
     clearHistory,
     shareReport,
   } = useAutoTrack();
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  // Diagnostics are for debugging only: shown when Developer options are on.
+  const [developerMode, setDeveloperMode] = useState(false);
   const showSkeleton = useLoadingGate(loading);
 
   // Permissions are granted in system settings, so look again on every open.
   useEffect(() => {
     if (visible) {
       refreshStatus();
+      isDeveloperModeEnabled().then(setDeveloperMode, () => setDeveloperMode(false));
     }
   }, [refreshStatus, visible]);
 
@@ -79,7 +81,7 @@ export function AutoTrackingScreen({
   }, [visible]);
 
   // The detector only streams its log while the panel is expanded.
-  const showLog = visible && diagnosticsOpen;
+  const showLog = visible && developerMode && diagnosticsOpen;
   useEffect(() => {
     if (!showLog) {
       return;
@@ -88,7 +90,6 @@ export function AutoTrackingScreen({
     return () => setLogStreaming(false);
   }, [setLogStreaming, showLog]);
 
-  const state = autoTrackState(supported, status);
   // Cheap (50 rows), and re-run each render so Today/Yesterday stay current.
   const groups = groupPayments(transactions);
 
@@ -147,25 +148,27 @@ export function AutoTrackingScreen({
           ]}
           showsVerticalScrollIndicator={false}>
           <Stagger index={0}>
-            <StatusHero
-              state={state}
+            <AutoTrackSetup
+              supported={supported}
               status={status}
+              prefs={prefs}
+              prefsDisabled={!prefsLoaded}
+              onPrefsChange={updatePrefs}
+              onChangeMethod={method => {
+                setTrackingMethod(method).catch(() => {});
+              }}
+              lastDetectedAt={lastDetectedAt(transactions)}
               syncing={syncing}
-              lastSyncAt={lastSyncAt}
               onSyncNow={() => {
                 syncNow().catch(() => {});
               }}
+              onDone={onClose}
             />
           </Stagger>
 
           {supported ? (
             <>
               <Stagger index={1}>
-                <SectionTitle title="Permissions" style={styles.sectionTitle} />
-                <PermissionsGroup status={status} />
-              </Stagger>
-
-              <Stagger index={2}>
                 <SectionTitle
                   title="Today's allowance"
                   style={styles.sectionTitle}
@@ -177,52 +180,7 @@ export function AutoTrackingScreen({
                 />
               </Stagger>
 
-              <Stagger index={3}>
-                <SectionTitle title="Settings" style={styles.sectionTitle} />
-                <SettingsGroup>
-                  <SettingsRow
-                    icon={<NotePencil size={ICON_SIZE} color={colors.text} />}
-                    label="Transaction notes"
-                    trailing={
-                      <ToggleSwitch
-                        value={prefs.notesEnabled}
-                        disabled={!prefsLoaded}
-                        onValueChange={next => updatePrefs({notesEnabled: next})}
-                        accessibilityLabel="Transaction notes"
-                      />
-                    }
-                  />
-                  <SettingsRow
-                    icon={<ShieldWarning size={ICON_SIZE} color={colors.text} />}
-                    label="Over-budget blocking"
-                    trailing={
-                      <ToggleSwitch
-                        value={prefs.blockingEnabled}
-                        disabled={!prefsLoaded}
-                        onValueChange={next => updatePrefs({blockingEnabled: next})}
-                        accessibilityLabel="Over-budget blocking"
-                      />
-                    }
-                  />
-                </SettingsGroup>
-                <AppText
-                  variant="caption"
-                  color={colors.muted}
-                  style={styles.footnote}>
-                  Ask what each detected payment was for. Notes appear on the
-                  payment in Activity.
-                </AppText>
-                <AppText
-                  variant="caption"
-                  color={colors.muted}
-                  style={styles.footnote}>
-                  Warn on the UPI Pay screen when a payment would go over
-                  today's limit. It can't stop a payment, but Cancel takes you
-                  back.
-                </AppText>
-              </Stagger>
-
-              <Stagger index={4}>
+              <Stagger index={2}>
                 <SectionTitle
                   title="Detected payments"
                   style={styles.sectionTitle}
@@ -230,17 +188,19 @@ export function AutoTrackingScreen({
                 {payments}
               </Stagger>
 
-              <Stagger index={5} style={styles.diagnostics}>
-                <DiagnosticsSection
-                  open={diagnosticsOpen}
-                  onToggle={() => setDiagnosticsOpen(value => !value)}
-                  log={log}
-                  onShareReport={() => {
-                    shareReport().catch(() => {});
-                  }}
-                  onClearHistory={confirmClear}
-                />
-              </Stagger>
+              {developerMode ? (
+                <Stagger index={3} style={styles.diagnostics}>
+                  <DiagnosticsSection
+                    open={diagnosticsOpen}
+                    onToggle={() => setDiagnosticsOpen(value => !value)}
+                    log={log}
+                    onShareReport={() => {
+                      shareReport().catch(() => {});
+                    }}
+                    onClearHistory={confirmClear}
+                  />
+                </Stagger>
+              ) : null}
             </>
           ) : null}
         </ScrollView>
@@ -249,7 +209,7 @@ export function AutoTrackingScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   screen: {
     flex: 1,
   },
@@ -275,11 +235,7 @@ const styles = StyleSheet.create({
     paddingTop: 26,
     paddingBottom: 12,
   },
-  footnote: {
-    paddingHorizontal: 4,
-    paddingTop: 10,
-  },
   diagnostics: {
     marginTop: 26,
   },
-});
+}));

@@ -9,6 +9,7 @@ import {LoginScreen} from '../features/auth/LoginScreen';
 import {SplashScreen} from '../features/auth/SplashScreen';
 import {OnboardingFlow} from '../features/onboarding/OnboardingFlow';
 import {OnboardingDraft} from '../features/onboarding/types';
+import {useBiometricLock} from '../features/security/BiometricLockProvider';
 import {MainTabs} from '../features/tabs/MainTabs';
 import {
   draftFromUser,
@@ -17,10 +18,52 @@ import {
   saveProfile,
   SaveProfileOptions,
 } from '../lib/profileStore';
+import {
+  addScheduledSetup,
+  applyScheduledSetup,
+  markSetupCurrent,
+  saveScheduledSetup,
+  scheduleFromDraft,
+  scheduledFromUser,
+  setupIsCurrent,
+  setupVersionOf,
+} from '../lib/scheduledSetup';
+import {editableBills} from '../lib/bills';
+import {
+  loadBudgetFlow,
+  migrateLegacyBudget,
+  pendingFlowFor,
+  saveBudgetFlow,
+  startNewAccountFlow,
+} from '../lib/budgetFlow';
+import {loadTransactions, localDateISO} from '../lib/transactionsStore';
+import {KnownBill} from '../features/onboarding/steps/BudgetStep';
 import {travel} from '../theme';
 import {RouteName} from './routes';
-import {HOME_KEY, LOADING_KEY, SETUP_KEY, swapKeyFor} from './swapKey';
+import {
+  HOME_KEY,
+  LOADING_KEY,
+  SETUP_KEY,
+  UPGRADE_KEY,
+  swapKeyFor,
+} from './swapKey';
 import {useRouter} from './useRouter';
+
+/**
+ * The one-time move of an account that used Paisa before to the rolling
+ * budget (handbook 5.3). Runs once: an account already moved is left alone.
+ */
+async function moveToRollingBudget(
+  userId: string,
+  payday: number | null | undefined,
+  startNow = false,
+) {
+  const current = await loadBudgetFlow(userId);
+  const next = migrateLegacyBudget(current, localDateISO(), payday, startNow);
+  if (next) {
+    await saveBudgetFlow(userId, next);
+  }
+}
 
 export function RootNavigator() {
   const router = useRouter('splash');
@@ -38,10 +81,11 @@ export function RootNavigator() {
     cancelPasswordReset,
   } = useAuth();
   const {supported: autoTrackSupported, stagePrefs} = useAutoTrack();
+  const {stageEnabled: stageAppLock, enabled: appLockOn} = useBiometricLock();
 
   // The onboarding toggles belong to the account, which may not exist yet:
   // staged, they replace the defaults when this user's prefs first load.
-  const stageAutoTrack = useCallback(
+  const stageAccountPrefs = useCallback(
     (completed: OnboardingDraft) => {
       if (autoTrackSupported) {
         stagePrefs({
@@ -49,12 +93,21 @@ export function RootNavigator() {
           blockingEnabled: completed.autoTrackBlocking ?? true,
         });
       }
+      if (completed.appLock === 'pin' && completed.appLockPin) {
+        stageAppLock({method: 'pin', pin: completed.appLockPin});
+      } else if (completed.appLock === 'biometric') {
+        stageAppLock({method: 'biometric'});
+      }
     },
-    [autoTrackSupported, stagePrefs],
+    [autoTrackSupported, stageAppLock, stagePrefs],
   );
   const [draft, setDraft] = useState<OnboardingDraft | null>(null);
   const [profileReady, setProfileReady] = useState(false);
   const [needsSetup, setNeedsSetup] = useState(false);
+  // An account from before payday, bills and app lock: asked those once.
+  const [needsUpgrade, setNeedsUpgrade] = useState(false);
+  // Bills an account catching up already has, so its budget is checked against them.
+  const [knownBills, setKnownBills] = useState<KnownBill[] | undefined>(undefined);
   const hadUser = useRef(false);
   const googleBusy = useRef(false);
 
@@ -66,12 +119,16 @@ export function RootNavigator() {
       hadUser.current = false;
       setDraft(null);
       setNeedsSetup(false);
+      setNeedsUpgrade(false);
       setProfileReady(true);
       router.reset('splash');
       return;
     }
 
     hadUser.current = true;
+
+    // Salary and bills picked at sign-up start once their first date comes.
+    applyScheduledSetup(user).catch(() => {});
 
     let cancelled = false;
     setProfileReady(false);
@@ -85,9 +142,28 @@ export function RootNavigator() {
       // failed attempt) — check that the required `goal` field was set.
       const provider = user.app_metadata?.provider;
       const profileIncomplete = !stored || !stored.goal;
-      setNeedsSetup(profileIncomplete && !!provider && provider !== 'email');
+      const owesSetup = profileIncomplete && !!provider && provider !== 'email';
+      setNeedsSetup(owesSetup);
+      // Someone still in first-time setup gets the new steps there.
+      const upgrade = !owesSetup && !setupIsCurrent(user);
+      setNeedsUpgrade(upgrade);
       setDraft(draftFromUser(user, stored));
       setProfileReady(true);
+      if (upgrade) {
+        loadTransactions()
+          .then(rows => {
+            if (!cancelled) {
+              setKnownBills(
+                editableBills(rows, scheduledFromUser(user)).map(bill => ({
+                  key: bill.key,
+                  label: bill.label,
+                  amount: bill.amount,
+                })),
+              );
+            }
+          })
+          .catch(() => {});
+      }
     });
 
     return () => {
@@ -99,7 +175,7 @@ export function RootNavigator() {
 
   const handleComplete = useCallback(
     async (completed: OnboardingDraft) => {
-      stageAutoTrack(completed);
+      stageAccountPrefs(completed);
       const password = completed.password ?? '';
       const result = await signUp(
         completed.email,
@@ -121,6 +197,15 @@ export function RootNavigator() {
       if (result.userId) {
         try {
           await saveProfile(result.userId, completed);
+          const today = localDateISO();
+          await saveBudgetFlow(
+            result.userId,
+            startNewAccountFlow(
+              pendingFlowFor(completed.alreadySpent, today, completed.payday, completed.startNow === true),
+              today,
+              completed.payday,
+            ),
+          ).catch(() => {});
         } catch {
           Alert.alert(
             'Account created',
@@ -128,9 +213,9 @@ export function RootNavigator() {
           );
         }
       }
-      setDraft(completed);
+      setDraft({...completed, appLockPin: undefined});
     },
-    [router, signUp, stageAutoTrack],
+    [router, signUp, stageAccountPrefs],
   );
 
   const handleSignIn = useCallback(
@@ -182,20 +267,69 @@ export function RootNavigator() {
       if (!user?.id) {
         return;
       }
-      stageAutoTrack(completed);
+      stageAccountPrefs(completed);
       try {
         await saveProfile(user.id, completed);
+        await saveScheduledSetup(scheduleFromDraft(completed));
+        await markSetupCurrent();
+        const today = localDateISO();
+        await saveBudgetFlow(
+          user.id,
+          startNewAccountFlow(
+            pendingFlowFor(completed.alreadySpent, today, completed.payday, completed.startNow === true),
+            today,
+            completed.payday,
+          ),
+        );
       } catch {
         Alert.alert(
           'Could not save to Supabase',
           'Your setup is on this device. Check your connection, then save your profile again from Profile.',
         );
       }
-      setDraft(completed);
+      setDraft({...completed, appLockPin: undefined});
       setNeedsSetup(false);
     },
-    [stageAutoTrack, user?.id],
+    [stageAccountPrefs, user?.id],
   );
+
+  // The catch-up flow saves into the existing account: payday and budget on
+  // the profile, bills and salary added to what is scheduled, the lock as set.
+  const handleUpgrade = useCallback(
+    async (completed: OnboardingDraft) => {
+      if (!user) {
+        return;
+      }
+      if (completed.appLock === 'pin' && completed.appLockPin) {
+        stageAppLock({method: 'pin', pin: completed.appLockPin});
+      } else if (completed.appLock === 'biometric') {
+        stageAppLock({method: 'biometric'});
+      }
+      try {
+        await saveProfile(user.id, completed);
+        await addScheduledSetup(user, scheduleFromDraft(completed));
+        await moveToRollingBudget(user.id, completed.payday, completed.startNow === true);
+        await markSetupCurrent();
+      } catch {
+        Alert.alert(
+          'Could not save to Supabase',
+          'Some of this setup may not be saved. Check your connection, then set it again from Profile.',
+        );
+      }
+      setDraft({...completed, appLockPin: undefined});
+      setNeedsUpgrade(false);
+    },
+    [stageAppLock, user],
+  );
+
+  // "Not now" keeps every value as it is and still moves the account over.
+  const dismissUpgrade = useCallback(() => {
+    setNeedsUpgrade(false);
+    if (user) {
+      moveToRollingBudget(user.id, draft?.payday ?? null).catch(() => {});
+    }
+    markSetupCurrent().catch(() => {});
+  }, [draft?.payday, user]);
 
   const handleProfileSave = useCallback(
     async (updated: OnboardingDraft, options?: SaveProfileOptions) => {
@@ -222,6 +356,19 @@ export function RootNavigator() {
       switch (name) {
         case LOADING_KEY:
           return <SplashScreen ready={false} onGetStarted={() => {}} />;
+        case UPGRADE_KEY:
+          return draft ? (
+            <OnboardingFlow
+              mode="upgrade"
+              initialDraft={draft}
+              passwordless
+              skipLock={appLockOn}
+              upgradeFrom={setupVersionOf(user)}
+              knownBills={knownBills}
+              onComplete={handleUpgrade}
+              onDismiss={dismissUpgrade}
+            />
+          ) : null;
         case SETUP_KEY:
           return draft ? (
             <OnboardingFlow
@@ -286,8 +433,11 @@ export function RootNavigator() {
       }
     },
     [
+      appLockOn,
+      dismissUpgrade,
       draft,
       handleComplete,
+      handleUpgrade,
       handleForgot,
       handleVerifyResetCode,
       handleUpdatePassword,
@@ -296,8 +446,10 @@ export function RootNavigator() {
       handleOAuthSetup,
       handleProfileSave,
       handleSignIn,
+      knownBills,
       router,
       signOut,
+      user,
     ],
   );
 
@@ -309,6 +461,7 @@ export function RootNavigator() {
         profileReady,
         hasDraft: Boolean(draft),
         needsSetup,
+        needsUpgrade,
         route: router.route,
       })}
       direction={router.direction}

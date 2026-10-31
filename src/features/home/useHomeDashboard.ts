@@ -1,10 +1,17 @@
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {useAuth} from '../auth/AuthProvider';
+import {BillMonth, copySkipper, loadBillMonths} from '../../lib/billMonths';
+import {cycleRangeFor} from '../../lib/budgetEngine';
+import {BudgetFlowState, loadBudgetFlow} from '../../lib/budgetFlow';
+import {BudgetHistory, EMPTY_HISTORY, loadBudgetHistory} from '../../lib/budgetMonths';
 import {CategoryRow, loadCategories} from '../../lib/categoriesStore';
+import {saveDueRecurring} from '../../lib/recurring';
+import {applyScheduledSetup} from '../../lib/scheduledSetup';
 import {
   TransactionRow,
   loadTransactions,
+  needsOpeningSeed,
   removeLedgerRow,
   seedOpeningBalance,
   upsertLedgerRow,
@@ -19,12 +26,26 @@ import {
 
 type DashboardStatus = 'loading' | 'ready' | 'error';
 
+/**
+ * The stored budget facts beside the ledger: bill statuses, finished months
+ * and where the account's tracking starts. `flow` is undefined until loaded
+ * and null when the database cannot hold it yet.
+ */
+export type BudgetData = {
+  billMonths: BillMonth[];
+  history: BudgetHistory;
+  flow: BudgetFlowState | null | undefined;
+};
+
+const NO_BUDGET_DATA: BudgetData = {billMonths: [], history: EMPTY_HISTORY, flow: undefined};
+
 export function useHomeDashboard(
   refreshNonce: number,
   openingAmount = 0,
   plan: MoneyPlan = EMPTY_MONEY_PLAN,
 ) {
   const {user} = useAuth();
+  const payday = plan.payday ?? null;
   const [range, setRange] = useState<HomeRange>('month');
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
@@ -34,8 +55,16 @@ export function useHomeDashboard(
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   // When the fetch behind `transactions` started; 0 until the first load.
   const [ledgerAsOf, setLedgerAsOf] = useState(0);
+  const [budgetData, setBudgetData] = useState<BudgetData>(NO_BUDGET_DATA);
+  // Reloads overlap (every auto-track sync starts one), so only the latest
+  // may apply its result.
+  const latestRequest = useRef(0);
+  // Bumped by local edits: a reload that started before one would undo it.
+  const localEdits = useRef(0);
+  const reloadRef = useRef<() => Promise<void>>(async () => {});
 
   const upsertLocal = useCallback((row: TransactionRow) => {
+    localEdits.current += 1;
     setTransactions(current => upsertLedgerRow(current, row));
     setUpdatedAt(new Date());
     setStatus('ready');
@@ -43,36 +72,94 @@ export function useHomeDashboard(
   }, []);
 
   const removeLocal = useCallback((id: string) => {
+    localEdits.current += 1;
     setTransactions(current => removeLedgerRow(current, id));
     setUpdatedAt(new Date());
   }, []);
 
   const reload = useCallback(async () => {
+    const request = ++latestRequest.current;
     if (!user) {
       setCategories([]);
       setTransactions([]);
+      setBudgetData(NO_BUDGET_DATA);
       setStatus('ready');
       setRefreshing(false);
       return;
     }
 
+    const editsAtStart = localEdits.current;
+    let editedMeanwhile = false;
     setRefreshing(true);
     setError(null);
-    const fetchStartedAt = Date.now();
+    let fetchStartedAt = Date.now();
     try {
-      if (openingAmount > 0) {
-        await seedOpeningBalance(openingAmount);
+      // Bills and salary picked at sign-up whose first date has come become
+      // ledger rows (their monthly copies follow below) on every refresh, not
+      // only at launch.
+      try {
+        await applyScheduledSetup(user);
+      } catch {
+        // Tried again on the next reload.
       }
-      const [nextCategories, nextTransactions] = await Promise.all([
+      fetchStartedAt = Date.now();
+      // Bill statuses decide which due-day copies may be added below, so
+      // when they cannot be read no copy is added this time round.
+      const [nextCategories, loaded, bills, history, flow] = await Promise.all([
         loadCategories(),
         loadTransactions(),
+        loadBillMonths().catch(() => null),
+        loadBudgetHistory().catch(() => null),
+        loadBudgetFlow(user.id).catch(() => undefined),
       ]);
+      let nextTransactions = loaded;
+      // Only touches the opening balance when it is missing or out of place.
+      if (openingAmount > 0 && needsOpeningSeed(loaded)) {
+        await seedOpeningBalance(openingAmount);
+        fetchStartedAt = Date.now();
+        nextTransactions = await loadTransactions();
+      }
+      // Monthly repeats that came due since the last visit become real rows.
+      // A failure here must not hide the ledger that did load.
+      try {
+        if (
+          bills &&
+          (await saveDueRecurring(
+            nextTransactions,
+            user.id,
+            undefined,
+            copySkipper(bills.months, date => cycleRangeFor(date, payday).start),
+          )) > 0
+        ) {
+          fetchStartedAt = Date.now();
+          nextTransactions = await loadTransactions();
+        }
+      } catch {
+        // Tried again on the next reload.
+      }
+      // A newer reload started meanwhile: its ledger wins.
+      if (request !== latestRequest.current) {
+        return;
+      }
+      // An edit made meanwhile is not in this ledger: fetch again instead.
+      if (localEdits.current !== editsAtStart) {
+        editedMeanwhile = true;
+        return;
+      }
       setCategories(nextCategories);
       setTransactions(nextTransactions);
+      setBudgetData(current => ({
+        billMonths: bills?.months ?? current.billMonths,
+        history: history ?? current.history,
+        flow: flow === undefined ? current.flow : flow,
+      }));
       setLedgerAsOf(fetchStartedAt);
       setUpdatedAt(new Date());
       setStatus('ready');
     } catch (caught) {
+      if (request !== latestRequest.current) {
+        return;
+      }
       setError(
         caught instanceof Error
           ? caught.message
@@ -80,9 +167,15 @@ export function useHomeDashboard(
       );
       setStatus('error');
     } finally {
-      setRefreshing(false);
+      if (request === latestRequest.current && !editedMeanwhile) {
+        setRefreshing(false);
+      }
     }
-  }, [openingAmount, user]);
+    if (editedMeanwhile) {
+      await reloadRef.current();
+    }
+  }, [openingAmount, payday, user]);
+  reloadRef.current = reload;
 
   useEffect(() => {
     reload();
@@ -104,6 +197,7 @@ export function useHomeDashboard(
     error,
     updatedAt,
     ledgerAsOf,
+    budgetData,
     reload,
     upsertLocal,
     removeLocal,

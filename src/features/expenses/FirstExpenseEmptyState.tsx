@@ -1,5 +1,5 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
 import {
   AppText,
@@ -9,7 +9,7 @@ import {
   Screen,
   Stagger,
 } from '../../components/ui';
-import {colors, layout, radii, spacing} from '../../theme';
+import {colors, layout, makeStyles, palettes, radii, spacing} from '../../theme';
 import {CategoryIconSquare} from '../add/categoryIcons';
 import {categoryById, currencyByCode} from '../onboarding/constants';
 import {OnboardingDraft} from '../onboarding/types';
@@ -31,6 +31,7 @@ export function FirstExpenseEmptyState({
   onAddExpense,
   inTabs = false,
 }: FirstExpenseEmptyStateProps) {
+  const styles = useStyles();
   const currency = currencyByCode(draft.currency);
   const firstName = draft.name.trim().split(' ')[0] || 'there';
   const previewCategories = draft.categoryIds.slice(0, 4);
@@ -99,7 +100,7 @@ export function FirstExpenseEmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(palette => ({
   root: {
     flex: 1,
     paddingHorizontal: layout.screenPadding,
@@ -142,6 +143,6 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 6,
     borderRadius: radii.pill,
-    backgroundColor: colors.line,
+    backgroundColor: palette === palettes.light ? colors.canvasSunk : colors.line,
   },
-});
+}));

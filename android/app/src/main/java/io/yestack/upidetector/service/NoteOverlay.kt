@@ -1,6 +1,6 @@
 package io.yestack.upidetector.service
 
-import android.accessibilityservice.AccessibilityService
+import android.content.Context
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Build
@@ -29,14 +29,18 @@ import io.yestack.upidetector.ui.OverlayStyle
  * "What was this for?" over whatever is on screen, drawn by the accessibility service as an overlay
  * ([WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY], like [SpendGuard]'s warning). Starting an activity from
  * the service in the background can be blocked by Android, or land behind the UPI app, without any error; an overlay
- * is shown at once.
+ * is shown at once. Shizuku capture ([DumpCaptureService]) draws it as [WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY]
+ * instead ([windowType]), with the overlay permission granted through Shizuku.
  *
  * One card: the payment, a text box (keyboard up at once) and Skip / Save. Save (or the keyboard's Done) attaches the
  * note; Skip or Back leaves the record as it is. State lives in [NotePromptFlow]; every callback goes through it and is
  * guarded, so a repeated tap or a late callback does nothing and an error is logged instead of crashing.
  * Main thread only.
  */
-class NoteOverlay(private val service: AccessibilityService) {
+class NoteOverlay(
+    private val service: Context,
+    private val windowType: Int = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+) {
 
     private val windowManager = service.getSystemService(WindowManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
@@ -182,7 +186,7 @@ class NoteOverlay(private val service: AccessibilityService) {
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            windowType,
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT,
         ).apply {

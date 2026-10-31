@@ -1,12 +1,13 @@
 import React from 'react';
-import {Alert} from 'react-native';
+import {Alert, AppState} from 'react-native';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 
-import {PressableScale, SecondaryButton, ToggleSwitch} from '../src/components/ui';
+import {PressableScale, PrimaryButton, SecondaryButton, ToggleSwitch} from '../src/components/ui';
 import {AutoTrackingScreen} from '../src/features/autotrack/AutoTrackingScreen';
 import {
   autoTrackState,
   groupPayments,
+  lastDetectedLabel,
   paymentPill,
 } from '../src/features/autotrack/autoTrackFormat';
 import {
@@ -36,9 +37,17 @@ jest.mock('../src/features/autotrack/AutoTrackProvider', () => ({
 
 const mockOpenAccessibility = jest.fn();
 const mockOpenNotificationAccess = jest.fn();
+const mockOpenShizuku = jest.fn();
+const mockRequestShizukuPermission = jest.fn();
+const mockStartShizukuCapture = jest.fn();
+const mockDeveloperMode = jest.fn(() => Promise.resolve(true));
 jest.mock('../src/lib/autotrack/nativeUpiDetector', () => ({
   openAccessibilitySettings: () => mockOpenAccessibility(),
   openNotificationAccessSettings: () => mockOpenNotificationAccess(),
+  openShizuku: () => mockOpenShizuku(),
+  requestShizukuPermission: () => mockRequestShizukuPermission(),
+  startShizukuCapture: () => mockStartShizukuCapture(),
+  isDeveloperModeEnabled: () => mockDeveloperMode(),
 }));
 
 /** All rendered text plus accessibility labels, flattened. */
@@ -117,19 +126,30 @@ const BOTH_ON: DetectorStatus = {
   accessibilityEnabled: true,
   notificationAccessEnabled: true,
   installedApps: [GPAY, PHONEPE],
+  trackingMethod: 'accessibility',
+  shizukuState: 'not_installed',
+  shizukuCaptureRunning: false,
+};
+
+const SHIZUKU_ON: DetectorStatus = {
+  ...BOTH_ON,
+  accessibilityEnabled: false,
+  trackingMethod: 'shizuku',
+  shizukuState: 'ready',
+  shizukuCaptureRunning: true,
 };
 
 const ALLOWANCE: DailyAllowance = {
   date: '2026-10-14',
-  weekStart: '2026-10-12',
-  weekEnd: '2026-10-18',
-  weekBudget: 9450,
-  spentWeekBeforeToday: 450,
-  daysLeftInWeek: 5,
+  cycleStart: '2026-10-01',
+  cycleEnd: '2026-10-31',
+  daysLeft: 18,
+  budget: 40000,
+  spentBeforeToday: 7600,
   dailyLimit: 1800,
   spentToday: 600,
   remainingToday: 1200,
-  remainingWeek: 8400,
+  remainingMonth: 31800,
 };
 
 const PAYMENTS: DetectedTxn[] = [
@@ -154,6 +174,7 @@ function autoTrack(overrides: Record<string, unknown> = {}) {
     loading: false,
     status: BOTH_ON,
     refreshStatus: jest.fn(async () => {}),
+    setTrackingMethod: jest.fn(async () => {}),
     prefs: {notesEnabled: true, blockingEnabled: true},
     prefsLoaded: true,
     updatePrefs: jest.fn(),
@@ -204,6 +225,16 @@ describe('AutoTrackingScreen', () => {
     mockUseAutoTrack.mockReset();
     mockOpenAccessibility.mockReset();
     mockOpenNotificationAccess.mockReset();
+    mockDeveloperMode.mockImplementation(() => Promise.resolve(true));
+  });
+
+  it('hides Diagnostics unless Developer options are on', async () => {
+    mockDeveloperMode.mockImplementation(() => Promise.resolve(false));
+    mockUseAutoTrack.mockReturnValue(autoTrack({lastSyncAt: TODAY_NOON}));
+    const tree = await render(screen());
+    const text = textOf(tree);
+    expect(text).toContain('Detected payments');
+    expect(text).not.toContain('Diagnostics');
   });
 
   it('renders every section with data, including a flagged payment', async () => {
@@ -213,16 +244,20 @@ describe('AutoTrackingScreen', () => {
     const text = textOf(tree);
 
     // Hero.
-    expect(text).toContain('Active');
+    expect(text).toContain('Auto-tracking status: Active');
+    expect(text).toContain('Never miss a UPI expense again.');
     expect(text).toContain('Google Pay installed');
     expect(text).toContain('Paytm not installed');
-    expect(text).toContain('Last synced 12:00 PM');
+    expect(text).toContain('Last payment detected 12:00 PM');
+    expect(text).not.toContain('Last synced');
     expect(text).toContain('Sync now');
     expect(value.refreshStatus).toHaveBeenCalled();
 
-    // Permissions.
-    expect(text).toContain('Accessibility service, on');
-    expect(text).toContain('Notification access, on');
+    // Setup is done: the success card replaces the steps, and the method choice stays out of sight.
+    expect(text).toContain("You're all set!");
+    expect(text).toContain('Payment tracking, on');
+    expect(text).toContain('Payment alerts, on');
+    expect(text).not.toContain('Step 1,');
 
     // Allowance.
     expect(text).toContain("Today's allowance");
@@ -231,17 +266,11 @@ describe('AutoTrackingScreen', () => {
     expect(text).toContain('₹600');
     expect(text).toContain('Left today');
     expect(text).toContain('₹1,200');
-    expect(text).toContain('Week budget ₹9,450 · 5 days left');
+    expect(text).toContain('₹31,800 left this month · 18 days left');
 
     // Settings and footnotes.
-    expect(text).toContain('Transaction notes');
-    expect(text).toContain('Over-budget blocking');
-    expect(text).toContain(
-      'Ask what each detected payment was for. Notes appear on the payment in Activity.',
-    );
-    expect(text).toContain(
-      "Warn on the UPI Pay screen when a payment would go over today's limit. It can't stop a payment, but Cancel takes you back.",
-    );
+    expect(text).toContain('Ask for a note');
+    expect(text).toContain('Warn before overspending');
 
     // Payments, grouped by day.
     expect(text).toContain('Today');
@@ -282,27 +311,127 @@ describe('AutoTrackingScreen', () => {
     expect(value.merge).toHaveBeenCalledWith(3);
   });
 
-  it('asks for permission and opens the right system settings', async () => {
+  it('guides setup with numbered steps and opens the right settings', async () => {
     mockUseAutoTrack.mockReturnValue(
       autoTrack({
-        status: {accessibilityEnabled: false, notificationAccessEnabled: true, installedApps: []},
+        status: {...BOTH_ON, accessibilityEnabled: false, notificationAccessEnabled: false},
       }),
     );
     const tree = await render(screen());
     const text = textOf(tree);
-    expect(text).toContain('Needs permission');
-    expect(text).toContain('Enable');
-    expect(text).toContain('Accessibility service, off');
-    expect(text).toContain('Notification access, on');
+    expect(text).toContain('Auto-tracking status: Setup required');
+    expect(text).toContain('Step 1, Allow screen reading, required, not done');
+    expect(text).toContain('Step 2, Payment alerts, optional, not done');
+    expect(text).toContain('Never your UPI PIN.');
+    expect(text).not.toContain("You're all set!");
 
     await act(async () => {
-      byLabel(tree, 'Accessibility service, off').props.onPress();
+      byLabel(tree, 'Turn on: Allow screen reading').props.onPress();
     });
     expect(mockOpenAccessibility).toHaveBeenCalledTimes(1);
     await act(async () => {
-      byLabel(tree, 'Notification access, on').props.onPress();
+      byLabel(tree, 'Allow: Payment alerts').props.onPress();
     });
     expect(mockOpenNotificationAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts payment alerts as optional: active without them, offered as an extra', async () => {
+    mockUseAutoTrack.mockReturnValue(
+      autoTrack({status: {...BOTH_ON, notificationAccessEnabled: false}}),
+    );
+    const tree = await render(screen());
+    const text = textOf(tree);
+    expect(text).toContain('Auto-tracking status: Active');
+    expect(text).toContain("You're all set!");
+    expect(text).toContain('Payment alerts, off');
+    expect(text).toContain('Step 2, Payment alerts, optional, not done');
+    expect(text).not.toContain('Step 1,');
+  });
+
+  it('returns to the app from the success card', async () => {
+    mockUseAutoTrack.mockReturnValue(autoTrack());
+    const onClose = jest.fn();
+    const tree = await render(screen(jest.fn(), onClose));
+    await act(async () => {
+      tree.root
+        .findAllByType(PrimaryButton)
+        .find(node => node.props.label === 'Back to Paisa')!
+        .props.onPress();
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows what to try when a step is still off after coming back', async () => {
+    let onAppState: ((state: string) => void) | undefined;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_type: string, handler: (state: string) => void) => {
+      onAppState = handler;
+      return {remove: jest.fn()};
+    }) as unknown as typeof AppState.addEventListener);
+    mockUseAutoTrack.mockReturnValue(
+      autoTrack({status: {...BOTH_ON, accessibilityEnabled: false}}),
+    );
+    const tree = await render(screen());
+    expect(textOf(tree)).not.toContain('Still off');
+    await act(async () => {
+      byLabel(tree, 'Turn on: Allow screen reading').props.onPress();
+    });
+    await act(async () => {
+      onAppState?.('background');
+      onAppState?.('active');
+    });
+    const text = textOf(tree);
+    expect(text).toContain('Still off.');
+    expect(text).toContain('Allow restricted settings');
+  });
+
+  it('switches the setup method from the switch at the top', async () => {
+    const value = autoTrack({status: {...BOTH_ON, accessibilityEnabled: false}});
+    mockUseAutoTrack.mockReturnValue(value);
+    const tree = await render(screen());
+    const segment = (label: string) =>
+      tree.root.findAll(
+        node => node.props.accessibilityLabel === label && typeof node.props.onPress === 'function',
+      )[0];
+    expect(segment('Standard setup')).toBeDefined();
+    await act(async () => {
+      segment('Shizuku setup').props.onPress();
+    });
+    expect(value.setTrackingMethod).toHaveBeenCalledWith('shizuku');
+    // The method in use is not set again.
+    await act(async () => {
+      segment('Standard setup').props.onPress();
+    });
+    expect(value.setTrackingMethod).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the Shizuku method as active', async () => {
+    mockUseAutoTrack.mockReturnValue(autoTrack({status: SHIZUKU_ON}));
+    const tree = await render(screen());
+    const text = textOf(tree);
+    expect(text).toContain('Auto-tracking status: Active');
+    expect(text).toContain("You're all set!");
+  });
+
+  it('walks through each Shizuku setup step, and shows a stopped capture as paused', async () => {
+    const steps: [Partial<DetectorStatus>, string, string, jest.Mock][] = [
+      [{shizukuState: 'not_installed'}, 'Setup required', 'Get Shizuku', mockOpenShizuku],
+      [{shizukuState: 'not_running'}, 'Setup required', 'Open Shizuku', mockOpenShizuku],
+      [{shizukuState: 'too_old'}, 'Setup required', 'Update', mockOpenShizuku],
+      [{shizukuState: 'no_permission'}, 'Setup required', 'Allow', mockRequestShizukuPermission],
+      [{shizukuState: 'ready'}, 'Paused', 'Resume', mockStartShizukuCapture],
+    ];
+    for (const [patch, badge, action, call] of steps) {
+      mockUseAutoTrack.mockReturnValue(
+        autoTrack({status: {...SHIZUKU_ON, shizukuCaptureRunning: false, ...patch}}),
+      );
+      const tree = await render(screen());
+      expect(textOf(tree)).toContain(`Auto-tracking status: ${badge}`);
+      call.mockClear();
+      await act(async () => {
+        byLabel(tree, `${action}: Connect Shizuku`).props.onPress();
+      });
+      expect(call).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('explains Android-only support and renders nothing interactive when unsupported', async () => {
@@ -313,7 +442,7 @@ describe('AutoTrackingScreen', () => {
     const text = textOf(tree);
     expect(text).toContain('Not available');
     expect(text).toContain('Android only');
-    for (const absent of ['Permissions', 'Sync now', 'Transaction notes', 'Detected payments', 'Diagnostics']) {
+    for (const absent of ['Shizuku', 'Sync now', 'Ask for a note', 'Detected payments', 'Diagnostics']) {
       expect(text).not.toContain(absent);
     }
     expect(tree.root.findAllByType(ToggleSwitch)).toHaveLength(0);
@@ -332,7 +461,7 @@ describe('AutoTrackingScreen', () => {
 
   it('shows "Over by" when today is past the limit', async () => {
     mockUseAutoTrack.mockReturnValue(
-      autoTrack({allowance: {...ALLOWANCE, spentToday: 2000, remainingToday: -200, remainingWeek: 7000}}),
+      autoTrack({allowance: {...ALLOWANCE, spentToday: 2000, remainingToday: -200, remainingMonth: 30400}}),
     );
     const tree = await render(screen());
     const text = textOf(tree);
@@ -348,16 +477,16 @@ describe('AutoTrackingScreen', () => {
     const toggle = (label: string) =>
       tree.root.findAllByType(ToggleSwitch).find(node => node.props.accessibilityLabel === label)!;
 
-    expect(toggle('Transaction notes').props.value).toBe(true);
-    expect(toggle('Over-budget blocking').props.value).toBe(false);
+    expect(toggle('Ask for a note').props.value).toBe(true);
+    expect(toggle('Warn before overspending').props.value).toBe(false);
 
     await act(async () => {
-      toggle('Transaction notes').props.onValueChange(false);
+      toggle('Ask for a note').props.onValueChange(false);
     });
     expect(value.updatePrefs).toHaveBeenLastCalledWith({notesEnabled: false});
 
     await act(async () => {
-      toggle('Over-budget blocking').props.onValueChange(true);
+      toggle('Warn before overspending').props.onValueChange(true);
     });
     expect(value.updatePrefs).toHaveBeenLastCalledWith({blockingEnabled: true});
     expect(value.updatePrefs).toHaveBeenCalledTimes(2);
@@ -374,7 +503,7 @@ describe('AutoTrackingScreen', () => {
 
     mockUseAutoTrack.mockReturnValue(autoTrack({syncing: true}));
     const busy = await render(screen());
-    expect(textOf(busy)).toContain('Syncing…');
+    expect(textOf(busy)).toContain('Saving payments to Activity…');
     const button = busy.root.findAll(
       node => node.props.accessibilityLabel === 'Sync now' && node.props.accessibilityState != null,
     )[0];
@@ -500,11 +629,33 @@ describe('AutoTrackingScreen log streaming and toggles', () => {
 });
 
 describe('autoTrackFormat', () => {
-  it('derives the state from platform and permissions', () => {
+  it('derives the state from platform and the required step only', () => {
     expect(autoTrackState(false, null)).toBe('unavailable');
     expect(autoTrackState(true, null)).toBe('checking');
     expect(autoTrackState(true, BOTH_ON)).toBe('active');
-    expect(autoTrackState(true, {...BOTH_ON, notificationAccessEnabled: false})).toBe('needs-permission');
+    // Payment alerts are optional.
+    expect(autoTrackState(true, {...BOTH_ON, notificationAccessEnabled: false})).toBe('active');
+    expect(autoTrackState(true, {...BOTH_ON, accessibilityEnabled: false})).toBe('setup-required');
+  });
+
+  it('counts Shizuku capture, not the accessibility service, when Shizuku is picked', () => {
+    expect(autoTrackState(true, SHIZUKU_ON)).toBe('active');
+    expect(autoTrackState(true, {...SHIZUKU_ON, accessibilityEnabled: true, shizukuCaptureRunning: false})).toBe(
+      'paused',
+    );
+    expect(autoTrackState(true, {...SHIZUKU_ON, shizukuState: 'not_running', shizukuCaptureRunning: false})).toBe(
+      'setup-required',
+    );
+    expect(autoTrackState(true, {...BOTH_ON, shizukuCaptureRunning: true, accessibilityEnabled: false})).toBe(
+      'setup-required',
+    );
+  });
+
+  it('labels the last detected payment', () => {
+    const now = new Date(TODAY_NOON + 3600_000);
+    expect(lastDetectedLabel(null, now)).toBe('No payments detected yet');
+    expect(lastDetectedLabel(TODAY_NOON, now)).toBe('Last payment detected 12:00 PM');
+    expect(lastDetectedLabel(YESTERDAY_NOON, now)).toMatch(/^Last payment detected \w{3} \d{1,2}, 12:00 PM$/);
   });
 
   it('maps a payment to its status pill', () => {

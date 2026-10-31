@@ -1,11 +1,19 @@
 import React, {useEffect, useRef} from 'react';
-import {AccessibilityInfo, Animated, StyleSheet, View} from 'react-native';
+import {AccessibilityInfo, Animated, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import Svg, {Path} from 'react-native-svg';
 
 import {AppText} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
-import {colors, duration, easing, radii, shadows, spring} from '../../theme';
+import {
+  colors,
+  duration,
+  easing,
+  makeStyles,
+  radii,
+  shadows,
+  spring,
+} from '../../theme';
 
 export type SavedEvent = {
   /** Bumps on every save so the same toast can replay. */
@@ -34,6 +42,7 @@ const AnimatedPath = Animated.createAnimatedComponent(Path);
  * never takes touches, so nothing waits on it.
  */
 export function SavedToast({event}: SavedToastProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
   const show = useRef(new Animated.Value(0)).current;
@@ -118,7 +127,7 @@ export function SavedToast({event}: SavedToastProps) {
               <AnimatedPath
                 d={CHECK}
                 fill="none"
-                stroke={event.tone === 'income' ? colors.onInk : colors.text}
+                stroke={event.tone === 'income' ? colors.onInk : colors.onAccent}
                 strokeWidth={2.6}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -141,7 +150,7 @@ export function SavedToast({event}: SavedToastProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   dock: {
     position: 'absolute',
     left: 0,
@@ -180,4 +189,4 @@ const styles = StyleSheet.create({
   text: {
     flexShrink: 1,
   },
-});
+}));

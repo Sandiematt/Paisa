@@ -1,6 +1,9 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
-import {DeviceMobile, Lightning, WarningCircle} from 'phosphor-react-native';
+import { View } from 'react-native';
+import { DeviceMobile } from 'phosphor-react-native/src/icons/DeviceMobile';
+import { Lightning } from 'phosphor-react-native/src/icons/Lightning';
+import { PauseCircle } from 'phosphor-react-native/src/icons/PauseCircle';
+import { WarningCircle } from 'phosphor-react-native/src/icons/WarningCircle';
 
 import {
   AppText,
@@ -8,80 +11,70 @@ import {
   GradientIconSquare,
   GradientView,
 } from '../../components/ui';
-import {
-  DetectorStatus,
-  UPI_APP_NAMES,
-} from '../../lib/autotrack/types';
-import {colors, radii, spacing, withAlpha} from '../../theme';
-import {AutoTrackState, lastSyncLabel} from './autoTrackFormat';
+import { DetectorStatus, UPI_APP_NAMES } from '../../lib/autotrack/types';
+import { colors, makeStyles, radii, spacing, withAlpha } from '../../theme';
+import type { ColorToken } from '../../theme';
+import { AutoTrackState, lastDetectedLabel } from './autoTrackFormat';
 
 type StatusHeroProps = {
   state: AutoTrackState;
   status: DetectorStatus | null;
-  syncing: boolean;
-  lastSyncAt: number | null;
-  onSyncNow: () => void;
+  /** When the newest payment was detected; null when none yet. Left out (no footer) during onboarding. */
+  lastDetectedAt?: number | null;
+  syncing?: boolean;
+  onSyncNow?: () => void;
 };
 
-const COPY: Record<
-  AutoTrackState,
-  {title: string; body: string; tone: string}
-> = {
-  checking: {
-    title: 'Checking…',
-    body: 'Looking at which permissions are on.',
-    tone: colors.text,
-  },
-  active: {
-    title: 'Active',
-    body: 'Paisa is watching for UPI payments and saves them to Activity.',
-    tone: colors.mint,
-  },
-  'needs-permission': {
-    title: 'Needs permission',
-    body: 'Turn on both permissions below so Paisa can see your UPI payments.',
-    tone: colors.gold,
-  },
-  unavailable: {
-    title: 'Not available',
-    body: 'Auto-tracking works on Android only. On this device, add payments by hand.',
-    tone: colors.text,
-  },
+const BADGE: Record<AutoTrackState, { label: string; tone: ColorToken }> = {
+  checking: { label: 'Checking…', tone: 'muted' },
+  active: { label: 'Active', tone: 'mint' },
+  paused: { label: 'Paused', tone: 'lavender' },
+  'setup-required': { label: 'Setup required', tone: 'gold' },
+  unavailable: { label: 'Not available', tone: 'muted' },
 };
 
-function HeroIcon({state}: {state: AutoTrackState}) {
+function HeroIcon({ state }: { state: AutoTrackState }) {
   if (state === 'unavailable') {
     return (
-      <GradientIconSquare size={48} gradient="savings">
-        <DeviceMobile size={24} color={colors.text} weight="fill" />
+      <GradientIconSquare size={40} gradient="savings">
+        <DeviceMobile size={20} color={colors.onAccent} weight="fill" />
       </GradientIconSquare>
     );
   }
-  if (state === 'needs-permission') {
+  if (state === 'setup-required') {
     return (
-      <GradientIconSquare size={48} gradient="rose">
-        <WarningCircle size={24} color={colors.text} weight="fill" />
+      <GradientIconSquare size={40} gradient="rose">
+        <WarningCircle size={20} color={colors.onAccent} weight="fill" />
+      </GradientIconSquare>
+    );
+  }
+  if (state === 'paused') {
+    return (
+      <GradientIconSquare size={40} gradient="savings">
+        <PauseCircle size={20} color={colors.onAccent} weight="fill" />
       </GradientIconSquare>
     );
   }
   return (
-    <GradientIconSquare size={48} glow={state === 'active'}>
-      <Lightning size={24} color={colors.text} weight="fill" />
+    <GradientIconSquare size={40} glow={state === 'active'}>
+      <Lightning size={20} color={colors.onAccent} weight="fill" />
     </GradientIconSquare>
   );
 }
 
-/** Status hero: state, supported UPI apps found on this phone, last sync. */
+/** What auto-tracking does, where it stands, the supported apps and the last detection. */
 export function StatusHero({
   state,
   status,
-  syncing,
-  lastSyncAt,
+  lastDetectedAt,
+  syncing = false,
   onSyncNow,
 }: StatusHeroProps) {
-  const copy = COPY[state];
+  const styles = useStyles();
+  const badge = BADGE[state];
   const installed = new Set(status?.installedApps ?? []);
-  const interactive = state !== 'unavailable';
+  const unavailable = state === 'unavailable';
+  const badgeColor = colors[badge.tone];
 
   return (
     <GradientView
@@ -89,25 +82,38 @@ export function StatusHero({
       angle={160}
       positions={[0, 0.7]}
       style={styles.card}>
-      <View style={styles.main}>
+      <View style={styles.top}>
         <HeroIcon state={state} />
-        <View style={styles.text}>
-          <AppText variant="label" color={colors.muted}>
-            UPI auto-tracking
-          </AppText>
-          <AppText
-            variant="heading"
-            color={copy.tone}
-            accessibilityRole="header">
-            {copy.title}
+        <View
+          style={[
+            styles.badge,
+            {
+              borderColor: withAlpha(badgeColor, 0.4),
+              backgroundColor: withAlpha(badgeColor, 0.12),
+            },
+          ]}
+          accessible
+          accessibilityLabel={`Auto-tracking status: ${badge.label}`}>
+          <View style={[styles.badgeDot, { backgroundColor: badgeColor }]} />
+          <AppText variant="label" color={badgeColor}>
+            {badge.label}
           </AppText>
         </View>
       </View>
+
+      <AppText
+        variant="title"
+        accessibilityRole="header"
+        style={styles.heading}>
+        Never miss a UPI expense again.
+      </AppText>
       <AppText variant="label" color={colors.inkSecondary} style={styles.body}>
-        {copy.body}
+        {unavailable
+          ? 'Auto-tracking works on Android only. On this device, add payments by hand.'
+          : 'Paisa adds your UPI payments for you.'}
       </AppText>
 
-      {interactive ? (
+      {unavailable ? null : (
         <>
           <View
             style={styles.chips}
@@ -115,7 +121,9 @@ export function StatusHero({
             accessibilityLabel={`Supported apps: ${Object.entries(UPI_APP_NAMES)
               .map(
                 ([pkg, name]) =>
-                  `${name} ${installed.has(pkg) ? 'installed' : 'not installed'}`,
+                  `${name} ${
+                    installed.has(pkg) ? 'installed' : 'not installed'
+                  }`,
               )
               .join(', ')}`}>
             {Object.entries(UPI_APP_NAMES).map(([pkg, name]) => {
@@ -133,30 +141,36 @@ export function StatusHero({
             })}
           </View>
 
-          <View style={styles.divider} />
-          <View style={styles.syncRow}>
-            <AppText
-              variant="label"
-              color={colors.muted}
-              style={styles.syncText}
-              numberOfLines={1}>
-              {syncing ? 'Syncing…' : lastSyncLabel(lastSyncAt)}
-            </AppText>
-            <GhostButton
-              label="Sync now"
-              tone="ink"
-              disabled={syncing}
-              onPress={onSyncNow}
-              style={styles.syncButton}
-            />
-          </View>
+          {lastDetectedAt === undefined ? null : (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.footer}>
+                <AppText
+                  variant="label"
+                  color={colors.muted}
+                  style={styles.footerText}
+                  numberOfLines={1}>
+                  {syncing
+                    ? 'Saving payments to Activity…'
+                    : lastDetectedLabel(lastDetectedAt)}
+                </AppText>
+                <GhostButton
+                  label="Sync now"
+                  tone="ink"
+                  disabled={syncing}
+                  onPress={() => onSyncNow?.()}
+                  style={styles.syncButton}
+                />
+              </View>
+            </>
+          )}
         </>
-      ) : null}
+      )}
     </GradientView>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   card: {
     borderRadius: radii.cardHero,
     borderWidth: 1,
@@ -164,23 +178,37 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     padding: 18,
   },
-  main: {
+  top: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
-  text: {
-    flex: 1,
-    gap: 2,
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+  },
+  badgeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  heading: {
+    marginTop: spacing.md,
   },
   body: {
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
   },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
   chip: {
     flexDirection: 'row',
@@ -211,17 +239,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line,
     marginTop: spacing.lg,
   },
-  syncRow: {
+  footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.md,
     marginTop: spacing.xs,
   },
-  syncText: {
+  footerText: {
     flex: 1,
   },
   syncButton: {
     marginRight: -spacing.lg,
   },
-});
+}));

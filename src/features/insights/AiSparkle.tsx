@@ -1,9 +1,9 @@
 import React, {useEffect, useRef} from 'react';
 import {Animated, StyleSheet, View} from 'react-native';
-import {Sparkle} from 'phosphor-react-native';
+import {Sparkle} from 'phosphor-react-native/src/icons/Sparkle';
 
 import {useReducedMotion} from '../../hooks/useReducedMotion';
-import {colors, easing} from '../../theme';
+import {brand, colors, easing} from '../../theme';
 
 type AiSparkleProps = {
   size?: number;
@@ -16,7 +16,8 @@ const REST_MS = 3200;
 /**
  * The AI summary glyph. Every few seconds it gives one soft twinkle while two
  * tiny sparkles blink beside it, then it rests. A single native-driver loop
- * drives all three, so it never wakes the JS thread.
+ * drives all three, so it never wakes the JS thread. It sits on a gradient
+ * icon square, so its colours are scheme-independent.
  */
 export function AiSparkle({size = 18}: AiSparkleProps) {
   const reducedMotion = useReducedMotion();
@@ -62,13 +63,13 @@ export function AiSparkle({size = 18}: AiSparkleProps) {
   return (
     <View style={{width: size, height: size}}>
       <Animated.View style={main}>
-        <Sparkle size={size} color={colors.text} weight="fill" />
+        <Sparkle size={size} color={colors.onAccent} weight="fill" />
       </Animated.View>
       <Animated.View pointerEvents="none" style={[styles.topRight, blink(0.15, 0.6)]}>
-        <Sparkle size={mini} color={colors.text} weight="fill" />
+        <Sparkle size={mini} color={colors.onAccent} weight="fill" />
       </Animated.View>
       <Animated.View pointerEvents="none" style={[styles.bottomLeft, blink(0.4, 0.9)]}>
-        <Sparkle size={mini - 1} color={colors.lavender} weight="fill" />
+        <Sparkle size={mini - 1} color={brand.lavender} weight="fill" />
       </Animated.View>
     </View>
   );

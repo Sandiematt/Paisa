@@ -81,7 +81,10 @@ describe('budget alert planning', () => {
   test('exceeds only once spending passes the budget', () => {
     const result = plan(10000.01);
     expect(result.fire?.kind).toBe('budget_exceeded');
-    expect(result.fire?.body).toContain('₹10,000.01');
+    expect(result.fire?.title).toBe("You've gone over this month's budget");
+    expect(result.fire?.body).toBe(
+      '₹0.01 over so far. Increase your budget to keep your daily limits on track.',
+    );
   });
 
   test('a jump past the budget shows only the exceeded alert but claims both', () => {
@@ -129,6 +132,20 @@ describe('budget alert planning', () => {
 
   test('ignores a missing budget', () => {
     expect(plan(500, {budget: 0})).toEqual({fire: null, consume: []});
+  });
+
+  test('a payday cycle keeps one key across the calendar month change', () => {
+    const result = planBudgetAlert({
+      userId: USER,
+      now: new Date(2026, 10, 3, 12),
+      spent: 12000,
+      budget: 10000,
+      period: '2026-10',
+      currencySymbol: '₹',
+      prefs: ON,
+      handled: new Set(),
+    });
+    expect(result.fire?.id).toBe('budget:user-1:2026-10:100');
   });
 
   test('period keys are zero padded calendar months', () => {

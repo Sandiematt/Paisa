@@ -27,7 +27,7 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -49,11 +49,42 @@ android {
 
     namespace "com.expense_tracker"
 
+    // A release APK built for sharing holds one phone architecture, not all
+    // four: app-arm64-v8a-release.apk for nearly every phone today, and
+    // app-armeabi-v7a-release.apk for old 32-bit ones. The emulator-only x86
+    // builds are left out. Debug runs and the Play bundle (bundleRelease,
+    // where Play splits by architecture itself) are not affected.
+    def apkRelease = gradle.startParameter.taskNames.any {
+        def task = it.toLowerCase()
+        task.contains('assemble') && task.contains('release')
+    }
+    splits {
+        abi {
+            enable apkRelease
+            reset()
+            include 'arm64-v8a', 'armeabi-v7a'
+            universalApk false
+        }
+    }
+    // The same APK keeps its native libraries compressed, so the file shared
+    // is about half the size (they are unpacked once on install). The Play
+    // bundle keeps them uncompressed, which Play prefers.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = apkRelease
+        }
+    }
+
     sourceSets {
         main {
             // UPI detector core (pure Kotlin, no android.*): compiled straight into the app, never modified here.
+            // The Shizuku method's two extra core files (DumpScript, UiDump) live in the app's own core package.
             java.srcDirs += ['../../backend_service/core/src/main/kotlin']
         }
+    }
+    buildFeatures {
+        // IShellService: the Shizuku user service that reads UPI app screens as the shell user.
+        aidl true
     }
     defaultConfig {
         applicationId "com.expense_tracker"
@@ -79,16 +110,31 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // Private upload key, never committed: set PAISA_UPLOAD_STORE_FILE, PAISA_UPLOAD_STORE_PASSWORD,
+        // PAISA_UPLOAD_KEY_ALIAS and PAISA_UPLOAD_KEY_PASSWORD in ~/.gradle/gradle.properties.
+        // See https://reactnative.dev/docs/signed-apk-android.
+        if (project.hasProperty('PAISA_UPLOAD_STORE_FILE')) {
+            release {
+                storeFile file(PAISA_UPLOAD_STORE_FILE)
+                storePassword PAISA_UPLOAD_STORE_PASSWORD
+                keyAlias PAISA_UPLOAD_KEY_ALIAS
+                keyPassword PAISA_UPLOAD_KEY_PASSWORD
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Never the public debug key: without the upload key properties the release build is left unsigned.
+            if (project.hasProperty('PAISA_UPLOAD_STORE_FILE')) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig null
+            }
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
@@ -103,6 +149,10 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // Shizuku tracking method only: reads UPI app screens as the shell user, no root. Brings only androidx.annotation.
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 
     testImplementation 'junit:junit:4.13.2'
     // android.jar stubs org.json in unit tests; the real implementation is needed to read the shared test vectors.

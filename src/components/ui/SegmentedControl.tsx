@@ -4,12 +4,20 @@ import {
   LayoutChangeEvent,
   Pressable,
   StyleProp,
-  StyleSheet,
   View,
   ViewStyle,
 } from 'react-native';
 
-import {colors, duration, easing, fonts, radii} from '../../theme';
+import {
+  colors,
+  duration,
+  easing,
+  fonts,
+  makeStyles,
+  radii,
+  shadows,
+  useTheme,
+} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 
 export type SegmentedOption<T extends string> = {
@@ -30,9 +38,10 @@ const PAD = 4;
 const SEGMENT_HEIGHT = 36;
 
 /**
- * Week / Month / Year style control. `surface` track with a `line` border and
- * 4px padding; the active segment is a `text`-coloured pill with a bold
- * `ground` label that slides between options.
+ * Week / Month / Year style control with a `line` border and 4px padding.
+ * Dark: `surface` track, the active segment a `text`-coloured pill with a bold
+ * `ground` label. Light: sunk track, a white raised pill with a bold `text`
+ * label. The pill slides between options.
  *
  *   <SegmentedControl
  *     options={[{value: 'week', label: 'Week'}, {value: 'month', label: 'Month'}]}
@@ -47,6 +56,8 @@ export function SegmentedControl<T extends string>({
   style,
   accessibilityLabel,
 }: SegmentedControlProps<T>) {
+  const styles = useStyles();
+  const light = useTheme().scheme === 'light';
   const reducedMotion = useReducedMotion();
   const [innerWidth, setInnerWidth] = useState(0);
   const index = Math.max(
@@ -73,7 +84,7 @@ export function SegmentedControl<T extends string>({
 
   return (
     <View
-      style={[styles.track, style]}
+      style={[styles.track, light && styles.trackLight, style]}
       accessibilityRole="tablist"
       accessibilityLabel={accessibilityLabel}>
       <View style={styles.inner} onLayout={onLayout}>
@@ -82,6 +93,7 @@ export function SegmentedControl<T extends string>({
             pointerEvents="none"
             style={[
               styles.thumb,
+              light && styles.thumbLight,
               {width: segmentWidth, transform: [{translateX}]},
             ]}
           />
@@ -101,6 +113,7 @@ export function SegmentedControl<T extends string>({
                 style={[
                   styles.label,
                   active ? styles.labelActive : styles.labelIdle,
+                  active && light && styles.labelActiveLight,
                 ]}>
                 {option.label}
               </Animated.Text>
@@ -112,13 +125,16 @@ export function SegmentedControl<T extends string>({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   track: {
     padding: PAD - 1,
     borderRadius: radii.pill,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.surface,
+  },
+  trackLight: {
+    backgroundColor: colors.canvasSunk,
   },
   inner: {
     flexDirection: 'row',
@@ -131,6 +147,10 @@ const styles = StyleSheet.create({
     left: 0,
     borderRadius: radii.pill,
     backgroundColor: colors.text,
+  },
+  thumbLight: {
+    backgroundColor: colors.surface,
+    ...shadows.cardSoft,
   },
   segment: {
     flex: 1,
@@ -146,8 +166,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.jakartaBold,
     color: colors.ground,
   },
+  labelActiveLight: {
+    color: colors.text,
+  },
   labelIdle: {
     fontFamily: fonts.jakartaMedium,
     color: colors.muted,
   },
-});
+}));

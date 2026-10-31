@@ -1,7 +1,7 @@
 import React from 'react';
-import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {StyleProp, View, ViewStyle} from 'react-native';
 
-import {colors, spacing} from '../../theme';
+import {colors, makeStyles, spacing} from '../../theme';
 import {AppText} from './AppText';
 
 type DividerLabelProps = {
@@ -11,6 +11,7 @@ type DividerLabelProps = {
 
 /** Hairline with a word set into it, separating two ways of doing one thing. */
 export function DividerLabel({label, style}: DividerLabelProps) {
+  const styles = useStyles();
   return (
     <View style={[styles.root, style]}>
       <View style={styles.rule} />
@@ -22,7 +23,7 @@ export function DividerLabel({label, style}: DividerLabelProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -35,4 +36,4 @@ const styles = StyleSheet.create({
   label: {
     marginHorizontal: spacing.md,
   },
-});
+}));

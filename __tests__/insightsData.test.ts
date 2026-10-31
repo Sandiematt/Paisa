@@ -1,6 +1,5 @@
 import {categoryVisual} from '../src/features/insights/categoryVisual';
 import {buildInsightsDataFromResponse} from '../src/features/insights/mapInsights';
-import {insightsData} from '../src/features/insights/insightsPlaceholder';
 import {buildSpendingBars} from '../src/features/insights/insightsMath';
 import type {InsightsResponse} from '../src/lib/supabase/insights';
 
@@ -156,27 +155,46 @@ describe('buildInsightsDataFromResponse', () => {
   });
 });
 
-describe('insightsData (example data)', () => {
-  const now = new Date(2026, 9, 24);
+describe('buildInsightsDataFromResponse before tracking started', () => {
+  const fresh = (overrides: Partial<InsightsResponse['stats']> = {}) =>
+    response({
+      periodComparison: {
+        currentTotal: 1000,
+        previousTotal: 0,
+        changeAmount: 1000,
+        changePercent: null,
+        direction: 'up',
+        changeKind: 'new',
+      },
+      dailyAverage: 41.67,
+      trendBuckets: [
+        {date: '2026-10-01', amount: 0, label: 'W1'},
+        {date: '2026-10-08', amount: 0, label: 'W2'},
+        {date: '2026-10-15', amount: 400, label: 'W3'},
+        {date: '2026-10-22', amount: 600, label: 'W4'},
+      ],
+      ...overrides,
+    });
 
-  it.each(['week', 'month', 'year'] as const)('is internally consistent for %s', period => {
-    const data = insightsData('₹', period, now);
-    const bucketTotal = data.buckets.reduce((sum, bucket) => sum + bucket.amount, 0);
-    expect(data.period).toBe(period);
-    expect(data.referenceDate).toBe('2026-10-24');
-    expect(data.currentTotal).toBe(bucketTotal);
-    expect(data.buckets.length).toBeGreaterThan(0);
-    expect(data.categories.length).toBeGreaterThan(0);
-    expect(data.generatedAt).toBeNull();
-    expect(data.deltaAmount).toBe(Math.abs(data.previousTotal - data.currentTotal));
+  it('has no previous period, movements or empty leading weeks for a user who joined this month', () => {
+    // Joined Sat 17 Oct; the reference date is 24 Oct.
+    const data = buildInsightsDataFromResponse(fresh(), null, '2026-10-17');
+    expect(data.hasPrevious).toBe(false);
+    expect(data.movements).toEqual([]);
+    expect(data.buckets.map(bucket => bucket.label)).toEqual(['W3', 'W4']);
+    // 1,000 over the 8 days tracked, not the 24 days of the month.
+    expect(data.dailyAverage).toBe(125);
   });
 
-  it('uses the right bucket shape per period', () => {
-    expect(insightsData('₹', 'week', now).buckets).toHaveLength(7);
-    // 24 October: four 7-day chunks.
-    expect(insightsData('₹', 'month', now).buckets.map(b => b.label)).toEqual(['W1', 'W2', 'W3', 'W4']);
-    // January to October.
-    expect(insightsData('₹', 'year', now).buckets).toHaveLength(10);
+  it('keeps the comparison once the previous period was tracked', () => {
+    const data = buildInsightsDataFromResponse(fresh(), null, '2026-09-10');
+    expect(data.hasPrevious).toBe(true);
+    expect(data.buckets).toHaveLength(4);
+    expect(data.dailyAverage).toBe(41.67);
+  });
+
+  it('keeps everything without a tracking date', () => {
+    expect(buildInsightsDataFromResponse(fresh()).hasPrevious).toBe(true);
   });
 });
 

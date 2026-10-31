@@ -1,24 +1,22 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Animated, RefreshControl, ScrollView, Share, StyleSheet, Text, View} from 'react-native';
-import {
-  ArrowsClockwise,
-  Airplane,
-  BookOpen,
-  Bag,
-  ChartBar,
-  Car,
-  Equals,
-  ForkKnife,
-  Heartbeat,
-  House,
-  Lightning,
-  ShareFat,
-  ShoppingCart,
-  Tag,
-  TrendDown,
-  TrendUp,
-  WifiSlash,
-} from 'phosphor-react-native';
+import {Animated, RefreshControl, ScrollView, Share, Text, View} from 'react-native';
+import {ArrowsClockwise} from 'phosphor-react-native/src/icons/ArrowsClockwise';
+import {Airplane} from 'phosphor-react-native/src/icons/Airplane';
+import {BookOpen} from 'phosphor-react-native/src/icons/BookOpen';
+import {Bag} from 'phosphor-react-native/src/icons/Bag';
+import {ChartBar} from 'phosphor-react-native/src/icons/ChartBar';
+import {Car} from 'phosphor-react-native/src/icons/Car';
+import {Equals} from 'phosphor-react-native/src/icons/Equals';
+import {ForkKnife} from 'phosphor-react-native/src/icons/ForkKnife';
+import {Heartbeat} from 'phosphor-react-native/src/icons/Heartbeat';
+import {House} from 'phosphor-react-native/src/icons/House';
+import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
+import {ShareFat} from 'phosphor-react-native/src/icons/ShareFat';
+import {ShoppingCart} from 'phosphor-react-native/src/icons/ShoppingCart';
+import {Tag} from 'phosphor-react-native/src/icons/Tag';
+import {TrendDown} from 'phosphor-react-native/src/icons/TrendDown';
+import {TrendUp} from 'phosphor-react-native/src/icons/TrendUp';
+import {WifiSlash} from 'phosphor-react-native/src/icons/WifiSlash';
 import type {Icon} from 'phosphor-react-native';
 
 import {
@@ -35,7 +33,17 @@ import {
 } from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
-import {colors, fonts, layout, linearGradient, typography, withAlpha} from '../../theme';
+import {
+  colors,
+  fonts,
+  layout,
+  linearGradient,
+  makeStyles,
+  palettes,
+  typography,
+  useTheme,
+  withAlpha,
+} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {CategoryIconKey, CategoryTone, TONE_GRADIENT, categoryVisual} from './categoryVisual';
 import {
@@ -46,12 +54,12 @@ import {
   compareFractions,
   describeDelta,
   isOfflineError,
+  localIsoDate,
   periodLabels,
   previousPeriodLabel,
   updatedLabel,
 } from './insightsMath';
-import {InsightsData, InsightsPeriod, insightsData} from './insightsPlaceholder';
-import type {ChangeKind} from './insightsTypes';
+import type {ChangeKind, InsightsData, InsightsPeriod} from './insightsTypes';
 import {buildInsightsDataFromResponse} from './mapInsights';
 import {AiSparkle} from './AiSparkle';
 import {useTutorialTarget} from '../tutorial/TutorialProvider';
@@ -63,6 +71,8 @@ export type InsightsScreenProps = {
   currencySymbol: string;
   /** Profile budget, used for the pace line only when the backend reports none. */
   monthlyBudget?: number | null;
+  /** `YYYY-MM-DD` the user started tracking; earlier periods have no data. */
+  trackingSince?: string | null;
   /** Kept so MainTabs wiring is unchanged. The DX header no longer shows an avatar. */
   name?: string;
   avatarUrl?: string;
@@ -76,7 +86,12 @@ const PERIOD_OPTIONS = [
 ] as const;
 
 const COLLAPSED_CATEGORIES = 6;
-const GOLD_GRADIENT = [colors.gold, '#B8862F'] as const;
+/** Brand gold stops, the same in both schemes (like the other icon gradients). */
+const GOLD_GRADIENT = [palettes.dark.gold, '#B8862F'] as const;
+/** Dark glyph on the fixed gold gradient. */
+const ON_GOLD = palettes.dark.ground;
+/** Previous-period comparison bar on light: a neutral gray, softer than `muted` text. */
+const PREVIOUS_BAR_LIGHT = '#A4A3AE';
 
 const CATEGORY_ICONS: Record<CategoryIconKey, Icon> = {
   house: House,
@@ -92,13 +107,21 @@ const CATEGORY_ICONS: Record<CategoryIconKey, Icon> = {
   tag: Tag,
 };
 
-const TONE_BAR_COLOR: Record<CategoryTone, string> = {
-  primary: colors.lavender,
-  rose: colors.roseLight,
-  savings: colors.sky,
-  strip: colors.violet,
-  gold: colors.gold,
-};
+/** Read at render so the bar follows the active scheme (deeper accents on light). */
+function toneBarColor(tone: CategoryTone): string {
+  switch (tone) {
+    case 'primary':
+      return colors.lavender;
+    case 'rose':
+      return colors.roseLight;
+    case 'savings':
+      return colors.sky;
+    case 'strip':
+      return colors.violet;
+    case 'gold':
+      return colors.gold;
+  }
+}
 
 /**
  * Deterministic hero font size from the rendered length. `adjustsFontSizeToFit`
@@ -132,12 +155,13 @@ function CategoryIconSquare({tone, icon, size = 40}: {tone: CategoryTone; icon: 
       size={size}
       gradient={gradient ?? 'primary'}
       style={gradient ? undefined : {backgroundImage: linearGradient(GOLD_GRADIENT, 140)}}>
-      <IconComponent size={19} color={onGold ? colors.ground : colors.text} weight="fill" />
+      <IconComponent size={19} color={onGold ? ON_GOLD : colors.onAccent} weight="fill" />
     </GradientIconSquare>
   );
 }
 
 function Header({canShare, onShare}: {canShare: boolean; onShare: () => void}) {
+  const styles = useStyles();
   // Insights is a root tab, so there is nothing to go back to: no back button.
   return (
     <View style={styles.header}>
@@ -161,6 +185,8 @@ function Header({canShare, onShare}: {canShare: boolean; onShare: () => void}) {
 }
 
 function SummaryCard({data, labels, currencySymbol}: {data: InsightsData; labels: PeriodLabels; currencySymbol: string}) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const money = (value: number) => formatMoney(value, currencySymbol, {decimals: 0});
   const delta = describeDelta(data, labels.deltaTarget, money);
   const deltaColor = toneColor(delta.tone);
@@ -199,16 +225,23 @@ function SummaryCard({data, labels, currencySymbol}: {data: InsightsData; labels
           </View>
           <ProgressBar progress={fractions.current} gradient={[colors.violet, colors.lavender]} height={10} />
         </View>
-        <View style={styles.compareRow}>
-          <View style={styles.compareHead}>
-            <Text style={styles.compareLabel}>
-              {labels.previousLabel}
-              {labels.previousQualifier ? <Text style={styles.compareQualifier}>{`  ${labels.previousQualifier}`}</Text> : null}
-            </Text>
-            <Text style={styles.compareValue}>{money(data.previousTotal)}</Text>
+        {/* Before tracking started there is no data, so no "₹0" row to compare with. */}
+        {data.hasPrevious ? (
+          <View style={styles.compareRow}>
+            <View style={styles.compareHead}>
+              <Text style={styles.compareLabel}>
+                {labels.previousLabel}
+                {labels.previousQualifier ? <Text style={styles.compareQualifier}>{`  ${labels.previousQualifier}`}</Text> : null}
+              </Text>
+              <Text style={styles.compareValue}>{money(data.previousTotal)}</Text>
+            </View>
+            <ProgressBar
+              progress={fractions.previous}
+              color={scheme === 'light' ? PREVIOUS_BAR_LIGHT : colors.muted}
+              height={10}
+            />
           </View>
-          <ProgressBar progress={fractions.previous} color={colors.muted} height={10} />
-        </View>
+        ) : null}
       </View>
 
       <View style={styles.stats}>
@@ -230,6 +263,7 @@ function SummaryCard({data, labels, currencySymbol}: {data: InsightsData; labels
 }
 
 function PaceLegend({label}: {label: string}) {
+  const styles = useStyles();
   return (
     <View style={styles.legend}>
       <View style={styles.legendDash} />
@@ -239,6 +273,7 @@ function PaceLegend({label}: {label: string}) {
 }
 
 function BarsCard({data, labels, currencySymbol}: {data: InsightsData; labels: PeriodLabels; currencySymbol: string}) {
+  const styles = useStyles();
   const model = useMemo(() => buildSpendingBars(data), [data]);
   const money = (value: number) => formatMoney(value, currencySymbol, {decimals: 0});
   const paceLabel =
@@ -256,6 +291,7 @@ function BarsCard({data, labels, currencySymbol}: {data: InsightsData; labels: P
 }
 
 function CategoriesCard({data, currencySymbol}: {data: InsightsData; currencySymbol: string}) {
+  const styles = useStyles();
   const [expanded, setExpanded] = useState(false);
   const rows = useMemo(() => buildCategoryRows(data.categories), [data.categories]);
   if (rows.length === 0) return null;
@@ -285,7 +321,7 @@ function CategoriesCard({data, currencySymbol}: {data: InsightsData; currencySym
                   </Text>
                   <Text style={styles.categoryAmount}>{amount}</Text>
                 </View>
-                <ProgressBar progress={row.fraction} color={TONE_BAR_COLOR[visual.tone]} height={4} />
+                <ProgressBar progress={row.fraction} color={toneBarColor(visual.tone)} height={4} />
               </View>
             </View>
           );
@@ -306,6 +342,7 @@ function CategoriesCard({data, currencySymbol}: {data: InsightsData; currencySym
 }
 
 function AiSummaryCard({data}: {data: InsightsData}) {
+  const styles = useStyles();
   return (
     <GradientView gradient={[colors.surfaceRaised, colors.surface]} angle={160} style={[styles.aiCard, styles.sectionGap]}>
       <View style={styles.aiHeader}>
@@ -337,6 +374,7 @@ function AiSummaryCard({data}: {data: InsightsData}) {
 }
 
 function MovementPanel({data, currencySymbol, caption}: {data: InsightsData; currencySymbol: string; caption: string}) {
+  const styles = useStyles();
   if (data.movements.length === 0) return null;
   return (
     <>
@@ -384,10 +422,11 @@ function MovementPanel({data, currencySymbol, caption}: {data: InsightsData; cur
 }
 
 function EmptyCard({labels}: {labels: PeriodLabels}) {
+  const styles = useStyles();
   return (
     <Card radius={24} padding={24} style={[styles.emptyCard, styles.sectionGapSmall]}>
       <GradientIconSquare size={48} glow>
-        <ChartBar size={24} color={colors.text} weight="fill" />
+        <ChartBar size={24} color={colors.onAccent} weight="fill" />
       </GradientIconSquare>
       <Text style={styles.emptyTitle}>{`No spending ${labels.phrase}`}</Text>
       <Text style={styles.emptyBody}>Add an expense and your charts and categories will show up here.</Text>
@@ -395,20 +434,35 @@ function EmptyCard({labels}: {labels: PeriodLabels}) {
   );
 }
 
+/** Shown when insights could not be loaded: no numbers rather than made-up ones. */
+function UnavailableCard() {
+  const styles = useStyles();
+  return (
+    <Card radius={24} padding={24} style={[styles.emptyCard, styles.sectionGapSmall]}>
+      <GradientIconSquare size={48} glow>
+        <ChartBar size={24} color={colors.onAccent} weight="fill" />
+      </GradientIconSquare>
+      <Text style={styles.emptyTitle}>Insights unavailable</Text>
+      <Text style={styles.emptyBody}>Your spending summary will appear here as soon as it loads.</Text>
+    </Card>
+  );
+}
+
 function StatusBanner({offline, message, onRetry}: {offline: boolean; message: string | null; onRetry: () => void}) {
+  const styles = useStyles();
   return (
     <BannerPill
       style={styles.statusBanner}
       iconGradient={offline ? 'savings' : 'rose'}
       icon={
         offline ? (
-          <WifiSlash size={20} color={colors.text} weight="bold" />
+          <WifiSlash size={20} color={colors.onAccent} weight="bold" />
         ) : (
-          <ArrowsClockwise size={20} color={colors.text} weight="bold" />
+          <ArrowsClockwise size={20} color={colors.onAccent} weight="bold" />
         )
       }
       title={offline ? "You're offline" : "Couldn't refresh insights"}
-      subtitle={offline ? 'Showing example numbers until you reconnect.' : (message ?? 'Showing example numbers for now.')}
+      subtitle={offline ? 'Insights need a connection. Reconnect and retry.' : (message ?? 'Pull down or tap retry to try again.')}
       trailing={<Text style={styles.retryText}>Retry</Text>}
       onPress={onRetry}
       accessibilityLabel="Retry loading insights"
@@ -434,10 +488,12 @@ function FadeIn({children}: {children: React.ReactNode}) {
 
 /** Shown while the first fetch for a period is in flight; no fabricated numbers. */
 function InsightsSkeleton() {
+  const styles = useStyles();
   return <LoadingState label="Loading insights" size={120} style={styles.loadingState} />;
 }
 
-export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsScreenProps) {
+export function InsightsScreen({currencySymbol, monthlyBudget = null, trackingSince = null}: InsightsScreenProps) {
+  const styles = useStyles();
   const navClearance = useFloatingNavClearance();
   const navScroll = useFloatingNavScroll();
   const [period, setPeriod] = useState<InsightsPeriod>('month');
@@ -455,19 +511,22 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
   const showPending = loading && !skeletonVisible;
   const hasError = insights.status === 'error';
 
-  const data = useMemo<InsightsData>(() => {
-    if (isLive && insights.data) {
-      return buildInsightsDataFromResponse(insights.data, monthlyBudget);
-    }
-    const example = insightsData(currencySymbol, period);
-    return monthlyBudget && monthlyBudget > 0 ? {...example, monthlyBudget} : example;
-  }, [currencySymbol, isLive, insights.data, monthlyBudget, period]);
+  // Only real numbers are ever shown: with no response there is no data.
+  const data = useMemo<InsightsData | null>(
+    () =>
+      isLive && insights.data ? buildInsightsDataFromResponse(insights.data, monthlyBudget, trackingSince) : null,
+    [isLive, insights.data, monthlyBudget, trackingSince],
+  );
 
-  const labels = useMemo(() => periodLabels(data.period, data.referenceDate), [data.period, data.referenceDate]);
+  const labels = useMemo(
+    () => (data ? periodLabels(data.period, data.referenceDate) : periodLabels(period, localIsoDate(new Date()))),
+    [data, period],
+  );
   const money = useCallback((value: number) => formatMoney(value, currencySymbol, {decimals: 0}), [currencySymbol]);
 
-  const canShare = isLive && !showSkeleton;
+  const canShare = data !== null && !showSkeleton;
   const onShare = useCallback(async () => {
+    if (!data) return;
     try {
       await Share.share({message: buildShareText(data, money)});
     } catch {
@@ -484,7 +543,7 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
     }
   }, [insights]);
 
-  const hasSpending = data.currentTotal > 0;
+  const hasSpending = data !== null && data.currentTotal > 0;
   const periodTarget = useTutorialTarget('insights.period');
 
   return (
@@ -525,6 +584,8 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
           </FadeIn>
         ) : showPending ? (
           <View style={styles.pendingSpace} />
+        ) : data === null ? (
+          <UnavailableCard />
         ) : (
           <FadeIn key="content">
             <SummaryCard data={data} labels={labels} currencySymbol={currencySymbol} />
@@ -549,7 +610,7 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null}: InsightsS
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   scroll: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -843,7 +904,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    backgroundColor: colors.canvasSunk,
   },
   aiHighlightText: {
     flex: 1,
@@ -913,4 +974,4 @@ const styles = StyleSheet.create({
   pendingSpace: {
     minHeight: 640,
   },
-});
+}));
