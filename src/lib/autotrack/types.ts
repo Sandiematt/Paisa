@@ -7,7 +7,9 @@
 //                     direction: "DEBIT"|"CREDIT"|"UNKNOWN", merchant: String?, upiRef: String?, detectedAtMillis: Long,
 //                     updatedAtMillis: Long, flag: "POSSIBLE_DUPLICATE"?, flagReason: String?, possibleDuplicateOfId: Long?,
 //                     note: String?, synced: Boolean, dirty: Boolean, remoteId: String?, syncedAtMillis: Long?}
-//   DetectorStatus   {accessibilityEnabled, notificationAccessEnabled: Boolean, installedApps: [String package names]}
+//   DetectorStatus   {accessibilityEnabled, notificationAccessEnabled: Boolean, installedApps: [String package names],
+//                     trackingMethod: "accessibility"|"shizuku", shizukuState: "not_installed"|"not_running"|"too_old"|
+//                     "no_permission"|"ready", shizukuCaptureRunning: Boolean}
 //   PendingTxn       DetectedTxn + {externalRef: String ("upi:<installId>:<epoch>:<id>"), alreadySynced: Boolean}
 //   AckEntry         {id: Long, remoteId: String?}
 //   AutoTrackPrefs   {notesEnabled, blockingEnabled: Boolean}
@@ -17,6 +19,9 @@
 // Ownership: native tags every detection with the owner set by setOwner(userId). getTransactions / getPending and the
 // unsynced spend only ever cover the current owner's rows. Detections made while signed out belong to the last owner.
 // Bridge methods (args): setOwner(userId: String?), clearUserData(purgeHistory: Boolean), setLogStreaming(enabled).
+// Tracking method (device-wide, stored natively): setTrackingMethod(method) resolves the saved method;
+// requestShizukuPermission() resolves whether Shizuku's dialog was shown; openShizuku(); startShizukuCapture()
+// resolves whether capture runs; stopShizukuCapture().
 //
 // Spend counting rule (native BudgetPlan extras, JS unsyncedSpendByDate, sync): only direction DEBIT is an expense.
 // A detection counts as extra spend when SUCCESS + DEBIT + unflagged and (not synced, or syncedAtMillis >
@@ -65,11 +70,36 @@ export type PendingTxn = DetectedTxn & {
 
 export type AckEntry = {id: number; remoteId: string | null};
 
+/**
+ * How UPI app screens are read: Paisa's accessibility service, or Shizuku
+ * (screen reading as the shell user, no accessibility service). Picked by the
+ * user when turning auto-tracking on; device-wide.
+ */
+export type TrackingMethod = 'accessibility' | 'shizuku';
+
+export const DEFAULT_TRACKING_METHOD: TrackingMethod = 'accessibility';
+
+/**
+ * Where Shizuku stands on this phone, for the Shizuku method: not installed,
+ * installed but not started (wireless debugging or adb), older than v11,
+ * running but Paisa not allowed to use it yet, or ready.
+ */
+export type ShizukuState =
+  | 'not_installed'
+  | 'not_running'
+  | 'too_old'
+  | 'no_permission'
+  | 'ready';
+
 export type DetectorStatus = {
   accessibilityEnabled: boolean;
   notificationAccessEnabled: boolean;
   /** Supported UPI apps installed on this phone (package names). */
   installedApps: string[];
+  trackingMethod: TrackingMethod;
+  shizukuState: ShizukuState;
+  /** Shizuku capture is reading screens (it can be stopped from its notification). */
+  shizukuCaptureRunning: boolean;
 };
 
 export type AutoTrackPrefs = {

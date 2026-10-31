@@ -52,8 +52,13 @@ android {
     sourceSets {
         main {
             // UPI detector core (pure Kotlin, no android.*): compiled straight into the app, never modified here.
+            // The Shizuku method's two extra core files (DumpScript, UiDump) live in the app's own core package.
             java.srcDirs += ['../../backend_service/core/src/main/kotlin']
         }
+    }
+    buildFeatures {
+        // IShellService: the Shizuku user service that reads UPI app screens as the shell user.
+        aidl true
     }
     defaultConfig {
         applicationId "com.expense_tracker"
@@ -103,6 +108,10 @@ dependencies {
     } else {
         implementation jscFlavor
     }
+
+    // Shizuku tracking method only: reads UPI app screens as the shell user, no root. Brings only androidx.annotation.
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
 
     testImplementation 'junit:junit:4.13.2'
     // android.jar stubs org.json in unit tests; the real implementation is needed to read the shared test vectors.

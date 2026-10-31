@@ -13,6 +13,7 @@ import {
   Stagger,
   ToggleSwitch,
 } from '../../components/ui';
+import {DEFAULT_TRACKING_METHOD} from '../../lib/autotrack/types';
 import {colors, spacing} from '../../theme';
 import {ActivitySkeleton} from '../activity/ActivitySkeleton';
 import {useLoadingGate} from '../insights/loadingGate';
@@ -21,8 +22,9 @@ import {useAutoTrack} from './AutoTrackProvider';
 import {autoTrackState, groupPayments} from './autoTrackFormat';
 import {DetectedPayments} from './DetectedPayments';
 import {DiagnosticsSection} from './DiagnosticsSection';
-import {PermissionsGroup} from './PermissionsGroup';
+import {PermissionsGroup, SHIZUKU_HELP} from './PermissionsGroup';
 import {StatusHero} from './StatusHero';
+import {TrackingMethodPicker} from './TrackingMethodPicker';
 
 type AutoTrackingScreenProps = {
   visible: boolean;
@@ -47,6 +49,7 @@ export function AutoTrackingScreen({
     loading,
     status,
     refreshStatus,
+    setTrackingMethod,
     prefs,
     prefsLoaded,
     updatePrefs,
@@ -161,8 +164,26 @@ export function AutoTrackingScreen({
           {supported ? (
             <>
               <Stagger index={1}>
+                <SectionTitle
+                  title="How Paisa reads payments"
+                  style={styles.sectionTitle}
+                />
+                <TrackingMethodPicker
+                  method={status?.trackingMethod ?? DEFAULT_TRACKING_METHOD}
+                  onChange={method => {
+                    setTrackingMethod(method).catch(() => {});
+                  }}
+                />
                 <SectionTitle title="Permissions" style={styles.sectionTitle} />
                 <PermissionsGroup status={status} />
+                {status?.trackingMethod === 'shizuku' ? (
+                  <AppText
+                    variant="caption"
+                    color={colors.muted}
+                    style={styles.footnote}>
+                    {SHIZUKU_HELP}
+                  </AppText>
+                ) : null}
               </Stagger>
 
               <Stagger index={2}>

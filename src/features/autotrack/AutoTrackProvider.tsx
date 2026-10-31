@@ -22,6 +22,7 @@ import {
   DetectedTxn,
   DetectorChangeReason,
   DetectorStatus,
+  TrackingMethod,
 } from '../../lib/autotrack/types';
 import {
   TransactionRow,
@@ -43,6 +44,8 @@ export type AutoTrackValue = {
   loading: boolean;
   status: DetectorStatus | null;
   refreshStatus: () => Promise<void>;
+  /** Picks how screens are read (device-wide); native starts or stops Shizuku capture to match. */
+  setTrackingMethod: (method: TrackingMethod) => Promise<void>;
   prefs: AutoTrackPrefs;
   /** False until this user's stored prefs are loaded; updatePrefs does nothing before then. */
   prefsLoaded: boolean;
@@ -120,6 +123,21 @@ export function AutoTrackProvider({children}: {children: React.ReactNode}) {
       setStatus(await native.getStatus());
     }
   }, [supported]);
+
+  const setTrackingMethod = useCallback(
+    async (method: TrackingMethod) => {
+      if (!supported) {
+        return;
+      }
+      // Shown at once; native's answer (and whether capture runs) follows.
+      setStatus(current =>
+        current ? {...current, trackingMethod: method} : current,
+      );
+      await native.setTrackingMethod(method);
+      await refreshStatus();
+    },
+    [refreshStatus, supported],
+  );
 
   const refreshTransactions = useCallback(async () => {
     const owner = ownerRef.current;
@@ -439,6 +457,7 @@ export function AutoTrackProvider({children}: {children: React.ReactNode}) {
       loading,
       status,
       refreshStatus,
+      setTrackingMethod,
       prefs,
       prefsLoaded,
       updatePrefs,
@@ -472,6 +491,7 @@ export function AutoTrackProvider({children}: {children: React.ReactNode}) {
       refreshStatus,
       setBudgetInputs,
       setLogStreaming,
+      setTrackingMethod,
       shareReport,
       stagePrefs,
       status,

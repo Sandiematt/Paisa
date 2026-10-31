@@ -22,6 +22,10 @@ object ReportBuilder {
         val installed: Map<String, Boolean>,
         val notificationAccess: Boolean,
         val notificationsIgnored: Int,
+        /** Which [io.yestack.upidetector.TrackingMethod] the user picked (its key). */
+        val trackingMethod: String = "accessibility",
+        /** Shizuku capture was running. */
+        val captureRunning: Boolean = false,
     )
 
     fun formatNodes(capture: AppStore.RawCapture): String = buildString {
@@ -67,7 +71,9 @@ object ReportBuilder {
         append("Device: ").append(h.device).append('\n')
         append("Android: ").append(h.androidVersion).append('\n')
         append("Time: ").append(full.format(Date(h.timeMillis))).append('\n')
+        append("Tracking method: ").append(h.trackingMethod).append('\n')
         append("Service enabled: ").append(h.serviceEnabled).append('\n')
+        append("Capture running (via Shizuku): ").append(h.captureRunning).append('\n')
         append("Notification access: ").append(h.notificationAccess).append('\n')
         append("Notifications ignored: ").append(h.notificationsIgnored).append('\n')
         append("Apps installed: ")

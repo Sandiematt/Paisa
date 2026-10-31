@@ -2,6 +2,8 @@ package io.yestack.upidetector.bridge
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -13,11 +15,15 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import io.yestack.upidetector.AppStore
 import io.yestack.upidetector.SupportedApps
+import io.yestack.upidetector.TrackingMethod
 import io.yestack.upidetector.budget.BudgetJson
 import io.yestack.upidetector.core.SpendLimit
+import io.yestack.upidetector.service.DumpCaptureService
+import io.yestack.upidetector.shizuku.ShizukuShell
 import io.yestack.upidetector.ui.ReportBuilder
 import java.math.BigDecimal
 import org.json.JSONArray
+import rikka.shizuku.Shizuku
 
 /**
  * `NativeModules.UpiDetector`: the bridge between Paisa's JS and the detector (see src/lib/autotrack/types.ts).
@@ -55,6 +61,19 @@ class UpiDetectorModule(private val reactContext: ReactApplicationContext) : Rea
 
     private val listener = AppStore.Listener { reason -> queue(reason) }
 
+    // Shizuku coming up, going away or answering the permission request changes the status, and may let capture start.
+    private val shizukuReceived = Shizuku.OnBinderReceivedListener { AppStore.post { onShizukuChanged() } }
+    private val shizukuDead = Shizuku.OnBinderDeadListener { AppStore.post { onShizukuChanged() } }
+    private val shizukuPermission = Shizuku.OnRequestPermissionResultListener { code, result ->
+        if (code == SHIZUKU_PERMISSION_CODE) {
+            AppStore.post {
+                AppStore.log("Shizuku permission ${if (result == PackageManager.PERMISSION_GRANTED) "granted" else "denied"}")
+                onShizukuChanged()
+            }
+        }
+    }
+    private var shizukuListening = false
+
     override fun getName(): String = NAME
 
     override fun initialize() {
@@ -65,6 +84,13 @@ class UpiDetectorModule(private val reactContext: ReactApplicationContext) : Rea
                 if (!listenerAdded) {
                     listenerAdded = true
                     AppStore.addListener(listener)
+                }
+                if (!shizukuListening) {
+                    shizukuListening = true
+                    // Sticky: runs now when Shizuku is already up, which resumes capture the user left on.
+                    Shizuku.addBinderReceivedListenerSticky(shizukuReceived)
+                    Shizuku.addBinderDeadListener(shizukuDead)
+                    Shizuku.addRequestPermissionResultListener(shizukuPermission)
                 }
             } catch (t: Throwable) {
                 // The module must load even if the detector store cannot: methods report the error to JS.
@@ -77,6 +103,12 @@ class UpiDetectorModule(private val reactContext: ReactApplicationContext) : Rea
             listenerAdded = false
             logStreaming = false
             AppStore.removeListener(listener)
+            if (shizukuListening) {
+                shizukuListening = false
+                Shizuku.removeBinderReceivedListener(shizukuReceived)
+                Shizuku.removeBinderDeadListener(shizukuDead)
+                Shizuku.removeRequestPermissionResultListener(shizukuPermission)
+            }
             main.removeCallbacks(flush)
             queuedReasons.clear()
             flushScheduled = false
@@ -110,10 +142,14 @@ class UpiDetectorModule(private val reactContext: ReactApplicationContext) : Rea
     @ReactMethod
     fun getStatus(promise: Promise) = onMain(promise) {
         val ctx = reactContext.applicationContext
+        resumeCaptureIfWanted()
         DetectorJson.status(
             SystemStatus.isAccessibilityServiceEnabled(ctx),
             SystemStatus.isNotificationAccessEnabled(ctx),
             SystemStatus.installedApps(ctx),
+            TrackingMethod.get(ctx).key,
+            SystemStatus.shizukuState(ctx),
+            DumpCaptureService.running,
         ).toString()
     }
 
@@ -133,6 +169,99 @@ class UpiDetectorModule(private val reactContext: ReactApplicationContext) : Rea
         val intent = Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val activity = reactContext.currentActivity
         if (activity != null) activity.startActivity(Intent(action)) else reactContext.startActivity(intent)
+    }
+
+    // ---- tracking method (accessibility service or Shizuku) ----
+
+    /**
+     * [method] is a TrackingMethod key ("accessibility" or "shizuku"). Picking Shizuku starts capture as soon as Shizuku
+     * is ready (now, or once it is started and Paisa is allowed to use it); picking accessibility stops it. Resolves the
+     * saved key; an unknown key changes nothing.
+     */
+    @ReactMethod
+    fun setTrackingMethod(method: String, promise: Promise) = onMain(promise) {
+        val ctx = reactContext.applicationContext
+        val chosen = TrackingMethod.of(method)
+        if (chosen != null && chosen != TrackingMethod.get(ctx)) {
+            TrackingMethod.set(ctx, chosen)
+            AppStore.log("tracking method: ${chosen.key}")
+            if (chosen == TrackingMethod.SHIZUKU) {
+                DumpCaptureService.setWanted(ctx, true)
+                resumeCaptureIfWanted()
+            } else {
+                DumpCaptureService.stop(ctx)
+            }
+            AppStore.statusChanged()
+        }
+        TrackingMethod.get(ctx).key
+    }
+
+    /** Shows Shizuku's "allow Paisa?" dialog when Shizuku runs and Paisa is not allowed yet. Resolves whether it asked. */
+    @ReactMethod
+    fun requestShizukuPermission(promise: Promise) = onMain(promise) {
+        if (ShizukuShell.status() == ShizukuShell.Status.NO_PERMISSION) {
+            Shizuku.requestPermission(SHIZUKU_PERMISSION_CODE)
+            true
+        } else {
+            false
+        }
+    }
+
+    /** Opens the Shizuku app (to start it), or its store page when it is not installed. */
+    @ReactMethod
+    fun openShizuku(promise: Promise) = onMain(promise) {
+        val launch = reactContext.packageManager.getLaunchIntentForPackage(SystemStatus.SHIZUKU_PACKAGE)
+        try {
+            startActivity(launch ?: Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=${SystemStatus.SHIZUKU_PACKAGE}")))
+        } catch (e: RuntimeException) {
+            // No store app: the download page.
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SHIZUKU_DOWNLOAD_URL)))
+        }
+        null
+    }
+
+    /** Starts Shizuku capture again after the user stopped it (from the notification). Resolves whether it is running. */
+    @ReactMethod
+    fun startShizukuCapture(promise: Promise) = onMain(promise) {
+        DumpCaptureService.setWanted(reactContext.applicationContext, true)
+        resumeCaptureIfWanted()
+        DumpCaptureService.running
+    }
+
+    @ReactMethod
+    fun stopShizukuCapture(promise: Promise) = onMain(promise) {
+        DumpCaptureService.stop(reactContext.applicationContext)
+        null
+    }
+
+    private fun startActivity(intent: Intent) {
+        val activity = reactContext.currentActivity
+        if (activity != null) {
+            activity.startActivity(intent)
+        } else {
+            reactContext.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    private fun onShizukuChanged() {
+        resumeCaptureIfWanted()
+        AppStore.statusChanged()
+    }
+
+    /**
+     * Starts Shizuku capture when the user picked Shizuku, has not stopped capture, and Shizuku is ready. Main thread.
+     * Android may refuse to start a foreground service while Paisa is in the background; it is tried again the next
+     * time Paisa reads the status.
+     */
+    private fun resumeCaptureIfWanted() {
+        val ctx = reactContext.applicationContext
+        if (TrackingMethod.get(ctx) != TrackingMethod.SHIZUKU || DumpCaptureService.running) return
+        if (!DumpCaptureService.isWanted(ctx) || ShizukuShell.status() != ShizukuShell.Status.READY) return
+        try {
+            DumpCaptureService.start(ctx)
+        } catch (e: RuntimeException) {
+            AppStore.log("could not start Shizuku capture: $e")
+        }
     }
 
     // ---- detections ----
@@ -192,6 +321,8 @@ class UpiDetectorModule(private val reactContext: ReactApplicationContext) : Rea
             androidVersion = "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
             timeMillis = System.currentTimeMillis(),
             serviceEnabled = SystemStatus.isAccessibilityServiceEnabled(ctx),
+            trackingMethod = TrackingMethod.get(ctx).key,
+            captureRunning = DumpCaptureService.running,
             installed = SupportedApps.all.associate { it.packageName to (it.packageName in installed) },
             notificationAccess = SystemStatus.isNotificationAccessEnabled(ctx),
             notificationsIgnored = AppStore.ignoredNotificationCount,
@@ -285,5 +416,7 @@ class UpiDetectorModule(private val reactContext: ReactApplicationContext) : Rea
         const val EVENT = "UpiDetectorChanged"
         private const val ERROR_CODE = "E_UPI_DETECTOR"
         private const val EVENT_COALESCE_MILLIS = 250L
+        private const val SHIZUKU_PERMISSION_CODE = 4711
+        private const val SHIZUKU_DOWNLOAD_URL = "https://shizuku.rikka.app/download/"
     }
 }

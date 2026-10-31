@@ -30,7 +30,18 @@ describe('nativeUpiDetector', () => {
         accessibilityEnabled: false,
         notificationAccessEnabled: false,
         installedApps: [],
+        trackingMethod: 'accessibility',
+        shizukuState: 'not_installed',
+        shizukuCaptureRunning: false,
       });
+      expect(await detector.setTrackingMethod('shizuku')).toBe('accessibility');
+      expect(await detector.requestShizukuPermission()).toBe(false);
+      expect(await detector.startShizukuCapture()).toBe(false);
+      await detector.openShizuku();
+      await detector.stopShizukuCapture();
+      expect(stub.setTrackingMethod).not.toHaveBeenCalled();
+      expect(stub.requestShizukuPermission).not.toHaveBeenCalled();
+      expect(stub.openShizuku).not.toHaveBeenCalled();
       expect(await detector.getTransactions()).toEqual([]);
       expect(await detector.getLog()).toEqual([]);
       expect(await detector.getPending()).toEqual([]);
@@ -70,7 +81,49 @@ describe('nativeUpiDetector', () => {
         accessibilityEnabled: true,
         notificationAccessEnabled: false,
         installedApps: ['a.b'],
+        trackingMethod: 'accessibility',
+        shizukuState: 'not_installed',
+        shizukuCaptureRunning: false,
       });
+    });
+
+    it('parses the Shizuku method and falls back on unknown values', async () => {
+      stub.getStatus.mockResolvedValueOnce(
+        JSON.stringify({
+          trackingMethod: 'shizuku',
+          shizukuState: 'no_permission',
+          shizukuCaptureRunning: true,
+        }),
+      );
+      expect(await detector.getStatus()).toMatchObject({
+        trackingMethod: 'shizuku',
+        shizukuState: 'no_permission',
+        shizukuCaptureRunning: true,
+      });
+      stub.getStatus.mockResolvedValueOnce(
+        JSON.stringify({trackingMethod: 'root', shizukuState: 'odd'}),
+      );
+      expect(await detector.getStatus()).toMatchObject({
+        trackingMethod: 'accessibility',
+        shizukuState: 'not_installed',
+        shizukuCaptureRunning: false,
+      });
+    });
+
+    it('sets the tracking method and drives Shizuku', async () => {
+      expect(await detector.setTrackingMethod('shizuku')).toBe('shizuku');
+      expect(stub.setTrackingMethod).toHaveBeenCalledWith('shizuku');
+      stub.setTrackingMethod.mockRejectedValueOnce(new Error('boom'));
+      expect(await detector.setTrackingMethod('shizuku')).toBe('accessibility');
+
+      expect(await detector.requestShizukuPermission()).toBe(true);
+      stub.requestShizukuPermission.mockResolvedValueOnce(false);
+      expect(await detector.requestShizukuPermission()).toBe(false);
+      expect(await detector.startShizukuCapture()).toBe(true);
+      await detector.openShizuku();
+      await detector.stopShizukuCapture();
+      expect(stub.openShizuku).toHaveBeenCalledTimes(1);
+      expect(stub.stopShizukuCapture).toHaveBeenCalledTimes(1);
     });
 
     it('parses transactions, pending items and the log', async () => {

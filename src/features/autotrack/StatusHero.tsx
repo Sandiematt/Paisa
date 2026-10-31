@@ -24,7 +24,7 @@ type StatusHeroProps = {
 };
 
 const COPY: Record<
-  AutoTrackState,
+  AutoTrackState | 'needs-shizuku',
   {title: string; body: string; tone: string}
 > = {
   checking: {
@@ -40,6 +40,11 @@ const COPY: Record<
   'needs-permission': {
     title: 'Needs permission',
     body: 'Turn on both permissions below so Paisa can see your UPI payments.',
+    tone: colors.gold,
+  },
+  'needs-shizuku': {
+    title: 'Needs setup',
+    body: 'Finish the Shizuku and notification steps below so Paisa can see your UPI payments.',
     tone: colors.gold,
   },
   unavailable: {
@@ -79,7 +84,12 @@ export function StatusHero({
   lastSyncAt,
   onSyncNow,
 }: StatusHeroProps) {
-  const copy = COPY[state];
+  const copy =
+    COPY[
+      state === 'needs-permission' && status?.trackingMethod === 'shizuku'
+        ? 'needs-shizuku'
+        : state
+    ];
   const installed = new Set(status?.installedApps ?? []);
   const interactive = state !== 'unavailable';
 

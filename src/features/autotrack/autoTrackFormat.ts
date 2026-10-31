@@ -14,7 +14,20 @@ export const MAX_LOG_LINES = 100;
 
 export type AutoTrackState = 'checking' | 'active' | 'needs-permission' | 'unavailable';
 
-/** Where auto-tracking stands, from platform support and the two permissions. */
+/**
+ * Whether the chosen method is reading screens: the accessibility service is
+ * on, or Shizuku capture is running.
+ */
+export function screenReadingOn(status: DetectorStatus | null): boolean {
+  if (!status) {
+    return false;
+  }
+  return status.trackingMethod === 'shizuku'
+    ? status.shizukuCaptureRunning
+    : status.accessibilityEnabled;
+}
+
+/** Where auto-tracking stands, from platform support, the chosen method and its permissions. */
 export function autoTrackState(
   supported: boolean,
   status: DetectorStatus | null,
@@ -25,7 +38,7 @@ export function autoTrackState(
   if (!status) {
     return 'checking';
   }
-  return status.accessibilityEnabled && status.notificationAccessEnabled
+  return screenReadingOn(status) && status.notificationAccessEnabled
     ? 'active'
     : 'needs-permission';
 }

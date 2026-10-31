@@ -15,10 +15,20 @@ import {
   Stagger,
   ToggleSwitch,
 } from '../../../components/ui';
-import {getStatus} from '../../../lib/autotrack/nativeUpiDetector';
-import {DetectorStatus} from '../../../lib/autotrack/types';
+import {
+  getStatus,
+  setTrackingMethod,
+  subscribeToDetector,
+} from '../../../lib/autotrack/nativeUpiDetector';
+import {
+  DEFAULT_TRACKING_METHOD,
+  DetectorStatus,
+  TrackingMethod,
+} from '../../../lib/autotrack/types';
 import {colors, radii, spacing} from '../../../theme';
-import {PermissionsGroup} from '../../autotrack/PermissionsGroup';
+import {screenReadingOn} from '../../autotrack/autoTrackFormat';
+import {PermissionsGroup, SHIZUKU_HELP} from '../../autotrack/PermissionsGroup';
+import {TrackingMethodPicker} from '../../autotrack/TrackingMethodPicker';
 import {STEP_TITLES} from '../constants';
 import {StepLayout} from '../components/StepLayout';
 import {OnboardingDraft} from '../types';
@@ -34,10 +44,11 @@ type AutoTrackStepProps = {
 const ICON_SIZE = 24;
 
 /**
- * Optional last step on Android: grant the two system permissions and pick
- * the auto-tracking toggles. Permissions are system-wide, so they are read
- * straight from native; the toggles ride on the draft and are applied to the
- * account once it exists.
+ * Optional last step on Android: pick how Paisa reads payment screens (the
+ * accessibility service or Shizuku), grant what that method needs, and pick
+ * the auto-tracking toggles. The method and permissions are device-wide, so
+ * they are set and read straight from native; the toggles ride on the draft
+ * and are applied to the account once it exists.
  */
 export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
   const copy = STEP_TITLES.autotrack;
@@ -47,7 +58,8 @@ export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
     getStatus().then(setStatus);
   }, []);
 
-  // The user leaves for system settings to grant each permission.
+  // The user leaves for system settings (or Shizuku) to grant each permission;
+  // Shizuku answering, or capture starting, is reported as a status change.
   useEffect(() => {
     refresh();
     const subscription = AppState.addEventListener('change', state => {
@@ -55,14 +67,33 @@ export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
         refresh();
       }
     });
-    return () => subscription.remove();
+    const unsubscribe = subscribeToDetector(reason => {
+      if (reason === 'status') {
+        refresh();
+      }
+    });
+    return () => {
+      subscription.remove();
+      unsubscribe();
+    };
   }, [refresh]);
 
+  const chooseMethod = useCallback(
+    (method: TrackingMethod) => {
+      setStatus(current =>
+        current ? {...current, trackingMethod: method} : current,
+      );
+      setTrackingMethod(method).then(refresh);
+    },
+    [refresh],
+  );
+
+  const method = status?.trackingMethod ?? DEFAULT_TRACKING_METHOD;
+  const shizuku = method === 'shizuku';
   const notesOn = draft.autoTrackNotes ?? true;
   const blockingOn = draft.autoTrackBlocking ?? true;
   const ready =
-    status?.accessibilityEnabled === true &&
-    status?.notificationAccessEnabled === true;
+    screenReadingOn(status) && status?.notificationAccessEnabled === true;
 
   return (
     <StepLayout title={copy.title} subtitle={copy.subtitle}>
@@ -73,11 +104,13 @@ export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
           </GradientIconSquare>
           <View style={styles.bannerText}>
             <AppText variant="bodyStrong">
-              {ready ? 'Auto-tracking is on' : 'Two permissions to turn it on'}
+              {ready ? 'Auto-tracking is on' : 'Two steps to turn it on'}
             </AppText>
             <AppText variant="caption" color={colors.muted}>
               {ready
                 ? 'Payments you make will show up in Activity.'
+                : shizuku
+                ? 'Set up Shizuku and allow notification access, then come back here.'
                 : 'Tap each one, switch Paisa on, then come back here.'}
             </AppText>
           </View>
@@ -85,7 +118,22 @@ export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
       </Stagger>
 
       <Stagger index={2} style={styles.section}>
+        <AppText variant="label" color={colors.muted} style={styles.groupLabel}>
+          How Paisa reads payments
+        </AppText>
+        <TrackingMethodPicker method={method} onChange={chooseMethod} />
+      </Stagger>
+
+      <Stagger index={3} style={styles.section}>
         <PermissionsGroup status={status} />
+        {shizuku ? (
+          <AppText
+            variant="caption"
+            color={colors.muted}
+            style={styles.footnote}>
+            {SHIZUKU_HELP}
+          </AppText>
+        ) : null}
         <View style={styles.privacy}>
           <LockSimple size={14} color={colors.muted} />
           <AppText variant="caption" color={colors.muted} style={styles.privacyText}>
@@ -95,7 +143,7 @@ export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
         </View>
       </Stagger>
 
-      <Stagger index={3} style={styles.section}>
+      <Stagger index={4} style={styles.section}>
         <AppText variant="label" color={colors.muted} style={styles.groupLabel}>
           When a payment is detected
         </AppText>

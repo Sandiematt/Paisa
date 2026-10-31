@@ -36,9 +36,15 @@ jest.mock('../src/features/autotrack/AutoTrackProvider', () => ({
 
 const mockOpenAccessibility = jest.fn();
 const mockOpenNotificationAccess = jest.fn();
+const mockOpenShizuku = jest.fn();
+const mockRequestShizukuPermission = jest.fn();
+const mockStartShizukuCapture = jest.fn();
 jest.mock('../src/lib/autotrack/nativeUpiDetector', () => ({
   openAccessibilitySettings: () => mockOpenAccessibility(),
   openNotificationAccessSettings: () => mockOpenNotificationAccess(),
+  openShizuku: () => mockOpenShizuku(),
+  requestShizukuPermission: () => mockRequestShizukuPermission(),
+  startShizukuCapture: () => mockStartShizukuCapture(),
 }));
 
 /** All rendered text plus accessibility labels, flattened. */
@@ -117,6 +123,17 @@ const BOTH_ON: DetectorStatus = {
   accessibilityEnabled: true,
   notificationAccessEnabled: true,
   installedApps: [GPAY, PHONEPE],
+  trackingMethod: 'accessibility',
+  shizukuState: 'not_installed',
+  shizukuCaptureRunning: false,
+};
+
+const SHIZUKU_ON: DetectorStatus = {
+  ...BOTH_ON,
+  accessibilityEnabled: false,
+  trackingMethod: 'shizuku',
+  shizukuState: 'ready',
+  shizukuCaptureRunning: true,
 };
 
 const ALLOWANCE: DailyAllowance = {
@@ -154,6 +171,7 @@ function autoTrack(overrides: Record<string, unknown> = {}) {
     loading: false,
     status: BOTH_ON,
     refreshStatus: jest.fn(async () => {}),
+    setTrackingMethod: jest.fn(async () => {}),
     prefs: {notesEnabled: true, blockingEnabled: true},
     prefsLoaded: true,
     updatePrefs: jest.fn(),
@@ -285,7 +303,7 @@ describe('AutoTrackingScreen', () => {
   it('asks for permission and opens the right system settings', async () => {
     mockUseAutoTrack.mockReturnValue(
       autoTrack({
-        status: {accessibilityEnabled: false, notificationAccessEnabled: true, installedApps: []},
+        status: {...BOTH_ON, accessibilityEnabled: false, installedApps: []},
       }),
     );
     const tree = await render(screen());
@@ -303,6 +321,59 @@ describe('AutoTrackingScreen', () => {
       byLabel(tree, 'Notification access, on').props.onPress();
     });
     expect(mockOpenNotificationAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the user pick Shizuku instead of the accessibility service', async () => {
+    const value = autoTrack();
+    mockUseAutoTrack.mockReturnValue(value);
+    const tree = await render(screen());
+    const text = textOf(tree);
+    expect(text).toContain('How Paisa reads payments');
+    const cards = tree.root
+      .findAllByType(PressableScale)
+      .filter(node => node.props.accessibilityRole === 'radio');
+    expect(cards).toHaveLength(2);
+    expect(cards.map(card => card.props.accessibilityState.selected)).toEqual([true, false]);
+    await act(async () => {
+      cards[1].props.onPress();
+    });
+    expect(value.setTrackingMethod).toHaveBeenCalledWith('shizuku');
+    // The method already chosen is not set again.
+    await act(async () => {
+      cards[0].props.onPress();
+    });
+    expect(value.setTrackingMethod).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Shizuku instead of the accessibility service once Shizuku is picked', async () => {
+    mockUseAutoTrack.mockReturnValue(autoTrack({status: SHIZUKU_ON}));
+    const tree = await render(screen());
+    const text = textOf(tree);
+    expect(text).toContain('Active');
+    expect(text).toContain('Permissions | Shizuku | On');
+    expect(text).toContain('wireless debugging');
+    expect(text).not.toContain('Accessibility service, ');
+  });
+
+  it('walks through each Shizuku setup step', async () => {
+    const steps: [Partial<DetectorStatus>, string, jest.Mock][] = [
+      [{shizukuState: 'not_installed'}, 'Shizuku, not installed', mockOpenShizuku],
+      [{shizukuState: 'not_running'}, 'Shizuku, not running', mockOpenShizuku],
+      [{shizukuState: 'no_permission'}, 'Shizuku, not allowed', mockRequestShizukuPermission],
+      [{shizukuState: 'ready'}, 'Shizuku, stopped', mockStartShizukuCapture],
+    ];
+    for (const [patch, label, action] of steps) {
+      mockUseAutoTrack.mockReturnValue(
+        autoTrack({status: {...SHIZUKU_ON, shizukuCaptureRunning: false, ...patch}}),
+      );
+      const tree = await render(screen());
+      expect(textOf(tree)).toContain('Needs setup');
+      action.mockClear();
+      await act(async () => {
+        byLabel(tree, label).props.onPress();
+      });
+      expect(action).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('explains Android-only support and renders nothing interactive when unsupported', async () => {
@@ -505,6 +576,16 @@ describe('autoTrackFormat', () => {
     expect(autoTrackState(true, null)).toBe('checking');
     expect(autoTrackState(true, BOTH_ON)).toBe('active');
     expect(autoTrackState(true, {...BOTH_ON, notificationAccessEnabled: false})).toBe('needs-permission');
+  });
+
+  it('counts Shizuku capture, not the accessibility service, when Shizuku is picked', () => {
+    expect(autoTrackState(true, SHIZUKU_ON)).toBe('active');
+    expect(autoTrackState(true, {...SHIZUKU_ON, accessibilityEnabled: true, shizukuCaptureRunning: false})).toBe(
+      'needs-permission',
+    );
+    expect(autoTrackState(true, {...BOTH_ON, shizukuCaptureRunning: true, accessibilityEnabled: false})).toBe(
+      'needs-permission',
+    );
   });
 
   it('maps a payment to its status pill', () => {
