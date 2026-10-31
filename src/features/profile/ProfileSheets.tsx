@@ -10,7 +10,8 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {CheckCircle, X} from 'phosphor-react-native';
+import {CheckCircle} from 'phosphor-react-native/src/icons/CheckCircle';
+import {X} from 'phosphor-react-native/src/icons/X';
 
 import {
   AppText,
@@ -430,6 +431,8 @@ type MoneySheetProps = {
   renderExtra?: (draft: string) => React.ReactNode;
   /** A value one tap puts in the field, such as a calculated amount; hidden while the field holds it. */
   suggestion?: {label: string; value: string};
+  /** Why the typed amount cannot be saved; Done stays off while there is a reason. */
+  validate?: (draft: string) => string | null;
   onDone: (value: string) => void;
   onClose: () => void;
 };
@@ -446,11 +449,13 @@ export function MoneySheet({
   helper,
   renderExtra,
   suggestion,
+  validate,
   onDone,
   onClose,
 }: MoneySheetProps) {
   const styles = useStyles();
   const [draft, setDraft] = useState(value);
+  const problem = validate ? validate(draft) : null;
 
   useEffect(() => {
     if (visible) {
@@ -478,6 +483,11 @@ export function MoneySheet({
         autoFocus
       />
       {renderExtra ? renderExtra(draft) : null}
+      {problem ? (
+        <AppText variant="caption" color={colors.roseLight} style={styles.suggestion}>
+          {problem}
+        </AppText>
+      ) : null}
       {suggestion && suggestion.value !== draft ? (
         <GhostButton
           label={suggestion.label}
@@ -489,6 +499,7 @@ export function MoneySheet({
       <PrimaryButton
         label="Done"
         style={styles.action}
+        disabled={problem !== null}
         onPress={() => {
           onDone(draft);
           onClose();

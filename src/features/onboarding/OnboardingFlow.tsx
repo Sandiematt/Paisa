@@ -35,6 +35,9 @@ export function OnboardingFlow({
   mode,
   skipLock,
   onDismiss,
+  upgradeFrom,
+  knownBills,
+  today,
 }: OnboardingFlowProps) {
   const flow = useOnboarding(onComplete, {
     initialDraft,
@@ -42,6 +45,9 @@ export function OnboardingFlow({
     mode,
     skipLock,
     onDismiss,
+    upgradeFrom,
+    knownBills,
+    today,
   });
   const scrollRef = useRef<ScrollViewInstance>(null);
   const viewportRef = useRef<ViewInstance>(null);
@@ -79,7 +85,7 @@ export function OnboardingFlow({
     (key: string) => {
       switch (key as StepKey) {
         case 'whatsnew':
-          return <WhatsNewStep />;
+          return <WhatsNewStep restart={flow.mode === 'restart'} />;
         case 'basics':
           return (
             <BasicInfoStep
@@ -103,13 +109,23 @@ export function OnboardingFlow({
             />
           );
         case 'budget':
-          return <BudgetStep draft={flow.draft} onChange={flow.update} />;
+          return (
+            <BudgetStep
+              draft={flow.draft}
+              errors={flow.errors}
+              onChange={flow.update}
+              today={flow.today}
+              knownBills={flow.knownBills}
+              // Accounts moving over already have this month's spending logged.
+              asksAlreadySpent={flow.mode !== 'upgrade'}
+            />
+          );
         case 'autotrack':
           return <AutoTrackStep draft={flow.draft} onChange={flow.update} />;
         case 'lock':
           return <LockStep draft={flow.draft} onChange={flow.update} />;
         case 'done':
-          return <DoneStep draft={flow.draft} />;
+          return <DoneStep draft={flow.draft} today={flow.today} knownBills={flow.knownBills} />;
         default:
           return null;
       }
@@ -154,14 +170,16 @@ export function OnboardingFlow({
         <OnboardingFooter
           primaryLabel={
             flow.isLastStep
-              ? mode === 'upgrade'
+              ? mode === 'upgrade' || mode === 'restart'
                 ? 'Back to Paisa'
                 : 'Start using Paisa'
               : flow.stepKey === 'whatsnew'
-                ? 'Set it up'
+                ? 'Got it'
                 : 'Continue'
           }
-          skipLabel={flow.stepKey === 'whatsnew' ? 'Not now' : undefined}
+          skipLabel={
+            flow.stepKey === 'whatsnew' ? (mode === 'restart' ? 'Keep last values' : 'Not now') : undefined
+          }
           onPrimary={flow.goNext}
           loading={flow.busy}
           skippable={flow.skippable}

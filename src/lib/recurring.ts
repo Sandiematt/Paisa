@@ -37,7 +37,7 @@ function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate();
 }
 
-function isSeriesStart(row: TransactionRow): boolean {
+export function isSeriesStart(row: TransactionRow): boolean {
   return (
     row.isRecurring &&
     row.kind === 'regular' &&
@@ -54,8 +54,12 @@ export type BillCommitment = {
   day: number;
   /** Comes due inside the cycle at all (a series starting later does not). */
   dueThisCycle: boolean;
-  /** Already saved as a row inside the cycle. */
+  /** Already saved as a row inside the cycle, or paid before sign-up. */
   paidThisCycle: boolean;
+  /** Paid before sign-up, so no row holds it and the budget still has to hold it back. */
+  paidOutsideLedger?: boolean;
+  /** The series was stopped or changed; listed only for a payment it made this cycle. */
+  ended?: boolean;
 };
 
 /** A row that belongs to a monthly expense series: the marked row or one of its copies. */
@@ -74,6 +78,16 @@ export type PendingBill = {
   amount: number;
   /** First date, `YYYY-MM-DD`. */
   date: string;
+  /**
+   * Set when the user said this month's was paid before sign-up (that day,
+   * `YYYY-MM-DD`): the cycle holding it counts the bill as paid.
+   */
+  paidSince?: string;
+  /**
+   * Set when the user said this month's is not paid yet (that day): the cycle
+   * holding it keeps the bill reserved until it is paid.
+   */
+  notPaidSince?: string;
 };
 
 /**
@@ -103,43 +117,54 @@ export function billCommitments(
   const commitments: BillCommitment[] = [];
   for (const [rootId, list] of series) {
     const root = list.find(row => row.id === rootId);
-    // Copies whose marked row was deleted or unmarked are no longer a series.
-    if (!root || !root.isRecurring) {
+    const dates = list.map(row => calendarDateISO(row.transactionDate)).sort();
+    const paidThisCycle = dates.some(date => date >= cycle.start && date <= cycle.end);
+    // Copies whose marked row was deleted or unmarked are no longer a series,
+    // but a payment it made this cycle is still a bill, not day-to-day spend.
+    const ended = !root || !root.isRecurring;
+    if (ended && !paidThisCycle) {
       continue;
     }
-    const dates = list.map(row => calendarDateISO(row.transactionDate)).sort();
     const latest = list.reduce((a, b) =>
       calendarDateISO(b.transactionDate) > calendarDateISO(a.transactionDate) ? b : a,
     );
-    const first = calendarDateISO(root.transactionDate);
+    const first = root ? calendarDateISO(root.transactionDate) : dates[0];
     commitments.push({
       key: rootId,
       label:
         latest.description ||
         latest.merchant ||
-        root.description ||
-        root.merchant ||
+        root?.description ||
+        root?.merchant ||
         'Monthly bill',
       amount: latest.amount,
       day: Number(first.slice(8, 10)),
       dueThisCycle: first <= cycle.end,
-      paidThisCycle: dates.some(date => date >= cycle.start && date <= cycle.end),
+      paidThisCycle,
+      ...(ended ? {ended: true} : {}),
     });
   }
   for (const bill of pending) {
+    const paidBeforeSignup =
+      bill.paidSince !== undefined && bill.paidSince <= cycle.end && bill.date > cycle.end;
     commitments.push({
       key: bill.key,
       label: bill.label,
       amount: bill.amount,
       day: Number(bill.date.slice(8, 10)),
-      dueThisCycle: bill.date <= cycle.end,
-      paidThisCycle: false,
+      dueThisCycle: bill.date <= cycle.end || paidBeforeSignup,
+      paidThisCycle: paidBeforeSignup,
+      ...(paidBeforeSignup ? {paidOutsideLedger: true} : {}),
     });
   }
   return commitments.sort((a, b) => a.day - b.day);
 }
 
-/** What the cycle's bills take out of the budget, and what of that is still to come. */
+/**
+ * What the cycle's bills take out of the budget, and what of that the
+ * cycle's spending does not hold: bills still to come, and ones paid before
+ * sign-up.
+ */
 export function committedTotals(commitments: BillCommitment[]): {
   committed: number;
   upcoming: number;
@@ -151,17 +176,35 @@ export function committedTotals(commitments: BillCommitment[]): {
       continue;
     }
     committed += bill.amount;
-    if (!bill.paidThisCycle) {
+    if (!bill.paidThisCycle || bill.paidOutsideLedger) {
       upcoming += bill.amount;
     }
   }
   return {committed: Number(committed.toFixed(2)), upcoming: Number(upcoming.toFixed(2))};
 }
 
+/**
+ * Every bill in a month, due this cycle or not: what the monthly budget is
+ * shown and edited after, as onboarding does, so bills that start next cycle
+ * still count.
+ */
+export function monthlyBillTotal(commitments: BillCommitment[]): number {
+  // A stopped series no longer repeats; a changed one is counted as its replacement.
+  const total = commitments.reduce((sum, bill) => (bill.ended ? sum : sum + bill.amount), 0);
+  return Number(total.toFixed(2));
+}
+
+/**
+ * Says a due copy is not to be added: the user set how that month's bill
+ * stands themselves (see billMonths, copySkipper).
+ */
+export type CopySkip = (rootId: string, rootRef: string | null, date: string) => boolean;
+
 /** Copies of marked rows that are due on or before `today` and not saved yet. */
 export function dueRecurringTransactions(
   rows: TransactionRow[],
   today: string = localDateISO(),
+  skip?: CopySkip,
 ): NewTransaction[] {
   const saved = new Set<string>();
   for (const row of rows) {
@@ -190,7 +233,7 @@ export function dueRecurringTransactions(
         break;
       }
       const externalRef = recurringRef(row.id, monthKey);
-      if (saved.has(externalRef)) {
+      if (saved.has(externalRef) || skip?.(row.id, row.externalRef ?? null, date)) {
         continue;
       }
       due.push({
@@ -219,8 +262,9 @@ export async function saveDueRecurring(
   rows: TransactionRow[],
   userId: string,
   today: string = localDateISO(),
+  skip?: CopySkip,
 ): Promise<number> {
-  const due = dueRecurringTransactions(rows, today);
+  const due = dueRecurringTransactions(rows, today, skip);
   if (due.length === 0) {
     return 0;
   }

@@ -1,6 +1,6 @@
 import React from 'react';
 import {View} from 'react-native';
-import {Backspace} from 'phosphor-react-native';
+import {Backspace} from 'phosphor-react-native/src/icons/Backspace';
 
 import {AppText, PressableScale} from '../../components/ui';
 import {PIN_LENGTH} from '../../lib/biometricLock';

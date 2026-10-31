@@ -3,6 +3,7 @@ import {User} from '@supabase/supabase-js';
 
 import {DEFAULT_CATEGORY_IDS} from '../features/onboarding/constants';
 import {GoalId, OnboardingDraft} from '../features/onboarding/types';
+import {PENDING_FLOW_KEY, pendingFlowFor} from './budgetFlow';
 import {isAutomaticBudget, monthlyBudgetOf} from './budgetPlan';
 import {
   SETUP_VERSION,
@@ -13,6 +14,7 @@ import {supabase} from './supabase/client';
 import {
   applyWalletAdjustment,
   loadTransactions,
+  localDateISO,
   seedOpeningBalance,
   walletBalanceFrom,
 } from './transactionsStore';
@@ -78,6 +80,11 @@ export function textToMoney(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Never below zero: the database refuses a negative budget. */
+function clampMoney(value: number | null): number | null {
+  return value === null ? null : Math.max(0, value);
+}
+
 function rowToDraft(row: ProfileRow, email: string): OnboardingDraft {
   return {
     name: row.name,
@@ -103,7 +110,7 @@ function draftToRow(userId: string, draft: OnboardingDraft) {
     // The budget in effect, so a calculated one is stored as it stands.
     monthly_budget: isAutomaticBudget(draft)
       ? monthlyBudgetOf(draft)
-      : textToMoney(draft.monthlyBudget),
+      : clampMoney(textToMoney(draft.monthlyBudget)),
     monthly_savings_goal: textToMoney(draft.monthlySavingsGoal),
     goal: draft.goal,
     category_ids: draft.categoryIds,
@@ -122,15 +129,19 @@ export function draftFromUser(
     asString(meta.full_name) || asString(meta.name) || asString(meta.display_name);
   // Google OAuth surfaces the email both on user.email and meta.email.
   const metaEmail = user.email || asString(meta.email);
+  // The sign-up trigger inserts a row with no plan (or goal) in it, and the
+  // first save fills it. Until then the plan picked in onboarding is in the
+  // metadata, so the row's blanks must not hide it.
+  const planned = (value: string | undefined, key: string) =>
+    stored?.goal ? value ?? '' : value || asString(meta[key]);
   return {
     name: stored?.name || metaName || displayNameFromEmail(user.email),
     email: stored?.email || metaEmail,
     currency: stored?.currency || asString(meta.currency, 'INR'),
-    startingBalance: stored?.startingBalance ?? asString(meta.startingBalance),
-    monthlyIncome: stored?.monthlyIncome ?? asString(meta.monthlyIncome),
-    monthlyBudget: stored?.monthlyBudget ?? asString(meta.monthlyBudget),
-    monthlySavingsGoal:
-      stored?.monthlySavingsGoal ?? asString(meta.monthlySavingsGoal),
+    startingBalance: planned(stored?.startingBalance, 'startingBalance'),
+    monthlyIncome: planned(stored?.monthlyIncome, 'monthlyIncome'),
+    monthlyBudget: planned(stored?.monthlyBudget, 'monthlyBudget'),
+    monthlySavingsGoal: planned(stored?.monthlySavingsGoal, 'monthlySavingsGoal'),
     goal: stored?.goal ?? asGoal(meta.goal),
     categoryIds: stored?.categoryIds ?? asCategories(meta.categoryIds),
     // The profiles table has no payday column; it lives on the auth user.
@@ -162,6 +173,13 @@ export function profilePayload(draft: OnboardingDraft) {
     // A new account goes through every current step, so it is never caught up later.
     setupVersion: SETUP_VERSION,
     ...scheduledMetadata(scheduleFromDraft(draft)),
+    // Where its budget starts is worked out the first time it opens (budgetFlow).
+    [PENDING_FLOW_KEY]: pendingFlowFor(
+      draft.alreadySpent,
+      localDateISO(),
+      draft.payday,
+      draft.startNow === true,
+    ),
   };
 }
 

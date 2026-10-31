@@ -1,6 +1,9 @@
 import React, {useEffect, useState} from 'react';
 import {KeyboardAvoidingView, Modal, Platform, View} from 'react-native';
-import {Envelope, Eye, EyeSlash, Lock} from 'phosphor-react-native';
+import {Envelope} from 'phosphor-react-native/src/icons/Envelope';
+import {Eye} from 'phosphor-react-native/src/icons/Eye';
+import {EyeSlash} from 'phosphor-react-native/src/icons/EyeSlash';
+import {Lock} from 'phosphor-react-native/src/icons/Lock';
 
 import {
   AppText,

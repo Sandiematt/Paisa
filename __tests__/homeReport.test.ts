@@ -281,8 +281,6 @@ describe('buildHomeReport', () => {
     expect(report.overBudget).toBe(true);
     expect(report.planFeasible).toBe(true);
     expect(report.planLabel).toBe('On track');
-    // 14 finished days at 200 a day of budget and 133.33 set aside, less the 9000.
-    expect(report.savingsState).toEqual({ kind: 'negative', overspend: 4333.33 });
     expect(report.insightKicker).toBe('Spending');
     expect(report.healthLabel).toBe('Off track');
     expect(report.spendRatio).toBe(150);
@@ -308,14 +306,12 @@ describe('buildHomeReport', () => {
     expect(report.overBudget).toBe(false);
     expect(report.planFeasible).toBe(false);
     expect(report.plannedSavings).toBe(1000);
-    // With a budget, savings come from the daily plan: 13 days at 333.33, less 100.
-    expect(report.savingsState).toEqual({ kind: 'positive', amount: 4233.33 });
     expect(report.healthLabel).toBe('On track');
     expect(report.planLabel).toBe('Off track');
     expect(report.planHint.toLowerCase()).toContain('month');
   });
 
-  it('measures savings progress from what the daily plan leaves', () => {
+  it('reads the plan against the budget', () => {
     const rows = [
       tx({
         id: 'pay',
@@ -339,10 +335,6 @@ describe('buildHomeReport', () => {
       monthlySavingsGoal: 5000,
     });
 
-    // 13 finished days (2-14 Sep) at 666.67 of budget plus 333.33 set aside, less 500.
-    expect(report.savingsFromPlan).toBe(true);
-    expect(report.actualSavings).toBe(12500);
-    expect(report.savingsState).toEqual({ kind: 'positive', amount: 12500 });
     expect(report.plannedSavings).toBe(10000);
     expect(report.monthlySavingsGoal).toBe(5000);
     expect(report.overBudget).toBe(false);
@@ -352,7 +344,7 @@ describe('buildHomeReport', () => {
     expect(report.insightKicker).toBe('Spending');
   });
 
-  it('counts savings from the plan even before income is logged', () => {
+  it('reads a feasible plan before income is logged', () => {
     const rows = [
       tx({
         id: 'coffee',
@@ -369,7 +361,6 @@ describe('buildHomeReport', () => {
       monthlySavingsGoal: 5000,
     });
 
-    expect(report.savingsState).toEqual({ kind: 'positive', amount: 11000 });
     expect(report.planFeasible).toBe(true);
     expect(report.plannedSavings).toBe(10000);
     expect(report.overBudget).toBe(false);
@@ -576,7 +567,7 @@ describe('buildHomeReport', () => {
     expect(today.series).toEqual([10000]);
   });
 
-  it('evaluates the savings plan monthly even on the week range', () => {
+  it('reads the plan monthly even on the week range', () => {
     const rows = [
       tx({
         id: 'pay',
@@ -600,14 +591,8 @@ describe('buildHomeReport', () => {
       monthlySavingsGoal: 1000,
     });
 
-    // Only Mon 14 Sep is over: its 666.67 daily budget, unspent (rent is today).
-    expect(report.savingsState).toEqual({ kind: 'positive', amount: 666.67 });
-    expect(report.actualSavings).toBe(666.67);
     expect(report.monthlySavingsGoal).toBe(1000);
     expect(report.periodSavingsTarget).toBe(233.33);
-    // Judged on the finished days: Mon 14 Sep at 1000 / 30 a day.
-    expect(report.savingsTargetToDate).toBe(33.33);
-    expect(report.savingsVsTarget).toBe(633.34);
     expect(report.planFeasible).toBe(false);
     expect(report.plannedSavings).toBe(0);
     expect(report.periodPlannedSavings).toBe(0);
@@ -621,13 +606,8 @@ describe('buildHomeReport', () => {
     expect(report.monthlyRemainingBudget).toBe(-1580);
     expect(report.monthlyOverBudget).toBe(true);
     expect(report.monthlySpendRatio).toBe(108);
-    // The ledger starts 14 Sep, so the month has one finished day so far.
-    expect(report.monthlyActualSavings).toBe(666.67);
-    expect(report.monthlySavingsVsTarget).toBe(633.34);
-    expect(report.monthlySavingsState).toEqual({
-      kind: 'positive',
-      amount: 666.67,
-    });
+    // Income less spending; savings with a budget come from the rolling budget.
+    expect(report.monthlyActualSavings).toBe(28420);
   });
 
   describe('health score without a budget', () => {

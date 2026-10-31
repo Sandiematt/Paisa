@@ -1,4 +1,5 @@
-import {Moon, Sun} from 'phosphor-react-native';
+import {Moon} from 'phosphor-react-native/src/icons/Moon';
+import {Sun} from 'phosphor-react-native/src/icons/Sun';
 import React, {useEffect, useRef} from 'react';
 import {Animated, Easing, GestureResponderEvent, StyleSheet} from 'react-native';
 

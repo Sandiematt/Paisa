@@ -123,15 +123,15 @@ const BOTH_ON: DetectorStatus = {
 
 const ALLOWANCE: DailyAllowance = {
   date: '2026-10-14',
-  weekStart: '2026-10-12',
-  weekEnd: '2026-10-18',
-  weekBudget: 9450,
-  spentWeekBeforeToday: 450,
-  daysLeftInWeek: 5,
+  cycleStart: '2026-10-01',
+  cycleEnd: '2026-10-31',
+  daysLeft: 18,
+  budget: 40000,
+  spentBeforeToday: 7600,
   dailyLimit: 1800,
   spentToday: 600,
   remainingToday: 1200,
-  remainingWeek: 8400,
+  remainingMonth: 31800,
 };
 
 const PAYMENTS: DetectedTxn[] = [
@@ -243,7 +243,7 @@ describe('AutoTrackingScreen', () => {
     expect(text).toContain('₹600');
     expect(text).toContain('Left today');
     expect(text).toContain('₹1,200');
-    expect(text).toContain('Week budget ₹9,450 · 5 days left');
+    expect(text).toContain('₹31,800 left this month · 18 days left');
 
     // Settings and footnotes.
     expect(text).toContain('Transaction notes');
@@ -344,7 +344,7 @@ describe('AutoTrackingScreen', () => {
 
   it('shows "Over by" when today is past the limit', async () => {
     mockUseAutoTrack.mockReturnValue(
-      autoTrack({allowance: {...ALLOWANCE, spentToday: 2000, remainingToday: -200, remainingWeek: 7000}}),
+      autoTrack({allowance: {...ALLOWANCE, spentToday: 2000, remainingToday: -200, remainingMonth: 30400}}),
     );
     const tree = await render(screen());
     const text = textOf(tree);

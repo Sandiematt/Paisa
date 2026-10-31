@@ -24,16 +24,11 @@ import {
   DetectorStatus,
 } from '../../lib/autotrack/types';
 import {
-  TransactionRow,
   localDateISO,
   upsertDetectedTransaction,
 } from '../../lib/transactionsStore';
 import {useAuth} from '../auth/AuthProvider';
-import {
-  buildBudgetSnapshot,
-  dailyAllowance,
-  unsyncedSpendByDate,
-} from './dailyAllowance';
+import {dailyAllowance, unsyncedSpendByDate} from './dailyAllowance';
 import {createSyncDrain} from './syncDrain';
 
 export type AutoTrackValue = {
@@ -74,17 +69,11 @@ export type AutoTrackValue = {
   merge: (id: number) => Promise<void>;
   clearHistory: () => Promise<void>;
   shareReport: () => Promise<void>;
-  /** The screen that owns the ledger calls this whenever transactions or the budget change. */
-  setBudgetInputs: (inputs: {
-    transactions: TransactionRow[];
-    monthlyBudget: number;
-    /** Payday the budget month starts on; null keeps calendar months. */
-    payday?: number | null;
-    /** Monthly bills due this budget month, taken off before day-to-day spending. */
-    committed?: number;
-    /** When the ledger fetch behind `transactions` started; 0 if unknown. */
-    dataAsOfMillis?: number;
-  }) => void;
+  /**
+   * The screen that owns the ledger calls this whenever transactions or the
+   * budget change, with the snapshot built from them (snapshotForBudget).
+   */
+  setBudgetSnapshot: (snapshot: BudgetSnapshot) => void;
 };
 
 const AutoTrackContext = createContext<AutoTrackValue | null>(null);
@@ -356,24 +345,8 @@ export function AutoTrackProvider({children}: {children: React.ReactNode}) {
     [updatePrefs],
   );
 
-  const setBudgetInputs = useCallback(
-    (inputs: {
-      transactions: TransactionRow[];
-      monthlyBudget: number;
-      payday?: number | null;
-      committed?: number;
-      dataAsOfMillis?: number;
-    }) => {
-      const next = buildBudgetSnapshot(
-        inputs.transactions,
-        {
-          monthlyBudget: inputs.monthlyBudget,
-          payday: inputs.payday,
-          committed: inputs.committed,
-        },
-        new Date(),
-        inputs.dataAsOfMillis ?? 0,
-      );
+  const setBudgetSnapshot = useCallback(
+    (next: BudgetSnapshot) => {
       const json = JSON.stringify(next);
       if (json === snapshotJson.current) {
         return;
@@ -466,7 +439,7 @@ export function AutoTrackProvider({children}: {children: React.ReactNode}) {
       merge,
       clearHistory,
       shareReport,
-      setBudgetInputs,
+      setBudgetSnapshot,
     }),
     [
       allowance,
@@ -480,7 +453,7 @@ export function AutoTrackProvider({children}: {children: React.ReactNode}) {
       prefs,
       prefsLoaded,
       refreshStatus,
-      setBudgetInputs,
+      setBudgetSnapshot,
       setLogStreaming,
       shareReport,
       stagePrefs,

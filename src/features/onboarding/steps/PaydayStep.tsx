@@ -1,6 +1,7 @@
 import React from 'react';
 import {View} from 'react-native';
-import {CalendarCheck, CurrencyInr} from 'phosphor-react-native';
+import {CalendarCheck} from 'phosphor-react-native/src/icons/CalendarCheck';
+import {CurrencyInr} from 'phosphor-react-native/src/icons/CurrencyInr';
 
 import {
   AppText,

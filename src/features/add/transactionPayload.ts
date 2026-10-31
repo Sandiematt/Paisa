@@ -16,11 +16,14 @@ export type TransactionFormInput = {
   note: string;
   /** Repeats every month. Defaults to the existing row's setting, else off. */
   isRecurring?: boolean;
+  /** A one-off expense set aside from the month like a bill (fees, repairs). */
+  isFixed?: boolean;
   existing?: {
     merchant: string | null;
     description: string | null;
     paymentMethod: string | null;
     isRecurring: boolean;
+    isFixed?: boolean;
   } | null;
   oldCategoryName?: string | null;
 };
@@ -78,6 +81,8 @@ export function buildTransactionPayload(
         description: name,
         merchant: name,
         isRecurring: input.isRecurring ?? false,
+        // Only an expense can be a one-off fixed cost.
+        ...(input.isFixed && input.type === 'expense' ? {isFixed: true} : {}),
       },
     };
   }
@@ -95,6 +100,9 @@ export function buildTransactionPayload(
         : existing.merchant,
       paymentMethod: existing.paymentMethod,
       isRecurring: input.isRecurring ?? existing.isRecurring,
+      ...(input.isFixed !== undefined || existing.isFixed
+        ? {isFixed: input.type === 'expense' && (input.isFixed ?? existing.isFixed ?? false)}
+        : {}),
     },
   };
 }

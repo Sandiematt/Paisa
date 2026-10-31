@@ -1,6 +1,9 @@
 import React, {useState} from 'react';
 import {KeyboardAvoidingView, ScrollView, View} from 'react-native';
-import {Envelope, Eye, EyeSlash, Lock} from 'phosphor-react-native';
+import {Envelope} from 'phosphor-react-native/src/icons/Envelope';
+import {Eye} from 'phosphor-react-native/src/icons/Eye';
+import {EyeSlash} from 'phosphor-react-native/src/icons/EyeSlash';
+import {Lock} from 'phosphor-react-native/src/icons/Lock';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
 import {Logo} from '../../components/brand/Logo';

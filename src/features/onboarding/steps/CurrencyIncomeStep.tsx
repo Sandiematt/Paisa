@@ -32,7 +32,7 @@ export function CurrencyIncomeStep({draft, onChange}: CurrencyIncomeStepProps) {
           }
           keyboardType="number-pad"
           returnKeyType="done"
-          helper="What you have now. This becomes the opening wallet amount."
+          helper="What is in your bank and wallet now. Paisa tracks from it; the money stays with you."
         />
       </Stagger>
 

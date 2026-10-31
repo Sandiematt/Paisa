@@ -53,13 +53,22 @@ import {
   NotificationTarget,
 } from '../../lib/notifications/types';
 import {TransactionRow} from '../../lib/transactionsStore';
-import {monthlySpentFor} from '../home/homeReport';
 import {useAuth} from '../auth/AuthProvider';
 
 /** What the app knows about spending; the provider decides what to notify. */
 export type NotificationSnapshot = {
   transactions: TransactionRow[];
-  monthlyBudget: number;
+  /**
+   * This budget cycle, from the rolling budget (src/lib/budgetEngine.ts):
+   * day-to-day spending so far against what the cycle has for it. Null with
+   * no running budget (none set, waiting to start, or needing a fix).
+   */
+  budget: {
+    /** Month the cycle starts in, `YYYY-MM`: one set of alerts per cycle. */
+    period: string;
+    spent: number;
+    spendable: number;
+  } | null;
   currencySymbol: string;
 };
 
@@ -289,12 +298,13 @@ export function NotificationsProvider({
         }
       }
 
-      if (snapshot) {
+      if (snapshot?.budget) {
         const plan = planBudgetAlert({
           userId: owner,
           now,
-          spent: monthlySpentFor(snapshot.transactions, now),
-          budget: snapshot.monthlyBudget,
+          spent: snapshot.budget.spent,
+          budget: snapshot.budget.spendable,
+          period: snapshot.budget.period,
           currencySymbol: snapshot.currencySymbol,
           prefs,
           handled: new Set(Object.keys(handledRef.current)),

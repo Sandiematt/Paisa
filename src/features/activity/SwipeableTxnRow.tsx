@@ -6,13 +6,11 @@ import {
   Text as NativeText,
   View,
 } from 'react-native';
-import {
-  ArrowsClockwise,
-  Copy,
-  NotePencil,
-  PencilSimple,
-  Trash,
-} from 'phosphor-react-native';
+import {ArrowsClockwise} from 'phosphor-react-native/src/icons/ArrowsClockwise';
+import {Copy} from 'phosphor-react-native/src/icons/Copy';
+import {NotePencil} from 'phosphor-react-native/src/icons/NotePencil';
+import {PencilSimple} from 'phosphor-react-native/src/icons/PencilSimple';
+import {Trash} from 'phosphor-react-native/src/icons/Trash';
 
 import {PressableScale, Text} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';

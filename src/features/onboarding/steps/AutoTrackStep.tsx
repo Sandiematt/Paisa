@@ -1,11 +1,9 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {AppState, View} from 'react-native';
-import {
-  Lightning,
-  LockSimple,
-  NotePencil,
-  ShieldWarning,
-} from 'phosphor-react-native';
+import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
+import {LockSimple} from 'phosphor-react-native/src/icons/LockSimple';
+import {NotePencil} from 'phosphor-react-native/src/icons/NotePencil';
+import {ShieldWarning} from 'phosphor-react-native/src/icons/ShieldWarning';
 
 import {
   AppText,

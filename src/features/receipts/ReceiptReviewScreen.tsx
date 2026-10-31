@@ -12,15 +12,13 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {
-  CalendarBlank,
-  CaretDown,
-  CaretUp,
-  CheckCircle,
-  CircleIcon,
-  CopySimple,
-  Warning,
-} from 'phosphor-react-native';
+import {CalendarBlank} from 'phosphor-react-native/src/icons/CalendarBlank';
+import {CaretDown} from 'phosphor-react-native/src/icons/CaretDown';
+import {CaretUp} from 'phosphor-react-native/src/icons/CaretUp';
+import {CheckCircle} from 'phosphor-react-native/src/icons/CheckCircle';
+import {CircleIcon} from 'phosphor-react-native/src/icons/Circle';
+import {CopySimple} from 'phosphor-react-native/src/icons/CopySimple';
+import {Warning} from 'phosphor-react-native/src/icons/Warning';
 
 import {
   AppText,

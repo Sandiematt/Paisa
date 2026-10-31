@@ -1,24 +1,22 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Animated, RefreshControl, ScrollView, Share, Text, View} from 'react-native';
-import {
-  ArrowsClockwise,
-  Airplane,
-  BookOpen,
-  Bag,
-  ChartBar,
-  Car,
-  Equals,
-  ForkKnife,
-  Heartbeat,
-  House,
-  Lightning,
-  ShareFat,
-  ShoppingCart,
-  Tag,
-  TrendDown,
-  TrendUp,
-  WifiSlash,
-} from 'phosphor-react-native';
+import {ArrowsClockwise} from 'phosphor-react-native/src/icons/ArrowsClockwise';
+import {Airplane} from 'phosphor-react-native/src/icons/Airplane';
+import {BookOpen} from 'phosphor-react-native/src/icons/BookOpen';
+import {Bag} from 'phosphor-react-native/src/icons/Bag';
+import {ChartBar} from 'phosphor-react-native/src/icons/ChartBar';
+import {Car} from 'phosphor-react-native/src/icons/Car';
+import {Equals} from 'phosphor-react-native/src/icons/Equals';
+import {ForkKnife} from 'phosphor-react-native/src/icons/ForkKnife';
+import {Heartbeat} from 'phosphor-react-native/src/icons/Heartbeat';
+import {House} from 'phosphor-react-native/src/icons/House';
+import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
+import {ShareFat} from 'phosphor-react-native/src/icons/ShareFat';
+import {ShoppingCart} from 'phosphor-react-native/src/icons/ShoppingCart';
+import {Tag} from 'phosphor-react-native/src/icons/Tag';
+import {TrendDown} from 'phosphor-react-native/src/icons/TrendDown';
+import {TrendUp} from 'phosphor-react-native/src/icons/TrendUp';
+import {WifiSlash} from 'phosphor-react-native/src/icons/WifiSlash';
 import type {Icon} from 'phosphor-react-native';
 
 import {

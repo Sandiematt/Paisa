@@ -10,7 +10,7 @@ import React, {
 import {AppState, Modal, StatusBar, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {Lock} from 'phosphor-react-native';
+import {Lock} from 'phosphor-react-native/src/icons/Lock';
 
 import {
   AppText,

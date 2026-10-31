@@ -24,8 +24,20 @@ import {
   markSetupCurrent,
   saveScheduledSetup,
   scheduleFromDraft,
+  scheduledFromUser,
   setupIsCurrent,
+  setupVersionOf,
 } from '../lib/scheduledSetup';
+import {editableBills} from '../lib/bills';
+import {
+  loadBudgetFlow,
+  migrateLegacyBudget,
+  pendingFlowFor,
+  saveBudgetFlow,
+  startNewAccountFlow,
+} from '../lib/budgetFlow';
+import {loadTransactions, localDateISO} from '../lib/transactionsStore';
+import {KnownBill} from '../features/onboarding/steps/BudgetStep';
 import {travel} from '../theme';
 import {RouteName} from './routes';
 import {
@@ -36,6 +48,22 @@ import {
   swapKeyFor,
 } from './swapKey';
 import {useRouter} from './useRouter';
+
+/**
+ * The one-time move of an account that used Paisa before to the rolling
+ * budget (handbook 5.3). Runs once: an account already moved is left alone.
+ */
+async function moveToRollingBudget(
+  userId: string,
+  payday: number | null | undefined,
+  startNow = false,
+) {
+  const current = await loadBudgetFlow(userId);
+  const next = migrateLegacyBudget(current, localDateISO(), payday, startNow);
+  if (next) {
+    await saveBudgetFlow(userId, next);
+  }
+}
 
 export function RootNavigator() {
   const router = useRouter('splash');
@@ -78,6 +106,8 @@ export function RootNavigator() {
   const [needsSetup, setNeedsSetup] = useState(false);
   // An account from before payday, bills and app lock: asked those once.
   const [needsUpgrade, setNeedsUpgrade] = useState(false);
+  // Bills an account catching up already has, so its budget is checked against them.
+  const [knownBills, setKnownBills] = useState<KnownBill[] | undefined>(undefined);
   const hadUser = useRef(false);
   const googleBusy = useRef(false);
 
@@ -115,9 +145,25 @@ export function RootNavigator() {
       const owesSetup = profileIncomplete && !!provider && provider !== 'email';
       setNeedsSetup(owesSetup);
       // Someone still in first-time setup gets the new steps there.
-      setNeedsUpgrade(!owesSetup && !setupIsCurrent(user));
+      const upgrade = !owesSetup && !setupIsCurrent(user);
+      setNeedsUpgrade(upgrade);
       setDraft(draftFromUser(user, stored));
       setProfileReady(true);
+      if (upgrade) {
+        loadTransactions()
+          .then(rows => {
+            if (!cancelled) {
+              setKnownBills(
+                editableBills(rows, scheduledFromUser(user)).map(bill => ({
+                  key: bill.key,
+                  label: bill.label,
+                  amount: bill.amount,
+                })),
+              );
+            }
+          })
+          .catch(() => {});
+      }
     });
 
     return () => {
@@ -151,6 +197,15 @@ export function RootNavigator() {
       if (result.userId) {
         try {
           await saveProfile(result.userId, completed);
+          const today = localDateISO();
+          await saveBudgetFlow(
+            result.userId,
+            startNewAccountFlow(
+              pendingFlowFor(completed.alreadySpent, today, completed.payday, completed.startNow === true),
+              today,
+              completed.payday,
+            ),
+          ).catch(() => {});
         } catch {
           Alert.alert(
             'Account created',
@@ -217,6 +272,15 @@ export function RootNavigator() {
         await saveProfile(user.id, completed);
         await saveScheduledSetup(scheduleFromDraft(completed));
         await markSetupCurrent();
+        const today = localDateISO();
+        await saveBudgetFlow(
+          user.id,
+          startNewAccountFlow(
+            pendingFlowFor(completed.alreadySpent, today, completed.payday, completed.startNow === true),
+            today,
+            completed.payday,
+          ),
+        );
       } catch {
         Alert.alert(
           'Could not save to Supabase',
@@ -244,6 +308,7 @@ export function RootNavigator() {
       try {
         await saveProfile(user.id, completed);
         await addScheduledSetup(user, scheduleFromDraft(completed));
+        await moveToRollingBudget(user.id, completed.payday, completed.startNow === true);
         await markSetupCurrent();
       } catch {
         Alert.alert(
@@ -257,10 +322,14 @@ export function RootNavigator() {
     [stageAppLock, user],
   );
 
+  // "Not now" keeps every value as it is and still moves the account over.
   const dismissUpgrade = useCallback(() => {
     setNeedsUpgrade(false);
+    if (user) {
+      moveToRollingBudget(user.id, draft?.payday ?? null).catch(() => {});
+    }
     markSetupCurrent().catch(() => {});
-  }, []);
+  }, [draft?.payday, user]);
 
   const handleProfileSave = useCallback(
     async (updated: OnboardingDraft, options?: SaveProfileOptions) => {
@@ -294,6 +363,8 @@ export function RootNavigator() {
               initialDraft={draft}
               passwordless
               skipLock={appLockOn}
+              upgradeFrom={setupVersionOf(user)}
+              knownBills={knownBills}
               onComplete={handleUpgrade}
               onDismiss={dismissUpgrade}
             />
@@ -375,8 +446,10 @@ export function RootNavigator() {
       handleOAuthSetup,
       handleProfileSave,
       handleSignIn,
+      knownBills,
       router,
       signOut,
+      user,
     ],
   );
 

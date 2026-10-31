@@ -1,6 +1,8 @@
 import React from 'react';
 import {View} from 'react-native';
-import {DeviceMobile, Lightning, WarningCircle} from 'phosphor-react-native';
+import {DeviceMobile} from 'phosphor-react-native/src/icons/DeviceMobile';
+import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
+import {WarningCircle} from 'phosphor-react-native/src/icons/WarningCircle';
 
 import {
   AppText,

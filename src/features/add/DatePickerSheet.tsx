@@ -8,7 +8,10 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {CaretDown, CaretLeft, CaretRight, CaretUp} from 'phosphor-react-native';
+import {CaretDown} from 'phosphor-react-native/src/icons/CaretDown';
+import {CaretLeft} from 'phosphor-react-native/src/icons/CaretLeft';
+import {CaretRight} from 'phosphor-react-native/src/icons/CaretRight';
+import {CaretUp} from 'phosphor-react-native/src/icons/CaretUp';
 
 import {AppText, PressableScale, PrimaryButton} from '../../components/ui';
 import {colors, layout, makeStyles, palettes, radii, spacing} from '../../theme';

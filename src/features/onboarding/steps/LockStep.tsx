@@ -1,6 +1,9 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {View} from 'react-native';
-import {CaretRight, CheckCircle, Fingerprint, Password} from 'phosphor-react-native';
+import {CaretRight} from 'phosphor-react-native/src/icons/CaretRight';
+import {CheckCircle} from 'phosphor-react-native/src/icons/CheckCircle';
+import {Fingerprint} from 'phosphor-react-native/src/icons/Fingerprint';
+import {Password} from 'phosphor-react-native/src/icons/Password';
 
 import {
   AppText,

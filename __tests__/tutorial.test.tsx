@@ -140,6 +140,16 @@ describe('tutorial steps', () => {
     expect(HOME[0]).toMatchObject({id: 'welcome', target: null});
   });
 
+  it('explains the budget and the daily limit on Home, with simple numbers', () => {
+    const ids = HOME.map(step => step.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(['budget-how', 'daily-limit', 'daily-limit-changes', 'goals']),
+    );
+    // The example adds up: 9,000 - 5,000 bills - 2,000 savings = 2,000; over 30 days about 66 a day.
+    expect(HOME.find(step => step.id === 'budget-how')?.body).toContain('₹2,000 left over');
+    expect(HOME.find(step => step.id === 'daily-limit')?.body).toContain('about ₹66 a day');
+  });
+
   it('places the card below a target, above when it would not fit, else centred', () => {
     const insets = {top: 40, bottom: 30};
     expect(

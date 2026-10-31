@@ -1,23 +1,21 @@
 import React from 'react';
-import {
-  Airplane,
-  ArrowCounterClockwise,
-  Briefcase,
-  Car,
-  DotsThree,
-  ForkKnife,
-  GameController,
-  GraduationCap,
-  Heart,
-  House,
-  Laptop,
-  Lightning,
-  Repeat,
-  ShoppingBag,
-  ShoppingCart,
-  Tag,
-  User,
-} from 'phosphor-react-native';
+import {Airplane} from 'phosphor-react-native/src/icons/Airplane';
+import {ArrowCounterClockwise} from 'phosphor-react-native/src/icons/ArrowCounterClockwise';
+import {Briefcase} from 'phosphor-react-native/src/icons/Briefcase';
+import {Car} from 'phosphor-react-native/src/icons/Car';
+import {DotsThree} from 'phosphor-react-native/src/icons/DotsThree';
+import {ForkKnife} from 'phosphor-react-native/src/icons/ForkKnife';
+import {GameController} from 'phosphor-react-native/src/icons/GameController';
+import {GraduationCap} from 'phosphor-react-native/src/icons/GraduationCap';
+import {Heart} from 'phosphor-react-native/src/icons/Heart';
+import {House} from 'phosphor-react-native/src/icons/House';
+import {Laptop} from 'phosphor-react-native/src/icons/Laptop';
+import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
+import {Repeat} from 'phosphor-react-native/src/icons/Repeat';
+import {ShoppingBag} from 'phosphor-react-native/src/icons/ShoppingBag';
+import {ShoppingCart} from 'phosphor-react-native/src/icons/ShoppingCart';
+import {Tag} from 'phosphor-react-native/src/icons/Tag';
+import {User} from 'phosphor-react-native/src/icons/User';
 import type {Icon as PhosphorIcon} from 'phosphor-react-native';
 
 import {GradientIconSquare, GradientView} from '../../components/ui';

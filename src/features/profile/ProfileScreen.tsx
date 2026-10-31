@@ -1,25 +1,24 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Alert, Animated, Image, Modal, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {
-  ArrowRight,
-  CaretRight,
-  Compass,
-  Coins,
-  CalendarCheck,
-  CurrencyInr,
-  DownloadSimple,
-  FileCsv,
-  Fingerprint,
-  Lightning,
-  PencilSimple,
-  PiggyBank,
-  SealCheck,
-  SignOut,
-  Target,
-  Trash,
-  Wallet,
-} from 'phosphor-react-native';
+import {ArrowRight} from 'phosphor-react-native/src/icons/ArrowRight';
+import {CaretRight} from 'phosphor-react-native/src/icons/CaretRight';
+import {Compass} from 'phosphor-react-native/src/icons/Compass';
+import {Coins} from 'phosphor-react-native/src/icons/Coins';
+import {CalendarCheck} from 'phosphor-react-native/src/icons/CalendarCheck';
+import {CurrencyInr} from 'phosphor-react-native/src/icons/CurrencyInr';
+import {DownloadSimple} from 'phosphor-react-native/src/icons/DownloadSimple';
+import {FilePdf} from 'phosphor-react-native/src/icons/FilePdf';
+import {Fingerprint} from 'phosphor-react-native/src/icons/Fingerprint';
+import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
+import {PencilSimple} from 'phosphor-react-native/src/icons/PencilSimple';
+import {PiggyBank} from 'phosphor-react-native/src/icons/PiggyBank';
+import {Receipt} from 'phosphor-react-native/src/icons/Receipt';
+import {SealCheck} from 'phosphor-react-native/src/icons/SealCheck';
+import {SignOut} from 'phosphor-react-native/src/icons/SignOut';
+import {Target} from 'phosphor-react-native/src/icons/Target';
+import {Trash} from 'phosphor-react-native/src/icons/Trash';
+import {Wallet} from 'phosphor-react-native/src/icons/Wallet';
 
 import {CameraGlyph, CheckGlyph} from '../../components/icons/Glyphs';
 import {
@@ -37,14 +36,15 @@ import {
 } from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {exportTransactionsCsv} from '../../lib/exportCsv';
+import {exportTransactionsPdf} from '../../lib/exportPdf';
 import {transactionsInMonth} from '../../lib/exportMonth';
 import {
-  automaticMonthlyBudget,
-  dayToDayBudget,
   isAutomaticBudget,
-  monthlyBudgetOf,
-  withDayToDayBudget,
+  monthlyTotalOf,
+  withMonthlyTotal,
+  withSavingsGoal,
 } from '../../lib/budgetPlan';
+import {BillInput, EditableBill} from '../../lib/bills';
 import {SaveProfileOptions} from '../../lib/profileStore';
 import {deleteAccount} from '../../lib/supabase/account';
 import {
@@ -63,7 +63,10 @@ import {
   spacing,
   useTheme,
 } from '../../theme';
-import {budgetForDay, scaleMonthly, yearlyFromMonthly} from '../home/homeReport';
+import {planProblem} from '../home/budgetCopy';
+import {yearlyFromMonthly} from '../home/homeReport';
+import {cycleLength, cycleRangeFor, validatePlan} from '../../lib/budgetEngine';
+import {localDateISO} from '../../lib/transactionsStore';
 import {
   currencyByCode,
   dayLabel,
@@ -73,6 +76,7 @@ import {useAutoTrack} from '../autotrack/AutoTrackProvider';
 import {autoTrackState} from '../autotrack/autoTrackFormat';
 import {useBiometricLock} from '../security/BiometricLockProvider';
 import {AvatarPickerModal} from './AvatarPickerModal';
+import {BillsSheet} from './BillsSheet';
 import {useNotificationSettings} from './NotificationsSettingsSection';
 import {ProfileGoalKey, profileCompleteness} from './profileCompleteness';
 import {balanceFieldText, planProfileSave} from './profileSavePlan';
@@ -97,6 +101,12 @@ type ProfileScreenProps = {
   onReplayTutorial?: () => void;
   /** This budget month's monthly bills; the budget shown is what is left after them. */
   monthlyBills?: number;
+  /** Asks whether this month's bills were paid before sign-up; shown in the budget sheet. */
+  billsQuestion?: React.ReactNode;
+  /** The monthly bills, edited from their own sheet. */
+  bills?: EditableBill[];
+  onSaveBill?: (bill: EditableBill | null, input: BillInput) => Promise<void>;
+  onRemoveBill?: (bill: EditableBill) => Promise<void>;
   onClose: () => void;
 };
 
@@ -105,11 +115,13 @@ type SheetKey =
   | 'balance'
   | 'income'
   | 'budget'
+  | 'bills'
   | 'savings'
   | 'payday'
   | 'appLock';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const NO_BILLS: EditableBill[] = [];
 const TOAST_DURATION_MS = 2200;
 const APP_VERSION = 'v0.0.1 (Beta)';
 const ICON_SIZE = 24;
@@ -213,6 +225,10 @@ export function ProfileScreen({
   onOpenAutoTracking,
   onReplayTutorial,
   monthlyBills = 0,
+  billsQuestion = null,
+  bills = NO_BILLS,
+  onSaveBill,
+  onRemoveBill,
   onClose,
 }: ProfileScreenProps) {
   const styles = useStyles();
@@ -313,16 +329,13 @@ export function ProfileScreen({
   const symbol = activeCurrency.symbol;
   const emailVerified = EMAIL_PATTERN.test(email.trim());
 
-  // The budget follows income and savings until the user sets their own, and
-  // is shown, edited and judged after this month's bills.
+  // The budget is the month's total, bills and the savings goal included; it
+  // follows income until the user sets their own (handbook D1).
   const budgetFields = {monthlyIncome, monthlyBudget, monthlySavingsGoal, budgetCustom};
   const budgetAutomatic = isAutomaticBudget(budgetFields);
-  const dayToDay = dayToDayBudget(monthlyBudgetOf(budgetFields), monthlyBills);
-  const calculatedDayToDay = dayToDayBudget(
-    automaticMonthlyBudget(budgetFields),
-    monthlyBills,
-  );
-  const budgetText = budgetAutomatic || monthlyBudget !== '' ? String(dayToDay) : '';
+  const monthlyTotal = monthlyTotalOf(budgetFields);
+  const savingsNumber = Number(monthlySavingsGoal) || 0;
+  const budgetText = monthlyTotal > 0 ? String(monthlyTotal) : '';
 
   const completeness = profileCompleteness(
     {monthlyIncome, monthlyBudget: budgetText, monthlySavingsGoal},
@@ -343,6 +356,12 @@ export function ProfileScreen({
     if (!name.trim()) {
       Alert.alert('Name needed', 'Add your name before saving.');
       setSheet('name');
+      return;
+    }
+    const problem = planProblem(budgetText, monthlyBills, savingsNumber, symbol);
+    if (problem) {
+      Alert.alert('Budget too small', problem);
+      setSheet('budget');
       return;
     }
 
@@ -396,13 +415,14 @@ export function ProfileScreen({
     ]);
   };
 
-  const runExport = async (scope: 'month' | 'all') => {
+  const runExport = async (scope: 'month' | 'all', format: 'pdf' | 'csv') => {
     if (exporting) {
       return;
     }
     setExporting(scope);
     try {
-      const result = await exportTransactionsCsv(
+      const exportFile = format === 'pdf' ? exportTransactionsPdf : exportTransactionsCsv;
+      const result = await exportFile(
         draft.currency,
         scope === 'month' ? {month: new Date()} : {},
       );
@@ -411,7 +431,7 @@ export function ProfileScreen({
           'Nothing to export yet',
           scope === 'month'
             ? 'Add a transaction this month first, or export all transactions from App settings.'
-            : 'Add a transaction first, then export your CSV.',
+            : 'Add a transaction first, then export it.',
         );
       }
     } catch (caught) {
@@ -422,6 +442,22 @@ export function ProfileScreen({
     } finally {
       setExporting(null);
     }
+  };
+
+  // A PDF reads as a statement; a CSV opens in a spreadsheet.
+  const chooseExport = (scope: 'month' | 'all') => {
+    if (exporting) {
+      return;
+    }
+    Alert.alert(
+      scope === 'month' ? `Export ${monthName}` : 'Export all transactions',
+      'A PDF statement to read or share, or a CSV for spreadsheets.',
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {text: 'CSV', onPress: () => runExport(scope, 'csv')},
+        {text: 'PDF', onPress: () => runExport(scope, 'pdf')},
+      ],
+    );
   };
 
   const runDelete = async () => {
@@ -470,24 +506,19 @@ export function ProfileScreen({
 
   const closeSheet = () => setSheet(null);
 
-  // `typed` is the day-to-day budget; the bills come on top of it.
-  const dailyHintFor = (typed: string): string | undefined => {
-    const budgetNumber = Number(typed) || 0;
-    const perDay =
-      budgetNumber > 0 ? Math.round(budgetForDay(budgetNumber, new Date(), payday)) : 0;
-    if (perDay <= 0) {
+  // `typed` is the month's total: bills and the goal come out of it, and the
+  // rest is split over the days (more or less as it is spent).
+  const dailyHintFor = (typed: string, goal = savingsNumber): string | undefined => {
+    const check = validatePlan(Number(typed) || 0, monthlyBills, goal);
+    if (check.status === 'over' || !(Number(typed) > 0)) {
       return undefined;
     }
-    const income = Number(monthlyIncome) || 0;
-    const leftover = income > 0 ? income - budgetNumber - monthlyBills : 0;
-    const savingsNumber = Number(monthlySavingsGoal) || 0;
-    const perDayText = `${symbol}${perDay.toLocaleString('en-IN')}`;
-    if (leftover === 0) {
-      return `About ${perDayText} / day.`;
+    if (check.status === 'zero') {
+      return 'Bills and the savings goal take all of it, so the daily limit is 0.';
     }
-    return leftover >= savingsNumber
-      ? `About ${perDayText} / day · ${symbol}${leftover.toLocaleString('en-IN')} planned leftover.`
-      : `About ${perDayText} / day · leftover is below the savings goal.`;
+    const days = cycleLength(cycleRangeFor(localDateISO(), payday));
+    const perDay = Math.floor(check.spendable / days);
+    return `${symbol}${check.spendable.toLocaleString('en-IN')} to spend a month after bills and savings · about ${symbol}${perDay.toLocaleString('en-IN')} a day.`;
   };
 
   const autoTrackStatus = autoTrackState(autoTrack.supported, autoTrack.status);
@@ -684,11 +715,11 @@ export function ProfileScreen({
 
           {/* Export banner */}
           <PressableScale
-            onPress={() => runExport('month')}
+            onPress={() => chooseExport('month')}
             disabled={exporting !== null}
             scaleTo={0.985}
             accessibilityRole="button"
-            accessibilityLabel={`Export ${monthName} as CSV. ${exportSubtitle}`}
+            accessibilityLabel={`Export ${monthName} as PDF or CSV. ${exportSubtitle}`}
             accessibilityState={{disabled: exporting !== null, busy: exportingMonth}}
             containerStyle={styles.bannerWrap}>
             <GradientView
@@ -697,11 +728,11 @@ export function ProfileScreen({
               positions={[0, 0.6, 1]}
               style={styles.banner}>
               <View style={styles.csvSquare}>
-                <FileCsv size={26} color={colors.onAccent} />
+                <FilePdf size={26} color={colors.onAccent} />
               </View>
               <View style={styles.bannerText}>
                 <AppText variant="heading" color={colors.onAccent} numberOfLines={1}>
-                  Export {monthName} as CSV
+                  Export {monthName} as PDF or CSV
                 </AppText>
                 <AppText variant="label" color={colors.onAccent} numberOfLines={1}>
                   {exportSubtitle}
@@ -741,12 +772,26 @@ export function ProfileScreen({
               icon={<Target size={ICON_SIZE} color={colors.text} />}
               label="Budget"
               value={
-                dayToDay > 0
-                  ? `${perMonth(String(dayToDay))}${budgetAutomatic ? ' · auto' : ''}`
+                monthlyTotal > 0
+                  ? `${perMonth(String(monthlyTotal))}${budgetAutomatic ? ' · income' : ''}`
                   : 'Not set'
               }
               onPress={() => setSheet('budget')}
             />
+            {onSaveBill && onRemoveBill ? (
+              <SettingsRow
+                icon={<Receipt size={ICON_SIZE} color={colors.text} />}
+                label="Monthly bills"
+                value={
+                  bills.length > 0
+                    ? `${bills.length} · ${symbol}${bills
+                        .reduce((sum, bill) => sum + bill.amount, 0)
+                        .toLocaleString('en-IN')}`
+                    : 'None'
+                }
+                onPress={() => setSheet('bills')}
+              />
+            ) : null}
             <SettingsRow
               icon={<CalendarCheck size={ICON_SIZE} color={colors.text} />}
               label="Pay cycle"
@@ -808,8 +853,8 @@ export function ProfileScreen({
               icon={<DownloadSimple size={ICON_SIZE} color={colors.text} />}
               label="Export all transactions"
               value={exporting === 'all' ? 'Preparing…' : undefined}
-              onPress={() => runExport('all')}
-              accessibilityLabel="Export all transactions as CSV"
+              onPress={() => chooseExport('all')}
+              accessibilityLabel="Export all transactions as PDF or CSV"
             />
             {onSignOut ? (
               <SettingsRow
@@ -896,66 +941,86 @@ export function ProfileScreen({
           label="Monthly budget"
           symbol={symbol}
           value={budgetText}
-          lead={
-            Number(monthlyIncome) > 0
-              ? `Calculated automatically: income${
-                  monthlyBills > 0 ? ', less monthly bills' : ''
-                }, less your savings goal. Change it if it looks wrong.`
-              : 'What you can spend each month after bills. Add your income to have it calculated.'
-          }
+          lead="Everything you have for the month, bills and your savings goal included. Bills and the goal are set aside first, and the rest becomes your daily limit."
           suggestion={
             Number(monthlyIncome) > 0
               ? {
-                  label: `Use calculated ${formatDerived(calculatedDayToDay, symbol)}`,
-                  value: String(calculatedDayToDay),
+                  label: `Use your income ${formatDerived(Number(monthlyIncome), symbol)}`,
+                  value: String(Number(monthlyIncome)),
                 }
               : undefined
           }
+          validate={draftText => planProblem(draftText, monthlyBills, savingsNumber, symbol)}
           renderExtra={draftText => {
             const hint = dailyHintFor(draftText);
-            return hint ? (
-              <AppText variant="caption" color={colors.muted} style={styles.sheetHint}>
-                {hint}
-              </AppText>
-            ) : null;
+            return (
+              <>
+                {hint ? (
+                  <AppText variant="caption" color={colors.muted} style={styles.sheetHint}>
+                    {hint}
+                  </AppText>
+                ) : null}
+                {billsQuestion}
+              </>
+            );
           }}
           onDone={typed => {
-            const next = withDayToDayBudget(budgetFields, typed, monthlyBills);
+            const next = withMonthlyTotal(budgetFields, typed);
             setMonthlyBudget(next.monthlyBudget);
             setBudgetCustom(next.budgetCustom ?? false);
           }}
           onClose={closeSheet}
         />
+        {onSaveBill && onRemoveBill ? (
+          <BillsSheet
+            visible={sheet === 'bills'}
+            bills={bills}
+            symbol={symbol}
+            onSave={onSaveBill}
+            onRemove={onRemoveBill}
+            onClose={closeSheet}
+          />
+        ) : null}
         <MoneySheet
           visible={sheet === 'savings'}
           title="Savings goal"
           label="Monthly savings goal"
           symbol={symbol}
           value={monthlySavingsGoal}
-          helper="Only this monthly target is saved. Week and year follow from it."
+          helper="Set aside from your monthly budget on the first day, before the daily limit. Money left unspent at month end is extra savings on top."
+          validate={draftText =>
+            budgetText === '' ? null : planProblem(budgetText, monthlyBills, Number(draftText) || 0, symbol)
+          }
           renderExtra={draftText => {
             const target = Number(draftText) || 0;
             if (target <= 0) {
               return null;
             }
+            const hint = budgetText === '' ? undefined : dailyHintFor(budgetText, target);
             return (
-              <Card style={styles.derivedCard} padding={0}>
-                <View style={[styles.derivedRow, styles.derivedDivider]}>
-                  <AppText variant="bodyStrong">Weekly pace</AppText>
-                  <AppText variant="numeric">
-                    {formatDerived(scaleMonthly(target, 'week', new Date()), symbol)}
+              <>
+                {hint ? (
+                  <AppText variant="caption" color={colors.muted} style={styles.sheetHint}>
+                    {hint}
                   </AppText>
-                </View>
-                <View style={styles.derivedRow}>
-                  <AppText variant="bodyStrong">Yearly potential</AppText>
-                  <AppText variant="numeric">
-                    {formatDerived(yearlyFromMonthly(target), symbol)}
-                  </AppText>
-                </View>
-              </Card>
+                ) : null}
+                <Card style={styles.derivedCard} padding={0}>
+                  <View style={styles.derivedRow}>
+                    <AppText variant="bodyStrong">Yearly potential</AppText>
+                    <AppText variant="numeric">
+                      {formatDerived(yearlyFromMonthly(target), symbol)}
+                    </AppText>
+                  </View>
+                </Card>
+              </>
             );
           }}
-          onDone={setMonthlySavingsGoal}
+          onDone={goal => {
+            // The month's total stays as it is: a bigger goal leaves less to spend.
+            const next = withSavingsGoal(budgetFields, goal);
+            setMonthlySavingsGoal(goal);
+            setMonthlyBudget(next.monthlyBudget);
+          }}
           onClose={closeSheet}
         />
         <AppLockSheet

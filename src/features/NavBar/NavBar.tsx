@@ -2,7 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import {Animated, LayoutChangeEvent, StyleSheet, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {Plus} from 'phosphor-react-native';
+import {Plus} from 'phosphor-react-native/src/icons/Plus';
 
 import {
   FLOATING_NAV_GAP,

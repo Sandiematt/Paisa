@@ -1,4 +1,6 @@
-import {ArrowsClockwise, CloudArrowDown, X} from 'phosphor-react-native';
+import {ArrowsClockwise} from 'phosphor-react-native/src/icons/ArrowsClockwise';
+import {CloudArrowDown} from 'phosphor-react-native/src/icons/CloudArrowDown';
+import {X} from 'phosphor-react-native/src/icons/X';
 import React, {useEffect, useRef, useState} from 'react';
 import {AccessibilityInfo, Animated, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';

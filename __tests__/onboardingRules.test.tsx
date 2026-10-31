@@ -83,8 +83,8 @@ describe('basics step', () => {
 });
 
 describe('bills step', () => {
-  async function toBills() {
-    mount({checkEmail: async () => false});
+  async function toBills(today?: string) {
+    mount({checkEmail: async () => false, today});
     fillBasics();
     for (let step = 0; step < 3; step += 1) {
       await act(async () => {
@@ -112,6 +112,94 @@ describe('bills step', () => {
       await flow.goNext();
     });
     expect(flow.stepKey).toBe('budget');
+  });
+
+  it('mid-month, asks which bills already past their due day are paid', async () => {
+    // Joining on 15 October: rent was due on the 5th, so it next comes on 5 November.
+    await toBills('2026-10-15');
+    act(() => {
+      flow.update('monthlyIncome', '25000');
+      flow.update('bills', [{id: 'rent', label: 'Rent', slug: 'housing', amount: '15000', day: 5}]);
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('budget');
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('budget');
+    expect(flow.errors.billsPaid).toMatch(/each of these bills/);
+
+    act(() => {
+      flow.update('billsPaid', {'onboarding:bill:rent': false});
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).not.toBe('budget');
+    // Not yet paid: it stays set aside this month until it is.
+    const [rent] = scheduleFromDraft(flow.draft, '2026-10-15');
+    expect(rent).toMatchObject({date: '2026-11-05', notPaidSince: '2026-10-15'});
+  });
+
+  it('does not ask in the last days of the month: the budget starts on the 1st', async () => {
+    await toBills('2026-10-30');
+    act(() => {
+      flow.update('monthlyIncome', '25000');
+      flow.update('bills', [{id: 'rent', label: 'Rent', slug: 'housing', amount: '15000', day: 5}]);
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).not.toBe('budget');
+    expect(flow.errors.billsPaid).toBeUndefined();
+  });
+
+  it('starting now in the last days asks about paid bills like mid-month', async () => {
+    await toBills('2026-10-30');
+    act(() => {
+      flow.update('monthlyIncome', '25000');
+      flow.update('bills', [{id: 'rent', label: 'Rent', slug: 'housing', amount: '15000', day: 5}]);
+      flow.update('startNow', true);
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('budget');
+    expect(flow.errors.billsPaid).toMatch(/each of these bills/);
+  });
+
+  it('will not continue while bills and the goal take more than the budget', async () => {
+    await toBills('2026-11-01');
+    act(() => {
+      flow.update('monthlyIncome', '9000');
+      flow.update('monthlySavingsGoal', '2000');
+      flow.update('bills', [{id: 'rent', label: 'Rent', slug: 'housing', amount: '8000', day: 5}]);
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('budget');
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('budget');
+    expect(flow.errors.monthlyBudget).toMatch(/more than this budget/);
+    // Exactly enough is allowed: a 0 daily limit, with a gentle notice.
+    act(() => {
+      flow.update('monthlySavingsGoal', '1000');
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).not.toBe('budget');
   });
 
   it('skipping drops half-filled bills', async () => {
@@ -164,6 +252,39 @@ describe('catch-up flow for existing accounts', () => {
     expect(flow.stepCount).toBe(5);
   });
 
+  it('only confirms the budget for an account that already set payday, bills and a lock', () => {
+    mount({mode: 'upgrade', passwordless: true, upgradeFrom: 2});
+    expect(flow.stepKey).toBe('whatsnew');
+    expect(flow.stepCount).toBe(3);
+  });
+
+  it('checks the budget against the bills the account already has', async () => {
+    mount({
+      mode: 'upgrade',
+      passwordless: true,
+      upgradeFrom: 2,
+      today: '2026-11-10',
+      knownBills: [{key: 'ledger:rent', label: 'Rent', amount: 15000}],
+      initialDraft: {monthlyIncome: '', monthlyBudget: '10000', budgetCustom: true},
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('budget');
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('budget');
+    expect(flow.errors.monthlyBudget).toBeDefined();
+  });
+
+  it('restarts with the setup again after a long absence, values filled in', () => {
+    mount({mode: 'restart', passwordless: true, initialDraft: {monthlyIncome: '30000'}});
+    expect(flow.stepKey).toBe('whatsnew');
+    expect(flow.stepCount).toBe(3);
+    expect(flow.draft.monthlyIncome).toBe('30000');
+  });
+
   it('"Not now" on the first screen leaves the flow', () => {
     const onDismiss = jest.fn();
     mount({mode: 'upgrade', passwordless: true, onDismiss});
@@ -181,7 +302,9 @@ describe('catch-up flow for existing accounts', () => {
   it('marks accounts by setup version', () => {
     expect(setupIsCurrent(null)).toBe(false);
     expect(setupIsCurrent({user_metadata: {}} as never)).toBe(false);
-    expect(setupIsCurrent({user_metadata: {setupVersion: 2}} as never)).toBe(true);
+    // Round 3 is the rolling budget: accounts on round 2 see What's new once.
+    expect(setupIsCurrent({user_metadata: {setupVersion: 2}} as never)).toBe(false);
+    expect(setupIsCurrent({user_metadata: {setupVersion: 3}} as never)).toBe(true);
   });
 });
 

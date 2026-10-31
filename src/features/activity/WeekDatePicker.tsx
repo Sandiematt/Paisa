@@ -1,12 +1,10 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {ScrollView, View} from 'react-native';
-import {
-  CalendarBlank,
-  CaretDown,
-  CaretLeft,
-  CaretRight,
-  CaretUp,
-} from 'phosphor-react-native';
+import {CalendarBlank} from 'phosphor-react-native/src/icons/CalendarBlank';
+import {CaretDown} from 'phosphor-react-native/src/icons/CaretDown';
+import {CaretLeft} from 'phosphor-react-native/src/icons/CaretLeft';
+import {CaretRight} from 'phosphor-react-native/src/icons/CaretRight';
+import {CaretUp} from 'phosphor-react-native/src/icons/CaretUp';
 
 import {PressableScale, Text} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';

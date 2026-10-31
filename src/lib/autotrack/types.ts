@@ -12,7 +12,8 @@
 //   AckEntry         {id: Long, remoteId: String?}
 //   AutoTrackPrefs   {notesEnabled, blockingEnabled: Boolean}
 //   BudgetSnapshot   {monthKey: "YYYY-MM", monthlyBudget: Number, spendByDate: {"YYYY-MM-DD": Number},
-//                     dataAsOfMillis: Long, cycleStartDay: Int (optional, default 1)}
+//                     dataAsOfMillis: Long, cycleStartDay: Int (optional, default 1),
+//                     trackingStart: "YYYY-MM-DD" (optional; no allowance before it)}
 //
 // Ownership: native tags every detection with the owner set by setOwner(userId). getTransactions / getPending and the
 // unsynced spend only ever cover the current owner's rows. Detections made while signed out belong to the last owner.
@@ -22,7 +23,8 @@
 // A detection counts as extra spend when SUCCESS + DEBIT + unflagged and (not synced, or syncedAtMillis >
 // snapshot.dataAsOfMillis — the Paisa ledger behind the snapshot was read before it was saved). UNKNOWN direction is
 // never synced; CREDIT syncs as income.
-//   Allowance        see DailyAllowance below (null when no budget)
+//   Allowance        {date, cycleStart, cycleEnd: "YYYY-MM-DD", daysLeft: Int, budget, spentBeforeToday, dailyLimit,
+//                     spentToday, remainingToday, remainingMonth: Number} (null when no budget); see DailyAllowance
 //   Event            "UpiDetectorChanged" with payload {reason: "transactions"|"log"|"status"}
 
 export type DetectorTxnStatus = 'SUCCESS' | 'FAILED' | 'PENDING';
@@ -88,34 +90,39 @@ export const DEFAULT_AUTO_TRACK_PREFS: AutoTrackPrefs = {
 export type BudgetSnapshot = {
   /** Month the budget cycle starts in, "YYYY-MM" (the calendar month when cycleStartDay is 1). */
   monthKey: string;
-  /** Budget left for day-to-day spending: profiles.monthly_budget minus this cycle's monthly bills. 0 means no budget (guard off). */
+  /**
+   * Money for day-to-day spending this cycle: the monthly budget less bills, the savings goal and anything
+   * spent before tracking began, plus top-ups (see src/lib/budgetEngine.ts). 0 means no budget (guard off).
+   */
   monthlyBudget: number;
-  /** Day-to-day expense spend per local day of the cycle, from Paisa rows (manual + already-synced auto); bills left out. */
+  /** Day-to-day expense spend per local day of the cycle from trackingStart, from Paisa rows (manual + already-synced auto); bills and fixed expenses left out. */
   spendByDate: Record<string, number>;
   /** When the Paisa ledger behind spendByDate was read (fetch start). Rows synced after this are not in it yet. */
   dataAsOfMillis: number;
   /** Payday the cycle starts on, 1-31 (31 = last day). Absent means 1: calendar months. */
   cycleStartDay?: number;
+  /** First day whose spending counts, "YYYY-MM-DD". Before it there is no allowance (the budget has not started). */
+  trackingStart?: string;
 };
 
-/** Adaptive-via-week daily allowance (see src/features/autotrack/dailyAllowance.ts). */
+/** The rolling daily allowance (see src/features/autotrack/dailyAllowance.ts). */
 export type DailyAllowance = {
   /** Today's local date, "YYYY-MM-DD". */
   date: string;
-  /** Monday of this week, clipped to the 1st of the month. */
-  weekStart: string;
-  /** Sunday of this week, clipped to the last day of the month. */
-  weekEnd: string;
-  weekBudget: number;
-  spentWeekBeforeToday: number;
-  /** Days left in the (clipped) week, including today. */
-  daysLeftInWeek: number;
+  cycleStart: string;
+  cycleEnd: string;
+  /** Days left in the cycle, today included. */
+  daysLeft: number;
+  /** The snapshot's day-to-day money for the cycle. */
+  budget: number;
+  spentBeforeToday: number;
+  /** max(0, budget - spentBeforeToday) / daysLeft, rounded down to the paisa. */
   dailyLimit: number;
   spentToday: number;
   /** dailyLimit - spentToday; negative when over. */
   remainingToday: number;
-  /** weekBudget - spent this week including today; negative when over. */
-  remainingWeek: number;
+  /** budget - everything spent through today; negative when the month is over. */
+  remainingMonth: number;
 };
 
 export type DetectorChangeReason = 'transactions' | 'log' | 'status';

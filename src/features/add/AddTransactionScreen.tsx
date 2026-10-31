@@ -12,7 +12,8 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {CalendarBlank, CaretDown} from 'phosphor-react-native';
+import {CalendarBlank} from 'phosphor-react-native/src/icons/CalendarBlank';
+import {CaretDown} from 'phosphor-react-native/src/icons/CaretDown';
 
 import {
   AppText,
@@ -151,6 +152,7 @@ export function AddTransactionScreen({
   const [customCategory, setCustomCategory] = useState('');
   const [note, setNote] = useState('');
   const [repeatMonthly, setRepeatMonthly] = useState(false);
+  const [fixedCost, setFixedCost] = useState(false);
   const [occurredOn, setOccurredOn] = useState(() => new Date());
   const [dateOpen, setDateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -168,6 +170,7 @@ export function AddTransactionScreen({
     setCustomCategory('');
     setNote(existing?.notes ?? '');
     setRepeatMonthly(existing?.isRecurring ?? false);
+    setFixedCost(existing?.isFixed ?? false);
     setOccurredOn(
       existing ? dateFromCalendarISO(existing.transactionDate) : new Date(),
     );
@@ -306,6 +309,8 @@ export function AddTransactionScreen({
         transactionDate: localDateISO(occurredOn),
         note,
         isRecurring: repeatMonthly,
+        // A monthly expense is a bill already; it cannot also be a one-off.
+        isFixed: kind === 'expense' && !repeatMonthly && fixedCost,
         existing,
         oldCategoryName:
           dbCategories.find(row => row.id === existing?.categoryId)?.name ??
@@ -546,6 +551,23 @@ export function AddTransactionScreen({
                 accessibilityLabel="Repeat every month"
               />
             </View>
+
+            {kind === 'expense' && !repeatMonthly ? (
+              <View style={styles.repeatRow}>
+                <View style={styles.repeatCopy}>
+                  <AppText variant="bodyStrong">One-off fixed cost</AppText>
+                  <AppText variant="caption" color={colors.inkSecondary}>
+                    Fees, repairs and the like. Set aside from this month's budget instead of
+                    today's limit.
+                  </AppText>
+                </View>
+                <ToggleSwitch
+                  value={fixedCost}
+                  onValueChange={setFixedCost}
+                  accessibilityLabel="One-off fixed cost"
+                />
+              </View>
+            ) : null}
           </ScrollView>
 
           <View

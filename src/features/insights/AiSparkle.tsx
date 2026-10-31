@@ -1,6 +1,6 @@
 import React, {useEffect, useRef} from 'react';
 import {Animated, StyleSheet, View} from 'react-native';
-import {Sparkle} from 'phosphor-react-native';
+import {Sparkle} from 'phosphor-react-native/src/icons/Sparkle';
 
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {brand, colors, easing} from '../../theme';

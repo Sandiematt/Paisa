@@ -1,13 +1,11 @@
 import React, {useState} from 'react';
 import {Alert} from 'react-native';
-import {
-  Bell,
-  BellRinging,
-  Clock,
-  ClockCountdown,
-  Percent,
-  Warning,
-} from 'phosphor-react-native';
+import {Bell} from 'phosphor-react-native/src/icons/Bell';
+import {BellRinging} from 'phosphor-react-native/src/icons/BellRinging';
+import {Clock} from 'phosphor-react-native/src/icons/Clock';
+import {ClockCountdown} from 'phosphor-react-native/src/icons/ClockCountdown';
+import {Percent} from 'phosphor-react-native/src/icons/Percent';
+import {Warning} from 'phosphor-react-native/src/icons/Warning';
 
 import {SettingsRow, ToggleSwitch} from '../../components/ui';
 import {colors} from '../../theme';

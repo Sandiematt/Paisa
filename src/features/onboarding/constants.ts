@@ -9,16 +9,16 @@ import {
 
 export const STEP_TITLES: Record<StepKey, {title: string; subtitle: string}> = {
   whatsnew: {
-    title: 'New in Paisa',
+    title: 'A new way to budget',
     subtitle:
-      'A few things to set up once. Your account and everything in it stay as they are.',
+      'Your account and everything in it stay as they are. Here is how your budget works now.',
   },
   basics: {
     title: 'First, the basics',
     subtitle: 'We use your name on your reports and nothing else.',
   },
   money: {
-    title: 'How much is in the wallet?',
+    title: 'How much do you have now?',
     subtitle: 'Starting balance is what you have now. Monthly income is what you expect to add.',
   },
   payday: {
@@ -32,8 +32,9 @@ export const STEP_TITLES: Record<StepKey, {title: string; subtitle: string}> = {
       'Rent, EMIs, a mess, recharges. Each one is added on its due date every month and taken off your budget first.',
   },
   budget: {
-    title: 'Savings and budget',
-    subtitle: 'Say how much to save. Your budget is what your income leaves after bills and savings.',
+    title: 'Budget and savings',
+    subtitle:
+      'Your monthly budget is everything for the month. Bills and your savings goal are set aside first; the rest becomes one daily limit.',
   },
   autotrack: {
     title: 'Track UPI payments for you',

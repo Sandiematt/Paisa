@@ -32,6 +32,7 @@ object BudgetJson {
             spend,
             o.optLong("dataAsOfMillis", 0L).coerceAtLeast(0L),
             o.optInt("cycleStartDay", 1).takeIf { it in 1..31 } ?: 1,
+            o.optString("trackingStart", "").takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it) },
         )
     } catch (e: Exception) {
         null
@@ -46,19 +47,20 @@ object BudgetJson {
             .put("spendByDate", spend)
             .put("dataAsOfMillis", s.dataAsOfMillis)
             .put("cycleStartDay", s.cycleStartDay)
+            .apply { s.trackingStart?.let { put("trackingStart", it.toString()) } }
             .toString()
     }
 
     fun allowanceToJson(a: Allowance): String = JSONObject()
         .put("date", a.date.toString())
-        .put("weekStart", a.weekStart.toString())
-        .put("weekEnd", a.weekEnd.toString())
-        .put("weekBudget", a.weekBudget.toDouble())
-        .put("spentWeekBeforeToday", a.spentWeekBeforeToday.toDouble())
-        .put("daysLeftInWeek", a.daysLeftInWeek)
+        .put("cycleStart", a.cycleStart.toString())
+        .put("cycleEnd", a.cycleEnd.toString())
+        .put("daysLeft", a.daysLeft)
+        .put("budget", a.budget.toDouble())
+        .put("spentBeforeToday", a.spentBeforeToday.toDouble())
         .put("dailyLimit", a.dailyLimit.toDouble())
         .put("spentToday", a.spentToday.toDouble())
         .put("remainingToday", a.remainingToday.toDouble())
-        .put("remainingWeek", a.remainingWeek.toDouble())
+        .put("remainingMonth", a.remainingMonth.toDouble())
         .toString()
 }

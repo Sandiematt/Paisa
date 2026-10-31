@@ -1,6 +1,8 @@
 import React, {useState} from 'react';
 import {View} from 'react-native';
-import {CheckCircle, Eye, EyeSlash} from 'phosphor-react-native';
+import {CheckCircle} from 'phosphor-react-native/src/icons/CheckCircle';
+import {Eye} from 'phosphor-react-native/src/icons/Eye';
+import {EyeSlash} from 'phosphor-react-native/src/icons/EyeSlash';
 
 import {AppText, PressableScale, Stagger, TextField} from '../../../components/ui';
 import {PASSWORD_RULES} from '../../../lib/passwordRules';

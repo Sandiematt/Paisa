@@ -1,13 +1,11 @@
 import React, {useRef, useState} from 'react';
 import {View, ViewInstance} from 'react-native';
-import {
-  CalendarBlank,
-  CaretDown,
-  CaretUp,
-  CheckCircle,
-  Plus,
-  X,
-} from 'phosphor-react-native';
+import {CalendarBlank} from 'phosphor-react-native/src/icons/CalendarBlank';
+import {CaretDown} from 'phosphor-react-native/src/icons/CaretDown';
+import {CaretUp} from 'phosphor-react-native/src/icons/CaretUp';
+import {CheckCircle} from 'phosphor-react-native/src/icons/CheckCircle';
+import {Plus} from 'phosphor-react-native/src/icons/Plus';
+import {X} from 'phosphor-react-native/src/icons/X';
 
 import {
   AppText,

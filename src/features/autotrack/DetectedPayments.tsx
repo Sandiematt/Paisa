@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {View} from 'react-native';
-import {NotePencil, Receipt} from 'phosphor-react-native';
+import {NotePencil} from 'phosphor-react-native/src/icons/NotePencil';
+import {Receipt} from 'phosphor-react-native/src/icons/Receipt';
 
 import {
   AppText,

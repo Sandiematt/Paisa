@@ -1,6 +1,7 @@
 import {User} from '@supabase/supabase-js';
 
 import {OnboardingDraft} from '../features/onboarding/types';
+import {cycleFor} from './budgetCycle';
 import {categoryForSlug, loadCategories} from './categoriesStore';
 import {PendingBill} from './recurring';
 import {supabase} from './supabase/client';
@@ -28,6 +29,17 @@ export type ScheduledEntry = {
   description: string;
   /** First date, `YYYY-MM-DD`; the monthly repeats follow from it. */
   date: string;
+  /** A category the user's ledger already gave it (a changed bill keeps its own); else found by `slug`. */
+  categoryId?: string;
+  /**
+   * Bills only, for a first date past this budget month: the day the user
+   * said this month's was paid already (see PendingBill), or said it was not.
+   */
+  paidSince?: string;
+  /** Older answer: this month's is not due, so it starts next month. */
+  unpaidSince?: string;
+  /** This month's is not paid yet: it stays reserved this month (see PendingBill). */
+  notPaidSince?: string;
 };
 
 function daysInMonth(year: number, month: number): number {
@@ -85,7 +97,124 @@ export function scheduleFromDraft(
       date: nextMonthlyDate(bill.day, today),
     });
   }
-  return entries;
+  let answered = entries;
+  if (draft.billsPaidThisCycle !== undefined) {
+    answered = answerBillsPaidThisCycle(answered, draft.billsPaidThisCycle, draft.payday, dateFromISO(today));
+  }
+  const later = new Set(
+    entriesStartingNextCycle(answered, draft.payday, dateFromISO(today)).map(entry => entry.ref),
+  );
+  for (const [ref, paid] of Object.entries(draft.billsPaid ?? {})) {
+    if (later.has(ref) && typeof paid === 'boolean') {
+      answered = answerBillPaid(answered, ref, paid, today);
+    }
+  }
+  return answered;
+}
+
+/** A bill's ref, as its waiting entry (and later its ledger series) carries it. */
+export function billRef(id: string): string {
+  return `${REF_PREFIX}bill:${id}`;
+}
+
+/**
+ * Bills whose first date is past the budget month `today` is in. None of them
+ * comes due this month, so the user is asked whether this month's were paid
+ * already rather than guessing (see `billsPaidThisCycle`).
+ */
+export function entriesStartingNextCycle(
+  entries: ScheduledEntry[],
+  payday: number | null | undefined,
+  today: Date = new Date(),
+): ScheduledEntry[] {
+  const cycleEnd = localDateISO(cycleFor(today, payday).end);
+  return entries.filter(entry => entry.type === 'expense' && entry.date > cycleEnd);
+}
+
+/** The bills onboarding would ask about for this draft. */
+export function billsStartingNextCycle(
+  draft: OnboardingDraft,
+  today: Date = new Date(),
+): ScheduledEntry[] {
+  return entriesStartingNextCycle(scheduleFromDraft(draft, localDateISO(today)), draft.payday, today);
+}
+
+/**
+ * Records whether this month's bill at `ref` (one starting next month) is
+ * paid already. Not paid yet keeps it set aside from this month's budget
+ * until it is paid (see billMonths.cycleBills).
+ */
+export function answerBillPaid(
+  entries: ScheduledEntry[],
+  ref: string,
+  paid: boolean,
+  today: string = localDateISO(),
+): ScheduledEntry[] {
+  return entries.map(entry => {
+    if (entry.ref !== ref) {
+      return entry;
+    }
+    const {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      paidSince: _paid,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      unpaidSince: _unpaid,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      notPaidSince: _notPaid,
+      ...rest
+    } = entry;
+    return paid ? {...rest, paidSince: today} : {...rest, notPaidSince: today};
+  });
+}
+
+/** Records one answer for every bill starting next month. */
+export function answerBillsPaidThisCycle(
+  entries: ScheduledEntry[],
+  paid: boolean,
+  payday: number | null | undefined,
+  today: Date = new Date(),
+): ScheduledEntry[] {
+  const day = localDateISO(today);
+  return entriesStartingNextCycle(entries, payday, today).reduce(
+    (answered, entry) => answerBillPaid(answered, entry.ref, paid, day),
+    entries,
+  );
+}
+
+/** What the user said about one bill: true paid, false not (or, before, "starts next month"). */
+export function billPaidAnswerOf(entry: ScheduledEntry): boolean | undefined {
+  if (entry.paidSince !== undefined) {
+    return true;
+  }
+  return entry.notPaidSince !== undefined || entry.unpaidSince !== undefined ? false : undefined;
+}
+
+/** What the user said about these bills: undefined until every one is answered alike. */
+export function billsPaidAnswer(later: ScheduledEntry[]): boolean | undefined {
+  if (later.length === 0) {
+    return undefined;
+  }
+  const answers = later.map(billPaidAnswerOf);
+  return answers.every(answer => answer === answers[0]) ? answers[0] : undefined;
+}
+
+/** Saves one bill's answer for an existing account; its waiting bills live on the auth user. */
+export async function saveBillPaid(user: User, ref: string, paid: boolean) {
+  await saveScheduledSetup(answerBillPaid(scheduledFromUser(user), ref, paid));
+}
+
+/** Saves the answer for an existing account; its waiting bills live on the auth user. */
+export async function saveBillsPaidThisCycle(
+  user: User,
+  paid: boolean,
+  payday: number | null | undefined,
+) {
+  await saveScheduledSetup(answerBillsPaidThisCycle(scheduledFromUser(user), paid, payday));
+}
+
+function dateFromISO(iso: string): Date {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(year, month - 1, day);
 }
 
 function isEntry(value: unknown): value is ScheduledEntry {
@@ -118,6 +247,8 @@ export function pendingBillsFromUser(user: User | null): PendingBill[] {
       label: entry.description,
       amount: entry.amount,
       date: entry.date,
+      ...(typeof entry.paidSince === 'string' ? {paidSince: entry.paidSince} : {}),
+      ...(typeof entry.notPaidSince === 'string' ? {notPaidSince: entry.notPaidSince} : {}),
     }));
 }
 
@@ -130,12 +261,18 @@ export function scheduledMetadata(entries: ScheduledEntry[]) {
  * Which round of setup steps an account has been through. Accounts made
  * before payday, bills and app lock existed have none, and are asked those
  * once (the catch-up flow); finishing or dismissing it brings them current.
+ * Round 3 is the rolling budget: a What's new page, then the budget to
+ * confirm (handbook 5.1).
  */
-export const SETUP_VERSION = 2;
+export const SETUP_VERSION = 3;
+
+export function setupVersionOf(user: User | null): number {
+  const version = user?.user_metadata?.setupVersion;
+  return typeof version === 'number' ? version : 0;
+}
 
 export function setupIsCurrent(user: User | null): boolean {
-  const version = user?.user_metadata?.setupVersion;
-  return typeof version === 'number' && version >= SETUP_VERSION;
+  return setupVersionOf(user) >= SETUP_VERSION;
 }
 
 export async function markSetupCurrent() {
@@ -186,7 +323,8 @@ export async function applyScheduledSetup(
       user_id: user.id,
       type: entry.type,
       amount: entry.amount,
-      category_id: categoryForSlug(categories, entry.slug, entry.type)?.id ?? null,
+      category_id:
+        entry.categoryId ?? categoryForSlug(categories, entry.slug, entry.type)?.id ?? null,
       description: entry.description,
       merchant: null,
       transaction_date: entry.date,

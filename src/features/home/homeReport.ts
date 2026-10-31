@@ -7,6 +7,7 @@ import {
   billCommitments,
   committedTotals,
   isBillRow,
+  monthlyBillTotal,
 } from '../../lib/recurring';
 import {
   TransactionRow,
@@ -82,7 +83,10 @@ export type HomeReport = {
   income: number;
   spent: number;
   remainingBudget: number;
+  /** The period's budget after the month's bills: what day-to-day spending gets. */
   budget: number;
+  /** The period's spending with bill payments left out; `budget` is judged on it. */
+  budgetSpent: number;
   monthlyIncome: number;
   monthlyBudget: number;
   monthlySpent: number;
@@ -98,6 +102,8 @@ export type HomeReport = {
   monthlyCommitted: number;
   /** The part of monthlyCommitted not paid yet; remainingBudget already leaves it out. */
   monthlyUpcomingBills: number;
+  /** Every monthly bill, including ones that start next cycle; the budget is shown after these. */
+  monthlyBills: number;
   bills: BillCommitment[];
   /** The budget month before this one, once it was tracked and had income; null otherwise. */
   lastMonthSavings: MonthSavings | null;
@@ -109,11 +115,6 @@ export type HomeReport = {
   /** Savings the goal asks for from the period start (or tracking start) through today. */
   savingsTargetToDate: number;
   savingsState: SavingsState;
-  /**
-   * True when the savings figures come from the daily plan (see
-   * planSavingsSoFar) rather than income less spending.
-   */
-  savingsFromPlan: boolean;
   planFeasible: boolean;
   overBudget: boolean;
   series: number[];
@@ -263,6 +264,22 @@ export function monthlySpentFor(
   return roundMoney(walletParts(rows).spent);
 }
 
+/**
+ * Day-to-day spending in the budget month containing `now`: monthly bill
+ * payments are left out, since the budget is judged after bills.
+ */
+export function dayToDaySpentFor(
+  transactions: TransactionRow[],
+  now = new Date(),
+  payday: number | null = getActivePayday(),
+): number {
+  const period = periodFor('month', now, payday);
+  const rows = transactions.filter(row =>
+    inRange(row.transactionDate, period.start, period.end),
+  );
+  return roundMoney(walletParts(rows).spent - billSpend(rows));
+}
+
 function changePercent(current: number, previous: number): number | null {
   if (Math.abs(previous) < 0.005) {
     return Math.abs(current) < 0.005 ? 0 : null;
@@ -315,7 +332,7 @@ function healthBreakdown(
     return {
       health: 0,
       healthLabel: 'No data',
-      healthHint: 'Add starting money or a salary to open your wallet',
+      healthHint: 'Add your starting balance or a salary to start tracking',
       healthTone: 'empty',
       savingsRate: 0,
       spendRatio: 0,
@@ -327,7 +344,7 @@ function healthBreakdown(
     return {
       health: 0,
       healthLabel: 'Poor',
-      healthHint: 'The wallet is empty. Add income to keep going',
+      healthHint: 'Your tracked balance is used up. Log income to keep going',
       healthTone: 'poor',
       savingsRate: 0,
       spendRatio: 100,
@@ -341,7 +358,7 @@ function healthBreakdown(
     return {
       health: 0,
       healthLabel: 'Poor',
-      healthHint: 'Spending used up the wallet this period',
+      healthHint: 'Spending used up your tracked balance this period',
       healthTone: 'poor',
       savingsRate: 0,
       spendRatio,
@@ -352,7 +369,7 @@ function healthBreakdown(
     return {
       health: remainingPct,
       healthLabel: 'Good',
-      healthHint: `${remainingPct}% of your wallet is still left`,
+      healthHint: `${remainingPct}% of your tracked balance is still left`,
       healthTone: 'good',
       savingsRate: remainingPct,
       spendRatio,
@@ -362,7 +379,7 @@ function healthBreakdown(
   return {
     health: remainingPct,
     healthLabel: 'Fair',
-    healthHint: `Spending used ${spendRatio}% of the wallet this period`,
+    healthHint: `Spending used ${spendRatio}% of your tracked balance this period`,
     healthTone: 'fair',
     savingsRate: remainingPct,
     spendRatio,
@@ -432,75 +449,6 @@ export function savingsDueBy(
   return from > to ? 0 : budgetForSpan(monthlyGoal, from, to, payday);
 }
 
-/**
- * Savings from the daily plan, for the finished days of `period`: each day
- * adds its share of what the plan sets aside (income less the budget, which is
- * the savings goal for a calculated budget) and whatever it left of its daily
- * budget, and a day that ran over takes the difference back. Spend 85 of a
- * 90 daily budget and the next day savings are 5 higher. Today counts once it
- * is over; days before tracking started are skipped.
- *
- * The daily budget is the spend guard's: the budget less the month's bills,
- * spread over the days of the budget month. Bills are left out of the spend,
- * since they come off the budget up front. Judging every day against that
- * fixed daily budget, not the lowered limit that follows overspending, means
- * an overspend is counted once.
- */
-export function planSavingsSoFar(
-  transactions: TransactionRow[],
-  period: {start: Date; end: Date},
-  now: Date,
-  plan: MoneyPlan,
-  committed: number,
-  trackingStart: Date | null,
-): {saved: number; goalToDate: number} {
-  const payday = plan.payday ?? null;
-  const monthlyBudget = Math.max(0, plan.monthlyBudget);
-  const dayToDay = Math.max(0, monthlyBudget - Math.max(0, committed));
-  const setAside = Math.max(0, plan.monthlyIncome - monthlyBudget);
-  const goal = Math.max(0, plan.monthlySavingsGoal);
-  const yesterday = addDays(startOfDay(now), -1);
-  const tracked = trackingStart ? startOfDay(trackingStart) : null;
-  const from = tracked && tracked > period.start ? tracked : period.start;
-  const to = yesterday < period.end ? yesterday : period.end;
-
-  const spendByDate = new Map<string, number>();
-  for (const row of transactions) {
-    if (row.type !== 'expense' || isLedgerSpecial(row) || isBillRow(row)) {
-      continue;
-    }
-    const date = row.transactionDate.slice(0, 10);
-    spendByDate.set(date, (spendByDate.get(date) ?? 0) + row.amount);
-  }
-
-  let saved = 0;
-  let goalToDate = 0;
-  for (let day = startOfDay(from); day.getTime() <= to.getTime(); day = addDays(day, 1)) {
-    const days = cycleFor(day, payday).length;
-    const spent = spendByDate.get(localDateISO(day)) ?? 0;
-    saved += setAside / days + dayToDay / days - spent;
-    goalToDate += goal / days;
-  }
-  return {saved: roundMoney(saved), goalToDate: roundMoney(goalToDate)};
-}
-
-/** Savings figures from planSavingsSoFar in place of income less spending. */
-function withPlanSavings(
-  insight: PlanInsight,
-  savings: {saved: number; goalToDate: number},
-): PlanInsight {
-  return {
-    ...insight,
-    actualSavings: savings.saved,
-    savingsTargetToDate: savings.goalToDate,
-    savingsVsTarget: roundMoney(savings.saved - savings.goalToDate),
-    savingsState:
-      savings.saved >= 0
-        ? {kind: 'positive', amount: savings.saved}
-        : {kind: 'negative', overspend: roundMoney(-savings.saved)},
-  };
-}
-
 /** Earliest ledger day, or null for an empty ledger. */
 export function firstLedgerDay(transactions: TransactionRow[]): Date | null {
   let first: Date | null = null;
@@ -556,6 +504,7 @@ function savingsStateFor(income: number, spent: number): SavingsState {
 type PlanInsight = {
   remainingBudget: number;
   budget: number;
+  budgetSpent: number;
   monthlyIncome: number;
   monthlyBudget: number;
   monthlySavingsGoal: number;
@@ -580,6 +529,13 @@ type PlanInsight = {
   spendRatio: number;
 };
 
+const NO_BILLS = {committed: 0, spent: 0};
+
+/** What rows spent on monthly bills, which come off the budget up front. */
+function billSpend(rows: TransactionRow[]): number {
+  return rows.reduce((sum, row) => (isBillRow(row) ? sum + row.amount : sum), 0);
+}
+
 function planInsight(
   plan: MoneyPlan,
   spent: number,
@@ -588,21 +544,29 @@ function planInsight(
   now: Date,
   empty: boolean,
   trackingStart: Date | null = null,
-  /** Bills still to come this budget month; held back from what is left. */
-  reserved = 0,
+  /** The budget month's bills, and how much of `spent` went on bills. */
+  bills: {committed: number; spent: number} = NO_BILLS,
 ): PlanInsight {
   const payday = plan.payday ?? null;
   const monthlyIncome = roundMoney(Math.max(0, plan.monthlyIncome));
   const monthlyBudget = roundMoney(Math.max(0, plan.monthlyBudget));
   const monthlySavingsGoal = roundMoney(Math.max(0, plan.monthlySavingsGoal));
-  const periodBudget = scaleMonthly(monthlyBudget, range, now, payday);
+  // The budget is shown and judged after bills: they come off it up front,
+  // and what is left is weighed against day-to-day spending, bills left out.
+  const dayToDay = monthlyBudget - Math.max(0, bills.committed);
+  const budgetSpent = roundMoney(Math.max(0, spent - Math.max(0, bills.spent)));
+  const periodBudget = dayToDay > 0 ? scaleMonthly(dayToDay, range, now, payday) : 0;
+  // Bills over the budget leave it short before anything is spent.
+  const periodShortfall = dayToDay < 0 ? scaleMonthly(-dayToDay, range, now, payday) : 0;
   const periodPlannedIncome = scaleMonthly(monthlyIncome, range, now, payday);
   const periodSavingsTarget = scaleMonthly(monthlySavingsGoal, range, now, payday);
   const noun = rangeNoun(range);
-  const remainingBudget = roundMoney(periodBudget - spent - reserved);
-  const overBudget = periodBudget > 0 && spent + reserved > periodBudget + 0.004;
+  const remainingBudget = roundMoney(periodBudget - budgetSpent - periodShortfall);
+  const overBudget = monthlyBudget > 0 && remainingBudget < -0.004;
   const plannedSavings = roundMoney(monthlyIncome - monthlyBudget);
-  const periodPlannedSavings = roundMoney(periodPlannedIncome - periodBudget);
+  const periodPlannedSavings = roundMoney(
+    periodPlannedIncome - scaleMonthly(monthlyBudget, range, now, payday),
+  );
   const planFeasible =
     monthlySavingsGoal <= 0 || plannedSavings + 0.004 >= monthlySavingsGoal;
   const savingsState = savingsStateFor(actualIncome, spent);
@@ -624,7 +588,11 @@ function planInsight(
   );
   const savingsVsTarget = roundMoney(actualSavings - savingsTargetToDate);
   const spendRatio =
-    periodBudget > 0 ? Math.round((spent / periodBudget) * 100) : 0;
+    periodBudget > 0
+      ? Math.round((budgetSpent / periodBudget) * 100)
+      : overBudget
+        ? 100
+        : 0;
 
   const planLabel = monthlySavingsGoal > 0 && !planFeasible ? 'Off track' : 'On track';
   const planTone: HealthTone =
@@ -642,6 +610,7 @@ function planInsight(
     return {
       remainingBudget,
       budget: periodBudget,
+      budgetSpent,
       monthlyIncome,
       monthlyBudget,
       monthlySavingsGoal,
@@ -656,7 +625,7 @@ function planInsight(
       overBudget: false,
       health: 0,
       healthLabel: 'No data',
-      healthHint: 'Add starting money or a salary to open your wallet',
+      healthHint: 'Add your starting balance or a salary to start tracking',
       healthTone: 'empty',
       insightKicker: 'Health score',
       planLabel: 'No data',
@@ -667,10 +636,11 @@ function planInsight(
     };
   }
 
-  if (periodBudget > 0 && overBudget) {
+  if (monthlyBudget > 0 && overBudget) {
     return {
       remainingBudget,
       budget: periodBudget,
+      budgetSpent,
       monthlyIncome,
       monthlyBudget,
       monthlySavingsGoal,
@@ -686,8 +656,8 @@ function planInsight(
       health: 0,
       healthLabel: 'Off track',
       healthHint:
-        reserved > 0 && spent <= periodBudget
-          ? `Bills still due take you past this ${noun}'s budget.`
+        dayToDay < 0
+          ? 'Your monthly bills are more than your budget.'
           : `You've spent more than this ${noun}'s budget.`,
       healthTone: 'poor',
       insightKicker: 'Spending',
@@ -699,10 +669,11 @@ function planInsight(
     };
   }
 
-  if (periodBudget > 0) {
+  if (monthlyBudget > 0) {
     return {
       remainingBudget,
       budget: periodBudget,
+      budgetSpent,
       monthlyIncome,
       monthlyBudget,
       monthlySavingsGoal,
@@ -731,6 +702,7 @@ function planInsight(
   return {
     remainingBudget,
     budget: periodBudget,
+    budgetSpent,
     monthlyIncome,
     monthlyBudget,
     monthlySavingsGoal,
@@ -1016,8 +988,8 @@ export function buildHomeReport(
   const monthParts = range === 'month' ? current : walletParts(monthRows);
   const hasBudget = plan.monthlyBudget > 0;
   const hasPlan = hasBudget || plan.monthlySavingsGoal > 0;
-  // Bills still to come are held back from what is left of the month's
-  // budget; a week's share of the budget does not carry them.
+  // The month's bills come off the budget up front, for every range: a
+  // week's or day's budget is its share of what the bills leave.
   const incomeInsight = planInsight(
     plan,
     current.spent,
@@ -1026,15 +998,11 @@ export function buildHomeReport(
     now,
     empty,
     trackingStart,
-    range === 'month' ? billTotals.upcoming : 0,
+    {committed: billTotals.committed, spent: billSpend(currentRows)},
   );
-  // With a budget, savings grow day by day from what the daily plan leaves.
-  const insight = hasBudget
-    ? withPlanSavings(
-        incomeInsight,
-        planSavingsSoFar(transactions, period, now, plan, billTotals.committed, trackingStart),
-      )
-    : incomeInsight;
+  // Savings with a budget are the goal plus extra savings, from the rolling
+  // budget (src/lib/budgetEngine.ts); the report keeps income less spending.
+  const insight = incomeInsight;
   const monthIncomeInsight =
     range === 'month'
       ? incomeInsight
@@ -1046,24 +1014,9 @@ export function buildHomeReport(
           now,
           empty,
           trackingStart,
-          billTotals.upcoming,
+          {committed: billTotals.committed, spent: billSpend(monthRows)},
         );
-  const monthInsight =
-    range === 'month'
-      ? insight
-      : hasBudget
-        ? withPlanSavings(
-            monthIncomeInsight,
-            planSavingsSoFar(
-              transactions,
-              monthPeriod,
-              now,
-              plan,
-              billTotals.committed,
-              trackingStart,
-            ),
-          )
-        : monthIncomeInsight;
+  const monthInsight = range === 'month' ? insight : monthIncomeInsight;
   const monthSlices =
     range === 'month' ? spendSlices(currentRows, categories) : spendSlices(monthRows, categories);
   const health = hasBudget
@@ -1087,6 +1040,8 @@ export function buildHomeReport(
     ),
     previousRows.length === 0,
     trackingStart,
+    // Judged against this month's bills, so the health change compares like with like.
+    {committed: billTotals.committed, spent: billSpend(previousRows)},
   );
   const previousHealth = hasBudget
     ? previousInsight
@@ -1117,6 +1072,7 @@ export function buildHomeReport(
     spent: roundMoney(current.spent),
     remainingBudget: insight.remainingBudget,
     budget: insight.budget,
+    budgetSpent: insight.budgetSpent,
     monthlyIncome: insight.monthlyIncome,
     monthlyBudget: insight.monthlyBudget,
     monthlySpent: roundMoney(monthParts.spent),
@@ -1130,6 +1086,7 @@ export function buildHomeReport(
     monthlySavingsState: monthInsight.savingsState,
     monthlyCommitted: billTotals.committed,
     monthlyUpcomingBills: billTotals.upcoming,
+    monthlyBills: monthlyBillTotal(bills),
     bills,
     lastMonthSavings: lastMonthSavings(transactions, monthPeriod, payday, plan, trackingStart),
     periodSavingsTarget: insight.periodSavingsTarget,
@@ -1139,7 +1096,6 @@ export function buildHomeReport(
     savingsVsTarget: insight.savingsVsTarget,
     savingsTargetToDate: insight.savingsTargetToDate,
     savingsState: insight.savingsState,
-    savingsFromPlan: hasBudget,
     planFeasible: insight.planFeasible,
     overBudget: insight.overBudget,
     series,

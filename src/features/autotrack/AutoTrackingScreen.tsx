@@ -1,7 +1,8 @@
 import React, {useEffect, useState} from 'react';
 import {Alert, Modal, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {NotePencil, ShieldWarning} from 'phosphor-react-native';
+import {NotePencil} from 'phosphor-react-native/src/icons/NotePencil';
+import {ShieldWarning} from 'phosphor-react-native/src/icons/ShieldWarning';
 
 import {
   AppText,

@@ -1,6 +1,6 @@
 import React, {useEffect, useRef} from 'react';
 import {Animated, View} from 'react-native';
-import {Receipt} from 'phosphor-react-native';
+import {Receipt} from 'phosphor-react-native/src/icons/Receipt';
 
 import {GradientIconSquare} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';

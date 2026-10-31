@@ -1,6 +1,10 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {useAuth} from '../auth/AuthProvider';
+import {BillMonth, copySkipper, loadBillMonths} from '../../lib/billMonths';
+import {cycleRangeFor} from '../../lib/budgetEngine';
+import {BudgetFlowState, loadBudgetFlow} from '../../lib/budgetFlow';
+import {BudgetHistory, EMPTY_HISTORY, loadBudgetHistory} from '../../lib/budgetMonths';
 import {CategoryRow, loadCategories} from '../../lib/categoriesStore';
 import {saveDueRecurring} from '../../lib/recurring';
 import {applyScheduledSetup} from '../../lib/scheduledSetup';
@@ -22,12 +26,26 @@ import {
 
 type DashboardStatus = 'loading' | 'ready' | 'error';
 
+/**
+ * The stored budget facts beside the ledger: bill statuses, finished months
+ * and where the account's tracking starts. `flow` is undefined until loaded
+ * and null when the database cannot hold it yet.
+ */
+export type BudgetData = {
+  billMonths: BillMonth[];
+  history: BudgetHistory;
+  flow: BudgetFlowState | null | undefined;
+};
+
+const NO_BUDGET_DATA: BudgetData = {billMonths: [], history: EMPTY_HISTORY, flow: undefined};
+
 export function useHomeDashboard(
   refreshNonce: number,
   openingAmount = 0,
   plan: MoneyPlan = EMPTY_MONEY_PLAN,
 ) {
   const {user} = useAuth();
+  const payday = plan.payday ?? null;
   const [range, setRange] = useState<HomeRange>('month');
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [transactions, setTransactions] = useState<TransactionRow[]>([]);
@@ -37,6 +55,7 @@ export function useHomeDashboard(
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   // When the fetch behind `transactions` started; 0 until the first load.
   const [ledgerAsOf, setLedgerAsOf] = useState(0);
+  const [budgetData, setBudgetData] = useState<BudgetData>(NO_BUDGET_DATA);
   // Reloads overlap (every auto-track sync starts one), so only the latest
   // may apply its result.
   const latestRequest = useRef(0);
@@ -63,6 +82,7 @@ export function useHomeDashboard(
     if (!user) {
       setCategories([]);
       setTransactions([]);
+      setBudgetData(NO_BUDGET_DATA);
       setStatus('ready');
       setRefreshing(false);
       return;
@@ -83,9 +103,14 @@ export function useHomeDashboard(
         // Tried again on the next reload.
       }
       fetchStartedAt = Date.now();
-      const [nextCategories, loaded] = await Promise.all([
+      // Bill statuses decide which due-day copies may be added below, so
+      // when they cannot be read no copy is added this time round.
+      const [nextCategories, loaded, bills, history, flow] = await Promise.all([
         loadCategories(),
         loadTransactions(),
+        loadBillMonths().catch(() => null),
+        loadBudgetHistory().catch(() => null),
+        loadBudgetFlow(user.id).catch(() => undefined),
       ]);
       let nextTransactions = loaded;
       // Only touches the opening balance when it is missing or out of place.
@@ -97,7 +122,15 @@ export function useHomeDashboard(
       // Monthly repeats that came due since the last visit become real rows.
       // A failure here must not hide the ledger that did load.
       try {
-        if ((await saveDueRecurring(nextTransactions, user.id)) > 0) {
+        if (
+          bills &&
+          (await saveDueRecurring(
+            nextTransactions,
+            user.id,
+            undefined,
+            copySkipper(bills.months, date => cycleRangeFor(date, payday).start),
+          )) > 0
+        ) {
           fetchStartedAt = Date.now();
           nextTransactions = await loadTransactions();
         }
@@ -115,6 +148,11 @@ export function useHomeDashboard(
       }
       setCategories(nextCategories);
       setTransactions(nextTransactions);
+      setBudgetData(current => ({
+        billMonths: bills?.months ?? current.billMonths,
+        history: history ?? current.history,
+        flow: flow === undefined ? current.flow : flow,
+      }));
       setLedgerAsOf(fetchStartedAt);
       setUpdatedAt(new Date());
       setStatus('ready');
@@ -136,7 +174,7 @@ export function useHomeDashboard(
     if (editedMeanwhile) {
       await reloadRef.current();
     }
-  }, [openingAmount, user]);
+  }, [openingAmount, payday, user]);
   reloadRef.current = reload;
 
   useEffect(() => {
@@ -159,6 +197,7 @@ export function useHomeDashboard(
     error,
     updatedAt,
     ledgerAsOf,
+    budgetData,
     reload,
     upsertLocal,
     removeLocal,

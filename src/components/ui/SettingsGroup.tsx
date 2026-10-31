@@ -1,6 +1,6 @@
 import React from 'react';
 import {StyleProp, View, ViewStyle} from 'react-native';
-import {CaretRight} from 'phosphor-react-native';
+import {CaretRight} from 'phosphor-react-native/src/icons/CaretRight';
 
 import {colors, makeStyles, radii, spacing} from '../../theme';
 import {AppText} from './AppText';

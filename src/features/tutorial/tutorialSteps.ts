@@ -4,6 +4,8 @@ import type {TabId} from '../NavBar/NavBar';
 export type TutorialTargetId =
   | 'home.balance'
   | 'home.totals'
+  | 'home.limit'
+  | 'home.goals'
   | 'home.profile'
   | 'home.notifications'
   | 'nav.add'
@@ -50,6 +52,35 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     target: 'home.totals',
     title: 'Money in and out',
     body: 'Expense and Income add up everything you recorded in the period you picked above.',
+  },
+  // How the budget works, in small steps and simple words.
+  {
+    id: 'budget-how',
+    section: 'home',
+    target: null,
+    title: 'How your budget works',
+    body: 'Say you have ₹9,000 for the month. First, Paisa keeps aside your bills, like ₹5,000 for rent. Then it keeps aside your savings, like ₹2,000. The ₹2,000 left over is your spending money.',
+  },
+  {
+    id: 'daily-limit',
+    section: 'home',
+    target: 'home.limit',
+    title: 'Your daily limit',
+    body: 'Paisa shares your spending money across the days left in the month. ₹2,000 for 30 days is about ₹66 a day. This line shows how much you can spend today.',
+  },
+  {
+    id: 'daily-limit-changes',
+    section: 'home',
+    target: null,
+    title: 'Spend less today, get more tomorrow',
+    body: 'Spend only ₹40 of your ₹66 today, and the ₹26 left over is shared across the next days, so tomorrow you can spend a little more. Spend too much, and the next days get a little less.',
+  },
+  {
+    id: 'goals',
+    section: 'home',
+    target: 'home.goals',
+    title: 'Budget and savings',
+    body: 'The budget circle shows how much of your spending money is used. Your savings stay safe. Any spending money left at the end of the month becomes extra savings.',
   },
   {
     id: 'profile',

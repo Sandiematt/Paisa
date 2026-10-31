@@ -41,6 +41,53 @@ export function monthlyBudgetOf(fields: BudgetFields): number {
     : amount(fields.monthlyBudget);
 }
 
+/**
+ * The monthly budget as the user sets it: everything for the month, bills
+ * and the savings goal included (handbook D1). The stored budget leaves the
+ * goal out (see above), so this adds it back; spendable is then this less
+ * bills less the goal, the same amount it always was. Calculated, it is the
+ * income. 0 means no budget.
+ */
+export function monthlyTotalOf(fields: BudgetFields): number {
+  if (isAutomaticBudget(fields)) {
+    return amount(fields.monthlyIncome);
+  }
+  if ((fields.monthlyBudget ?? '') === '') {
+    return 0;
+  }
+  const stored = Number(fields.monthlyBudget);
+  return Math.max(0, (Number.isFinite(stored) ? stored : 0) + amount(fields.monthlySavingsGoal));
+}
+
+/**
+ * The budget fields after the user types a monthly total. Typing the income
+ * keeps the budget calculated. While typed (or when the goal is raised past
+ * it), the stored budget can dip below zero; validation stops it being saved
+ * that way (see budgetEngine.validatePlan).
+ */
+export function withMonthlyTotal<T extends BudgetFields>(fields: T, typed: string): T {
+  const income = amount(fields.monthlyIncome);
+  if (income > 0 && typed !== '' && amount(typed) === income) {
+    return {...fields, budgetCustom: false, monthlyBudget: String(automaticMonthlyBudget(fields))};
+  }
+  if (typed === '') {
+    return {...fields, budgetCustom: true, monthlyBudget: ''};
+  }
+  const stored = amount(typed) - amount(fields.monthlySavingsGoal);
+  return {...fields, budgetCustom: true, monthlyBudget: String(Math.round(stored * 100) / 100)};
+}
+
+/** The budget fields with a new savings goal: the monthly total stays, so spendable shrinks. */
+export function withSavingsGoal<T extends BudgetFields>(fields: T, goal: string): T {
+  const total = monthlyTotalOf(fields);
+  const next = {...fields, monthlySavingsGoal: goal};
+  if (isAutomaticBudget(fields) || (fields.monthlyBudget ?? '') === '') {
+    return next;
+  }
+  const stored = total - amount(goal);
+  return {...next, monthlyBudget: String(Math.round(stored * 100) / 100)};
+}
+
 /** What a budget leaves for day-to-day spending once the month's bills are paid. */
 export function dayToDayBudget(monthlyBudget: number, bills: number): number {
   return Math.max(0, monthlyBudget - Math.max(0, bills));

@@ -7,7 +7,8 @@ import {
   View,
 } from 'react-native';
 
-import {MagnifyingGlass, XCircle} from 'phosphor-react-native';
+import {MagnifyingGlass} from 'phosphor-react-native/src/icons/MagnifyingGlass';
+import {XCircle} from 'phosphor-react-native/src/icons/XCircle';
 
 import {
   Card,

@@ -51,6 +51,24 @@ export type OnboardingDraft = {
   /** Log monthly income as a repeating entry on payday. */
   logSalary?: boolean;
   bills?: RecurringBill[];
+  /**
+   * Bills whose first due date is next budget month: whether this month's
+   * were paid already, so they come off this month's budget too. Asked on
+   * the budget step; undefined until answered.
+   */
+  billsPaidThisCycle?: boolean;
+  /** The same question per bill, by its ref (scheduledSetup.billRef): true paid, false not yet. */
+  billsPaid?: Record<string, boolean>;
+  /**
+   * What a mid-month joiner said they already spent this month, bills not
+   * included; empty to start fresh from today. Digits, like the other money.
+   */
+  alreadySpent?: string;
+  /**
+   * Joining in the last days of the month: true starts tracking now, over the
+   * days left; otherwise the budget starts on the first day of the next month.
+   */
+  startNow?: boolean;
   /** How Paisa locks, set up on the lock step: a confirmed fingerprint scan, or an app PIN. */
   appLock?: AppLockMethod | null;
   /** The PIN picked on the lock step. In memory only: never saved with the profile. */

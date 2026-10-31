@@ -1,7 +1,7 @@
 import React from 'react';
 import {View} from 'react-native';
 
-import {Bell} from 'phosphor-react-native';
+import {Bell} from 'phosphor-react-native/src/icons/Bell';
 import {AppText, PressableScale} from '../../components/ui';
 import {NotificationItem} from '../../lib/notifications/types';
 import {colors, fonts, makeStyles, palettes, radii, spacing} from '../../theme';

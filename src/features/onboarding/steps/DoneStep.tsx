@@ -1,13 +1,11 @@
 import React from 'react';
 import {View} from 'react-native';
-import {
-  CalendarCheck,
-  CheckCircle,
-  Fingerprint,
-  Receipt,
-  Target,
-  Wallet,
-} from 'phosphor-react-native';
+import {CalendarCheck} from 'phosphor-react-native/src/icons/CalendarCheck';
+import {CheckCircle} from 'phosphor-react-native/src/icons/CheckCircle';
+import {Fingerprint} from 'phosphor-react-native/src/icons/Fingerprint';
+import {Receipt} from 'phosphor-react-native/src/icons/Receipt';
+import {Target} from 'phosphor-react-native/src/icons/Target';
+import {Wallet} from 'phosphor-react-native/src/icons/Wallet';
 
 import {
   AppText,
@@ -15,8 +13,18 @@ import {
   GradientIconSquare,
   Stagger,
 } from '../../../components/ui';
-import {cycleFor} from '../../../lib/budgetCycle';
-import {dayToDayBudget, isAutomaticBudget, monthlyBudgetOf} from '../../../lib/budgetPlan';
+import {
+  cycleLength,
+  cycleRangeFor,
+  nextCycleStart,
+  remainingDays,
+  validatePlan,
+} from '../../../lib/budgetEngine';
+import {flowForToday} from '../../../lib/budgetFlow';
+import {isAutomaticBudget, monthlyTotalOf} from '../../../lib/budgetPlan';
+import {localDateISO} from '../../../lib/transactionsStore';
+import {dayMonth} from '../../home/budgetCopy';
+import {KnownBill, planBillsTotal} from './BudgetStep';
 import {GradientKey, colors, makeStyles, radii, spacing} from '../../../theme';
 import {STEP_TITLES, currencyByCode, dayLabel} from '../constants';
 import {StepLayout} from '../components/StepLayout';
@@ -24,6 +32,8 @@ import {OnboardingDraft} from '../types';
 
 type DoneStepProps = {
   draft: OnboardingDraft;
+  today?: string;
+  knownBills?: KnownBill[];
 };
 
 type SummaryRow = {
@@ -39,14 +49,57 @@ function money(symbol: string, amount: number): string {
   return `${symbol}${Math.round(amount).toLocaleString('en-IN')}`;
 }
 
-function summarize(draft: OnboardingDraft): SummaryRow[] {
+/** When the budget starts and what a day gets, from the date check. */
+export function budgetSummary(
+  draft: OnboardingDraft,
+  today: string,
+  knownBills: KnownBill[] = [],
+): {detail: string; set: boolean} {
+  const {symbol} = currencyByCode(draft.currency);
+  const total = monthlyTotalOf(draft);
+  if (total <= 0) {
+    return {detail: 'Not set', set: false};
+  }
+  const check = validatePlan(
+    total,
+    planBillsTotal(draft, knownBills),
+    Number(draft.monthlySavingsGoal) || 0,
+  );
+  if (check.status === 'over') {
+    return {detail: 'Bills and savings are more than the budget', set: false};
+  }
+  const flow = flowForToday(today, draft.payday, draft.startNow === true);
+  const cycle = cycleRangeFor(today, draft.payday);
+  if (flow === 'startNextMonth') {
+    const starts = nextCycleStart(today, draft.payday);
+    const days = cycleLength(cycleRangeFor(starts, draft.payday));
+    return {
+      detail: `Starts ${dayMonth(starts)} · ${money(symbol, check.spendable)} to spend, about ${money(
+        symbol,
+        Math.floor(check.spendable / days),
+      )} a day`,
+      set: true,
+    };
+  }
+  const spent = flow === 'midMonth' ? Number(draft.alreadySpent) || 0 : 0;
+  const days = remainingDays(today, cycle);
+  const perDay = Math.floor(Math.max(0, check.spendable - spent) / days);
+  return {
+    detail: `${money(symbol, check.spendable)} to spend${isAutomaticBudget(draft) ? ', from your income' : ''} · about ${money(
+      symbol,
+      perDay,
+    )} a day${flow === 'midMonth' ? ` for the ${days} days left` : ''}`,
+    set: true,
+  };
+}
+
+function summarize(draft: OnboardingDraft, today: string, knownBills: KnownBill[]): SummaryRow[] {
   const {symbol} = currencyByCode(draft.currency);
   const balance = Number(draft.startingBalance) || 0;
   const income = Number(draft.monthlyIncome) || 0;
-  const budget = monthlyBudgetOf(draft);
   const bills = (draft.bills ?? []).filter(bill => Number(bill.amount) > 0);
   const billTotal = bills.reduce((sum, bill) => sum + Number(bill.amount), 0);
-  const dayToDay = dayToDayBudget(budget, billTotal);
+  const budget = budgetSummary(draft, today, knownBills);
   const payday = draft.payday ?? null;
   const logsSalary = payday !== null && (draft.logSalary ?? true) && income > 0;
 
@@ -55,7 +108,7 @@ function summarize(draft: OnboardingDraft): SummaryRow[] {
       key: 'wallet',
       Icon: Wallet,
       gradient: 'primary',
-      title: 'Wallet',
+      title: 'Tracked balance',
       detail: `Starting with ${money(symbol, balance)}`,
       set: true,
     },
@@ -88,13 +141,8 @@ function summarize(draft: OnboardingDraft): SummaryRow[] {
       Icon: Target,
       gradient: 'budgetStrip',
       title: 'Budget',
-      detail:
-        dayToDay > 0
-          ? `${money(symbol, dayToDay)} a month${
-              isAutomaticBudget(draft) ? ', calculated' : ''
-            } · about ${money(symbol, dayToDay / cycleFor(new Date(), payday).length)} a day`
-          : 'Not set',
-      set: dayToDay > 0,
+      detail: budget.detail,
+      set: budget.set,
     },
     {
       key: 'lock',
@@ -112,11 +160,11 @@ function summarize(draft: OnboardingDraft): SummaryRow[] {
   ];
 }
 
-export function DoneStep({draft}: DoneStepProps) {
+export function DoneStep({draft, today = localDateISO(), knownBills = []}: DoneStepProps) {
   const styles = useStyles();
   const copy = STEP_TITLES.done;
   const firstName = draft.name.trim().split(/\s+/)[0];
-  const rows = summarize(draft);
+  const rows = summarize(draft, today, knownBills);
 
   return (
     <StepLayout

@@ -1,12 +1,12 @@
 import React from 'react';
 import {View} from 'react-native';
-import {ArrowRight} from 'phosphor-react-native';
+import {ArrowRight} from 'phosphor-react-native/src/icons/ArrowRight';
 
 import {AppText, Card, PressableScale, ProgressBar} from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
 import {DailyAllowance} from '../../lib/autotrack/types';
 import {colors, makeStyles, spacing} from '../../theme';
-import {daysLabel, weekProgress} from './autoTrackFormat';
+import {daysLabel, monthProgress} from './autoTrackFormat';
 
 type AllowanceCardProps = {
   allowance: DailyAllowance | null;
@@ -49,7 +49,7 @@ export function AllowanceCard({
   }
 
   const over = allowance.remainingToday < 0;
-  const weekOver = allowance.remainingWeek < 0;
+  const monthOver = allowance.remainingMonth < 0;
 
   return (
     <Card>
@@ -91,17 +91,19 @@ export function AllowanceCard({
 
       <View style={styles.week}>
         <ProgressBar
-          progress={weekProgress(allowance)}
-          gradient={weekOver ? 'rose' : 'primary'}
+          progress={monthProgress(allowance)}
+          gradient={monthOver ? 'rose' : 'primary'}
           height={6}
         />
         <AppText
           variant="caption"
-          color={weekOver ? colors.roseLight : colors.muted}>
-          {`Week budget ${money(allowance.weekBudget)} · ${daysLabel(
-            allowance.daysLeftInWeek,
-            'left',
-          )}`}
+          color={monthOver ? colors.roseLight : colors.muted}>
+          {monthOver
+            ? `Overspent by ${money(-allowance.remainingMonth)} this month`
+            : `${money(allowance.remainingMonth)} left this month · ${daysLabel(
+                allowance.daysLeft,
+                'left',
+              )}`}
         </AppText>
       </View>
     </Card>

@@ -1,6 +1,7 @@
 import React from 'react';
 import {View} from 'react-native';
-import {CaretDown, CaretUp} from 'phosphor-react-native';
+import {CaretDown} from 'phosphor-react-native/src/icons/CaretDown';
+import {CaretUp} from 'phosphor-react-native/src/icons/CaretUp';
 
 import {
   AppText,

@@ -3,11 +3,22 @@ import {useCallback, useMemo, useState} from 'react';
 import {isAutoTrackSupported} from '../../lib/autotrack/nativeUpiDetector';
 import {emailRegistered} from '../../lib/emailRegistered';
 import {firstMissedRule} from '../../lib/passwordRules';
+import {validatePlan} from '../../lib/budgetEngine';
+import {flowForToday} from '../../lib/budgetFlow';
+import {monthlyTotalOf} from '../../lib/budgetPlan';
+import {billPaidAnswerOf, billsStartingNextCycle} from '../../lib/scheduledSetup';
+import {localDateISO} from '../../lib/transactionsStore';
+import {KnownBill, planBillsTotal} from './steps/BudgetStep';
 import {useAuth} from '../auth/AuthProvider';
 import {DEFAULT_CATEGORY_IDS} from './constants';
 import {OnboardingDraft, STEP_KEYS, StepKey, StepValidity} from './types';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+function dateOf(iso: string): Date {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
 
 const INITIAL_DRAFT: OnboardingDraft = {
   name: '',
@@ -33,8 +44,20 @@ export type OnboardingOptions = {
   /**
    * 'upgrade' catches an existing account up on the steps added since it
    * signed up (payday, bills, budget, lock), starting with what is new.
+   * 'restart' is the setup again after a long absence (handbook 5.6), with
+   * the account's last values filled in.
    */
-  mode?: 'signup' | 'upgrade';
+  mode?: 'signup' | 'upgrade' | 'restart';
+  /**
+   * Upgrade only: the round of setup the account has been through. An
+   * account that already set payday, bills and a lock is only asked to
+   * confirm its budget.
+   */
+  upgradeFrom?: number;
+  /** Bills the account already has; the budget is checked against them too. */
+  knownBills?: KnownBill[];
+  /** Today, `YYYY-MM-DD`: the date check runs from it. Tests set it. */
+  today?: string;
   /** Upgrade only: the account already has a lock, so that step is left out. */
   skipLock?: boolean;
   /** Upgrade only: "Not now" on the first screen leaves the flow. */
@@ -91,8 +114,12 @@ export function useOnboarding(
     mode = 'signup',
     skipLock = false,
     onDismiss,
+    upgradeFrom = 0,
+    knownBills,
+    today: fixedToday,
   }: OnboardingOptions = {},
 ) {
+  const [today] = useState(() => fixedToday ?? localDateISO());
   // Read the auth user directly from context so we always have the latest
   // Google metadata, regardless of prop-drilling timing.
   const {user} = useAuth();
@@ -113,10 +140,15 @@ export function useOnboarding(
     return base;
   });
 
-  const upgrade = mode === 'upgrade';
+  const upgrade = mode === 'upgrade' || mode === 'restart';
   // For OAuth (passwordless) users, name/email come from Google — skip basics.
   const firstStep = !upgrade && passwordless ? 1 : 0;
   const [steps] = useState<readonly StepKey[]>(() => {
+    // Accounts that already went through payday, bills and lock only confirm
+    // their budget for the new way it works.
+    if (mode === 'restart' || (mode === 'upgrade' && upgradeFrom >= 2)) {
+      return ['whatsnew', 'budget', 'done'];
+    }
     if (upgrade) {
       const added: StepKey[] = ['whatsnew', 'payday', 'bills', 'budget', 'lock', 'done'];
       return skipLock ? added.filter(key => key !== 'lock') : added;
@@ -167,16 +199,22 @@ export function useOnboarding(
     } else if (bills.some(bill => !bill.label.trim())) {
       next.bills = 'Give every bill a name.';
     }
+    // Bills and the savings goal must fit in the budget (handbook 4.2).
+    const total = monthlyTotalOf(draft);
+    const goal = Number(draft.monthlySavingsGoal) || 0;
+    if (total > 0 && validatePlan(total, planBillsTotal(draft, knownBills), goal).status === 'over') {
+      next.monthlyBudget = 'Bills and the savings goal come to more than this budget.';
+    }
+    // Bills already past their due day mid-month: paid, or still to pay?
+    // Never assumed, so an unpaid one is not counted as extra savings.
+    if (total > 0 && flowForToday(today, draft.payday, draft.startNow === true) === 'midMonth') {
+      const later = billsStartingNextCycle(draft, dateOf(today));
+      if (later.some(entry => (draft.billsPaid?.[entry.ref] ?? billPaidAnswerOf(entry)) === undefined)) {
+        next.billsPaid = "Say whether each of these bills is paid this month.";
+      }
+    }
     return next;
-  }, [
-    draft.bills,
-    draft.confirmPassword,
-    draft.email,
-    draft.name,
-    draft.password,
-    passwordless,
-    takenEmails,
-  ]);
+  }, [draft, knownBills, passwordless, takenEmails, today]);
 
   const validity = useMemo<Record<StepKey, StepValidity>>(
     () => ({
@@ -192,7 +230,7 @@ export function useOnboarding(
       money: {canContinue: true, skippable: true},
       payday: {canContinue: true, skippable: true},
       bills: {canContinue: !errors.bills, skippable: true},
-      budget: {canContinue: true, skippable: true},
+      budget: {canContinue: !errors.billsPaid && !errors.monthlyBudget, skippable: true},
       autotrack: {canContinue: true, skippable: true},
       lock: {canContinue: true, skippable: !draft.appLock},
       done: {canContinue: true, skippable: false},
@@ -285,6 +323,9 @@ export function useOnboarding(
   return {
     draft,
     passwordless,
+    mode,
+    today,
+    knownBills,
     update,
     stepKey,
     stepIndex,

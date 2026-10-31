@@ -1,10 +1,9 @@
 import {
-  budgetAllocation,
-  buildBudgetSnapshot,
   dailyAllowance,
+  snapshotForBudget,
   unsyncedSpendByDate,
 } from '../src/features/autotrack/dailyAllowance';
-import {monthlySpentFor} from '../src/features/home/homeReport';
+import {BudgetFacts} from '../src/lib/budgetInputs';
 import {
   BudgetSnapshot,
   DailyAllowance,
@@ -64,16 +63,15 @@ function detection(partial: Partial<DetectedTxn>): DetectedTxn {
 
 describe('dailyAllowance shared vectors', () => {
   it.each(vectors)('$name', vector => {
-    expect(dailyAllowance(vector.snapshot, vector.today)).toEqual(
-      vector.expected,
-    );
+    expect(dailyAllowance(vector.snapshot, vector.today)).toEqual(vector.expected);
   });
 
   it('accepts a Date as today, at any time of day', () => {
     const vector = vectors[0];
-    expect(
-      dailyAllowance(vector.snapshot, new Date(2026, 9, 27, 23, 59)),
-    ).toEqual(vector.expected);
+    const [year, month, day] = vector.today.split('-').map(Number);
+    expect(dailyAllowance(vector.snapshot, new Date(year, month - 1, day, 23, 59))).toEqual(
+      vector.expected,
+    );
   });
 });
 
@@ -86,243 +84,124 @@ describe('dailyAllowance', () => {
   };
 
   it('counts extra spend on top of the snapshot', () => {
-    const result = dailyAllowance(snapshot, '2026-10-27', {
-      '2026-10-27': 300,
-      '2026-10-26': 100,
-    });
-    expect(result?.spentToday).toBe(500);
-    expect(result?.spentWeekBeforeToday).toBe(1600);
+    const allowance = dailyAllowance(snapshot, '2026-10-27', {'2026-10-26': 500, '2026-10-27': 300});
+    expect(allowance).toMatchObject({spentBeforeToday: 22000, spentToday: 500, dailyLimit: 1800});
   });
 
   it('ignores spend outside the month and after today', () => {
-    const base = dailyAllowance(snapshot, '2026-10-27');
-    const result = dailyAllowance(snapshot, '2026-10-27', {
-      '2026-09-30': 9999,
-      '2026-11-01': 9999,
-      '2026-10-30': 9999,
+    const allowance = dailyAllowance(snapshot, '2026-10-27', {
+      '2026-09-30': 999,
+      '2026-10-28': 999,
+      '2026-11-01': 999,
     });
-    expect(result).toEqual(base);
+    expect(allowance).toMatchObject({spentBeforeToday: 21500, spentToday: 200, remainingMonth: 9300});
   });
 
   it('uses extra spend even when the snapshot is for another month', () => {
-    const result = dailyAllowance(
-      {
-        monthKey: '2026-09',
-        monthlyBudget: 31000,
-        spendByDate: {},
-        dataAsOfMillis: 0,
-      },
-      '2026-10-27',
-      {'2026-10-27': 400},
-    );
-    expect(result?.spentToday).toBe(400);
-    // Oct 26-31 at 1,000 a day; the unspent month does not land in this week.
-    expect(result?.weekBudget).toBe(6000);
+    const allowance = dailyAllowance({...snapshot, monthKey: '2026-09'}, '2026-10-27', {'2026-10-27': 100});
+    expect(allowance).toMatchObject({spentBeforeToday: 0, spentToday: 100, dailyLimit: 6200});
   });
 
   it('has no allowance for a missing or invalid budget', () => {
-    expect(
-      dailyAllowance({...snapshot, monthlyBudget: -5}, '2026-10-27'),
-    ).toBe(null);
-    expect(
-      dailyAllowance({...snapshot, monthlyBudget: Number.NaN}, '2026-10-27'),
-    ).toBe(null);
-  });
-
-  it('clips a week that straddles the month end', () => {
-    // Thu 29 Oct 2026: Monday is 26 Oct, Sunday 1 Nov is outside the month.
-    const result = dailyAllowance(
-      {
-        monthKey: '2026-10',
-        monthlyBudget: 3100,
-        spendByDate: {},
-        dataAsOfMillis: 0,
-      },
-      '2026-10-29',
-    );
-    expect(result?.weekStart).toBe('2026-10-26');
-    expect(result?.weekEnd).toBe('2026-10-31');
-    expect(result?.daysLeftInWeek).toBe(3);
-    // 3,100 over 31 days is 100 a day, 600 for the 6 days of the week.
-    expect(result?.weekBudget).toBe(600);
-    expect(result?.dailyLimit).toBe(100);
+    expect(dailyAllowance({...snapshot, monthlyBudget: 0}, '2026-10-27')).toBeNull();
+    expect(dailyAllowance({...snapshot, monthlyBudget: -5}, '2026-10-27')).toBeNull();
+    expect(dailyAllowance({...snapshot, monthlyBudget: Number.NaN}, '2026-10-27')).toBeNull();
+    expect(dailyAllowance(snapshot, 'not a date')).toBeNull();
   });
 
   it('never reports a negative limit and avoids negative zero', () => {
-    const result = dailyAllowance(
-      {
-        monthKey: '2026-10',
-        monthlyBudget: 1000,
-        spendByDate: {'2026-10-26': 5000},
-        dataAsOfMillis: 0,
-      },
-      '2026-10-27',
-    );
-    expect(result?.dailyLimit).toBe(0);
-    expect(Object.is(result?.dailyLimit, 0)).toBe(true);
-    expect(result?.remainingToday).toBe(0);
-    // The week's share is 6 * 1,000 / 31 = 193.55, and 5,000 went on Monday.
-    expect(result?.remainingWeek).toBe(-4806.45);
+    const allowance = dailyAllowance({...snapshot, monthlyBudget: 100}, '2026-10-27')!;
+    expect(allowance.dailyLimit).toBe(0);
+    expect(Object.is(allowance.dailyLimit, -0)).toBe(false);
+    expect(allowance.remainingMonth).toBe(-21600);
   });
 });
 
-describe('budgetAllocation', () => {
-  it('divides the month into weeks, then a week into seven days', () => {
-    const october = budgetAllocation(1000, new Date(2026, 9, 28));
-    expect(october.weeksInMonth).toBeCloseTo(31 / 7, 10);
-    expect(october.weeklyBudget).toBeCloseTo(225.806, 3);
-    expect(october.dailyBudget).toBeCloseTo(32.258, 3);
-    // Every day of the month at the daily budget adds back up to the month.
-    expect(october.dailyBudget * 31).toBeCloseTo(1000, 6);
-
-    const february = budgetAllocation(2800, new Date(2026, 1, 10));
-    expect(february.weeksInMonth).toBe(4);
-    expect(february.weeklyBudget).toBe(700);
-    expect(february.dailyBudget).toBe(100);
+describe('snapshotForBudget', () => {
+  // ₹9,000 budget, ₹5,000 rent, ₹2,000 goal: ₹2,000 to spend in November.
+  const rent = tx({
+    id: 'rent',
+    type: 'expense',
+    amount: 5000,
+    transactionDate: '2026-10-01',
+    isRecurring: true,
+    description: 'Rent',
+  });
+  const rentNov = tx({
+    id: 'rent-nov',
+    type: 'expense',
+    amount: 5000,
+    transactionDate: '2026-11-01',
+    isRecurring: true,
+    externalRef: 'recurring:rent:2026-11',
+  });
+  const facts = (patch: Partial<BudgetFacts> = {}): BudgetFacts => ({
+    total: 9000,
+    savingsGoal: 2000,
+    transactions: [rent, rentNov],
+    ...patch,
   });
 
-  it('is zero for a missing budget', () => {
-    expect(budgetAllocation(0, new Date(2026, 9, 1)).dailyBudget).toBe(0);
-    expect(budgetAllocation(Number.NaN, new Date(2026, 9, 1)).weeklyBudget).toBe(0);
-  });
-});
-
-describe('buildBudgetSnapshot', () => {
-  const now = new Date(2026, 9, 27);
-
-  it('sums regular expenses per local day of the month', () => {
-    const snapshot = buildBudgetSnapshot(
-      [
-        tx({id: 'a', type: 'expense', amount: 100.5, transactionDate: '2026-10-05'}),
-        tx({id: 'b', type: 'expense', amount: 49.5, transactionDate: '2026-10-05'}),
-        tx({id: 'c', type: 'expense', amount: 20, transactionDate: '2026-10-27'}),
-      ],
-      30000,
-      now,
-    );
+  it('pushes what is left for day-to-day spending, bills and the goal set aside', () => {
+    const lunch = tx({id: 'lunch', type: 'expense', amount: 120, transactionDate: '2026-11-03'});
+    const snapshot = snapshotForBudget(facts({transactions: [rent, rentNov, lunch]}), '2026-11-05', 42);
     expect(snapshot).toEqual({
-      monthKey: '2026-10',
-      monthlyBudget: 30000,
-      spendByDate: {'2026-10-05': 150, '2026-10-27': 20},
-      dataAsOfMillis: 0,
+      monthKey: '2026-11',
+      monthlyBudget: 2000,
+      spendByDate: {'2026-11-03': 120},
+      dataAsOfMillis: 42,
       cycleStartDay: 1,
     });
+    expect(dailyAllowance(snapshot, '2026-11-05')!.dailyLimit).toBe(72.3); // 1880 / 26
   });
 
-  it('takes monthly bills off the budget and out of daily spend', () => {
-    const snapshot = buildBudgetSnapshot(
-      [
-        tx({id: 'rent', type: 'expense', amount: 18000, transactionDate: '2026-10-01', isRecurring: true}),
-        tx({
-          id: 'copy',
-          type: 'expense',
-          amount: 999,
-          transactionDate: '2026-10-10',
-          isRecurring: true,
-          externalRef: 'recurring:wifi:2026-10',
-        }),
-        tx({id: 'food', type: 'expense', amount: 250, transactionDate: '2026-10-10'}),
-      ],
-      {monthlyBudget: 30000, committed: 18999},
-      now,
+  it('leaves out income, balance rows, fixed one-offs and unsynced detections', () => {
+    const rows = [
+      rent,
+      rentNov,
+      tx({id: 'pay', type: 'income', amount: 900, transactionDate: '2026-11-02'}),
+      tx({id: 'adj', type: 'expense', amount: 50, kind: 'balance_adjustment', transactionDate: '2026-11-02'}),
+      tx({id: 'fees', type: 'expense', amount: 600, isFixed: true, transactionDate: '2026-11-02'}),
+    ];
+    const snapshot = snapshotForBudget(facts({transactions: rows, unsyncedSpend: {'2026-11-02': 75}}), '2026-11-05');
+    expect(snapshot.spendByDate).toEqual({});
+    // The fixed one-off is set aside like a bill.
+    expect(snapshot.monthlyBudget).toBe(1400);
+  });
+
+  it('takes off what a mid-month joiner already spent and counts from the join day', () => {
+    const snapshot = snapshotForBudget(
+      facts({
+        transactions: [rent, rentNov, tx({id: 'old', type: 'expense', amount: 300, transactionDate: '2026-11-02'})],
+        flow: {version: 1, trackingStart: '2026-11-15', alreadySpent: 400, startedOn: '2026-11-15', source: 'new'},
+      }),
+      '2026-11-15',
     );
-    expect(snapshot.monthlyBudget).toBe(11001);
-    expect(snapshot.spendByDate).toEqual({'2026-10-10': 250});
+    expect(snapshot).toMatchObject({monthlyBudget: 1600, spendByDate: {}, trackingStart: '2026-11-15'});
   });
 
-  it('keeps a budget taken entirely by bills switched on', () => {
-    expect(
-      buildBudgetSnapshot([], {monthlyBudget: 10000, committed: 12000}, now).monthlyBudget,
-    ).toBe(0.01);
+  it('is the coming month while the budget waits, so the guard starts by itself', () => {
+    const snapshot = snapshotForBudget(
+      facts({flow: {version: 1, trackingStart: '2026-11-01', alreadySpent: 0, startedOn: '2026-10-30', source: 'new'}}),
+      '2026-10-30',
+    );
+    expect(snapshot).toMatchObject({monthKey: '2026-11', monthlyBudget: 2000, trackingStart: '2026-11-01'});
+    expect(dailyAllowance(snapshot, '2026-10-30')).toBeNull();
+    expect(dailyAllowance(snapshot, '2026-11-01')!.dailyLimit).toBe(66.66);
+  });
+
+  it('keeps the guard on with a token paisa when nothing is left', () => {
+    expect(snapshotForBudget(facts({total: 7000}), '2026-11-05').monthlyBudget).toBe(0.01);
+  });
+
+  it('turns the guard off with no budget, or one that needs fixing', () => {
+    expect(snapshotForBudget(facts({total: 0}), '2026-11-05').monthlyBudget).toBe(0);
+    expect(snapshotForBudget(facts({total: 6000}), '2026-11-05').monthlyBudget).toBe(0);
   });
 
   it('follows the payday cycle', () => {
-    const snapshot = buildBudgetSnapshot(
-      [
-        tx({id: 'a', type: 'expense', amount: 100, transactionDate: '2026-10-24'}),
-        tx({id: 'b', type: 'expense', amount: 40, transactionDate: '2026-10-25'}),
-        tx({id: 'c', type: 'expense', amount: 60, transactionDate: '2026-11-03'}),
-      ],
-      {monthlyBudget: 31000, payday: 25},
-      new Date(2026, 10, 3),
-    );
-    expect(snapshot.monthKey).toBe('2026-10');
-    expect(snapshot.cycleStartDay).toBe(25);
-    expect(snapshot.spendByDate).toEqual({'2026-10-25': 40, '2026-11-03': 60});
-  });
-
-  it('leaves out income, opening balance and adjustments', () => {
-    const snapshot = buildBudgetSnapshot(
-      [
-        tx({id: 'a', type: 'expense', amount: 100, transactionDate: '2026-10-05'}),
-        tx({id: 'b', type: 'income', amount: 5000, transactionDate: '2026-10-05'}),
-        tx({
-          id: 'c',
-          type: 'expense',
-          amount: 700,
-          kind: 'opening_balance',
-          transactionDate: '2026-10-05',
-        }),
-        tx({
-          id: 'd',
-          type: 'expense',
-          amount: 300,
-          kind: 'balance_adjustment',
-          transactionDate: '2026-10-06',
-        }),
-      ],
-      30000,
-      now,
-    );
-    expect(snapshot.spendByDate).toEqual({'2026-10-05': 100});
-  });
-
-  it('records when the ledger fetch started', () => {
-    expect(buildBudgetSnapshot([], 1000, now, 1234).dataAsOfMillis).toBe(1234);
-    expect(buildBudgetSnapshot([], 1000, now).dataAsOfMillis).toBe(0);
-  });
-
-  it('ignores other months', () => {
-    const snapshot = buildBudgetSnapshot(
-      [
-        tx({id: 'a', type: 'expense', amount: 100, transactionDate: '2026-09-30'}),
-        tx({id: 'b', type: 'expense', amount: 100, transactionDate: '2026-11-01'}),
-        tx({id: 'c', type: 'expense', amount: 5, transactionDate: '2026-10-01'}),
-      ],
-      0,
-      now,
-    );
-    expect(snapshot.spendByDate).toEqual({'2026-10-01': 5});
-    expect(snapshot.monthlyBudget).toBe(0);
-  });
-
-  it('adds up to the same month spend the dashboard shows', () => {
-    const rows = [
-      tx({id: 'a', type: 'expense', amount: 120.25, transactionDate: '2026-10-03'}),
-      tx({id: 'b', type: 'expense', amount: 80.1, transactionDate: '2026-10-27'}),
-      tx({id: 'c', type: 'income', amount: 900, transactionDate: '2026-10-04'}),
-      tx({
-        id: 'd',
-        type: 'expense',
-        amount: 50,
-        kind: 'balance_adjustment',
-        transactionDate: '2026-10-10',
-      }),
-      tx({
-        id: 'e',
-        type: 'income',
-        amount: 10000,
-        kind: 'opening_balance',
-        transactionDate: '2026-10-01',
-      }),
-      tx({id: 'f', type: 'expense', amount: 40, transactionDate: '2026-09-28'}),
-    ];
-    const snapshot = buildBudgetSnapshot(rows, 5000, now);
-    const total = Object.values(snapshot.spendByDate).reduce(
-      (sum, value) => sum + value,
-      0,
-    );
-    expect(Number(total.toFixed(2))).toBe(monthlySpentFor(rows, now));
+    const snapshot = snapshotForBudget(facts({payday: 25, transactions: []}), '2026-10-27');
+    expect(snapshot).toMatchObject({monthKey: '2026-10', cycleStartDay: 25, monthlyBudget: 7000});
   });
 });
 
