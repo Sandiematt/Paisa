@@ -1,7 +1,7 @@
 import React from 'react';
-import {StyleProp, StyleSheet, ViewStyle} from 'react-native';
+import {StyleProp, ViewStyle} from 'react-native';
 
-import {GradientKey, shadows} from '../../theme';
+import {GradientKey, makeStyles, shadows} from '../../theme';
 import {GradientView} from './GradientView';
 
 type GradientIconSquareProps = {
@@ -11,7 +11,7 @@ type GradientIconSquareProps = {
   gradient?: GradientKey;
   /** Violet glow under the square, as on the home quick tiles. */
   glow?: boolean;
-  /** The icon; render it ~half the size, in `colors.text`. */
+  /** The icon; render it ~half the size, in `colors.onAccent`. */
   children?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 };
@@ -21,7 +21,7 @@ type GradientIconSquareProps = {
  * 34 gives 11 and 38 to 40 give 12).
  *
  *   <GradientIconSquare size={38} glow>
- *     <Receipt size={18} color={colors.text} weight="fill" />
+ *     <Receipt size={18} color={colors.onAccent} weight="fill" />
  *   </GradientIconSquare>
  */
 export function GradientIconSquare({
@@ -31,6 +31,7 @@ export function GradientIconSquare({
   children,
   style,
 }: GradientIconSquareProps) {
+  const styles = useStyles();
   return (
     <GradientView
       gradient={gradient}
@@ -45,9 +46,9 @@ export function GradientIconSquare({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   base: {
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

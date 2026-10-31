@@ -12,7 +12,16 @@ import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {
   useFloatingNavDockHeight,
 } from '../NavBar/FloatingNavScroll';
-import {colors, duration, easing, radii, shadows, spacing, withAlpha} from '../../theme';
+import {
+  ColorToken,
+  colors,
+  duration,
+  easing,
+  makeStyles,
+  radii,
+  spacing,
+  withAlpha,
+} from '../../theme';
 import {AddChoice} from './types';
 
 type AddActionSheetProps = {
@@ -31,25 +40,26 @@ const OPTIONS: {
   kind: AddChoice;
   title: string;
   description: string;
-  accent: string;
+  /** Palette role, resolved at render so it follows the scheme. */
+  accent: ColorToken;
 }[] = [
   {
     kind: 'income',
     title: 'Add income',
     description: 'Record money coming in',
-    accent: colors.mint,
+    accent: 'mint',
   },
   {
     kind: 'expense',
     title: 'Add expense',
     description: 'Record money going out',
-    accent: colors.roseLight,
+    accent: 'roseLight',
   },
   {
     kind: 'scan',
     title: 'Scan receipt',
     description: 'Read a bill or receipt from a photo',
-    accent: colors.lavender,
+    accent: 'lavender',
   },
 ];
 
@@ -58,6 +68,7 @@ export function AddActionSheet({
   onClose,
   onSelect,
 }: AddActionSheetProps) {
+  const styles = useStyles();
   const dockHeight = useFloatingNavDockHeight();
   const reducedMotion = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
@@ -121,49 +132,52 @@ export function AddActionSheet({
           },
         ]}>
         <View style={styles.card}>
-          {OPTIONS.map((option, index) => (
-            <React.Fragment key={option.kind}>
-              {index > 0 ? <View style={styles.divider} /> : null}
-              <PressableScale
-                onPress={() => onSelect(option.kind)}
-                scaleTo={0.98}
-                accessibilityRole="button"
-                accessibilityLabel={option.title}
-                accessibilityHint={option.description}
-                style={styles.row}>
-                <View
-                  style={[
-                    styles.mark,
-                    {
-                      backgroundColor: withAlpha(option.accent, 0.14),
-                      borderColor: withAlpha(option.accent, 0.3),
-                    },
-                  ]}>
-                  <TileLottieIcon
-                    kind={option.kind === 'scan' ? 'receipt' : option.kind}
-                    size={20}
-                    color={option.accent}
-                    replayKey={visible}
-                  />
-                </View>
-                <View style={styles.copy}>
-                  <AppText variant="heading" color={colors.text}>
-                    {option.title}
-                  </AppText>
-                  <AppText variant="caption" color={colors.muted}>
-                    {option.description}
-                  </AppText>
-                </View>
-              </PressableScale>
-            </React.Fragment>
-          ))}
+          {OPTIONS.map((option, index) => {
+            const accent = colors[option.accent];
+            return (
+              <React.Fragment key={option.kind}>
+                {index > 0 ? <View style={styles.divider} /> : null}
+                <PressableScale
+                  onPress={() => onSelect(option.kind)}
+                  scaleTo={0.98}
+                  accessibilityRole="button"
+                  accessibilityLabel={option.title}
+                  accessibilityHint={option.description}
+                  style={styles.row}>
+                  <View
+                    style={[
+                      styles.mark,
+                      {
+                        backgroundColor: withAlpha(accent, 0.14),
+                        borderColor: withAlpha(accent, 0.3),
+                      },
+                    ]}>
+                    <TileLottieIcon
+                      kind={option.kind === 'scan' ? 'receipt' : option.kind}
+                      size={20}
+                      color={accent}
+                      replayKey={visible}
+                    />
+                  </View>
+                  <View style={styles.copy}>
+                    <AppText variant="heading" color={colors.text}>
+                      {option.title}
+                    </AppText>
+                    <AppText variant="caption" color={colors.muted}>
+                      {option.description}
+                    </AppText>
+                  </View>
+                </PressableScale>
+              </React.Fragment>
+            );
+          })}
         </View>
       </Animated.View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   layer: {
     position: 'absolute',
     top: 0,
@@ -181,13 +195,14 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     transformOrigin: 'bottom right',
   },
+  // No shadow: the scrim already lifts the card, and Android's elevation
+  // shadow ignores the fade-in opacity, so it popped in as a dark box.
   card: {
     padding: spacing.sm,
     borderRadius: radii.cardHero,
     backgroundColor: colors.surfaceRaised,
     borderWidth: 1,
     borderColor: colors.line,
-    ...shadows.nav,
   },
   row: {
     height: ROW_HEIGHT,
@@ -215,4 +230,4 @@ const styles = StyleSheet.create({
     marginVertical: 2,
     marginHorizontal: spacing.sm,
   },
-});
+}));

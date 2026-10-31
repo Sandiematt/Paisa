@@ -1,9 +1,9 @@
 import React, {useEffect, useState} from 'react';
-import {Alert, Image, Linking, StyleSheet, View} from 'react-native';
+import {Alert, Image, Linking, View} from 'react-native';
 
 import {CheckGlyph} from '../../components/icons/Glyphs';
 import {AppText, PressableScale, SecondaryButton} from '../../components/ui';
-import {colors, radii, spacing} from '../../theme';
+import {colors, makeStyles, radii, spacing} from '../../theme';
 import {AvatarSource, pickAvatar} from './avatarImage';
 import {AVATAR_PRESETS, AvatarPreset} from './avatarPresets';
 import {SheetFrame} from './ProfileSheets';
@@ -23,6 +23,7 @@ export function AvatarPickerModal({
   onSelectAvatar,
   onClose,
 }: AvatarPickerModalProps) {
+  const styles = useStyles();
   const [selectedUrl, setSelectedUrl] = useState<string | undefined>(
     currentAvatarUrl,
   );
@@ -129,7 +130,7 @@ export function AvatarPickerModal({
                 />
                 {isSelected ? (
                   <View style={styles.checkBadge}>
-                    <CheckGlyph color={colors.text} size={10} />
+                    <CheckGlyph color={colors.onAccent} size={10} />
                   </View>
                 ) : null}
               </View>
@@ -157,7 +158,7 @@ export function AvatarPickerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   actions: {
     marginBottom: spacing.xl,
   },
@@ -216,4 +217,4 @@ const styles = StyleSheet.create({
   removeButton: {
     marginTop: spacing.sm,
   },
-});
+}));

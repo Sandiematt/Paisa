@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
-import {StyleSheet, View} from 'react-native';
-import {NotePencil, Receipt} from 'phosphor-react-native';
+import {View} from 'react-native';
+import {NotePencil} from 'phosphor-react-native/src/icons/NotePencil';
+import {Receipt} from 'phosphor-react-native/src/icons/Receipt';
 
 import {
   AppText,
@@ -11,7 +12,7 @@ import {
 } from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
 import {DetectedTxn} from '../../lib/autotrack/types';
-import {colors, fonts, radii, withAlpha} from '../../theme';
+import {colors, fonts, makeStyles, radii, withAlpha} from '../../theme';
 import {CategoryIconSquare} from '../add/categoryIcons';
 import {
   PaymentGroup,
@@ -37,6 +38,7 @@ function PaymentRow({
   onKeep,
   onMerge,
 }: PaymentRowProps) {
+  const styles = useStyles();
   const [busy, setBusy] = useState(false);
   const pill = paymentPill(item);
   const amount = signedAmount(item);
@@ -191,12 +193,13 @@ export function DetectedPayments({
   onKeep,
   onMerge,
 }: DetectedPaymentsProps) {
+  const styles = useStyles();
   if (groups.length === 0) {
     return (
       <Card radius={radii.cardHero} padding={0}>
         <View style={styles.emptyInner}>
           <GradientIconSquare size={48} glow>
-            <Receipt size={24} color={colors.text} weight="fill" />
+            <Receipt size={24} color={colors.onAccent} weight="fill" />
           </GradientIconSquare>
           <AppText variant="heading" align="center">
             No payments yet
@@ -242,7 +245,7 @@ export function DetectedPayments({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   group: {
     marginBottom: 12,
   },
@@ -326,4 +329,4 @@ const styles = StyleSheet.create({
     paddingVertical: 32,
     paddingHorizontal: 28,
   },
-});
+}));

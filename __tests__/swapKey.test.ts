@@ -47,6 +47,14 @@ describe('swapKeyFor', () => {
     ).toBe('setup');
   });
 
+  it('catches an older account up before home, after any first-time setup', () => {
+    const signedIn = {...base, signedIn: true, hasDraft: true};
+    expect(swapKeyFor({...signedIn, needsUpgrade: true})).toBe('upgrade');
+    expect(swapKeyFor({...signedIn, needsUpgrade: true, needsSetup: true})).toBe(
+      'setup',
+    );
+  });
+
   it('shows the current auth route when signed out', () => {
     expect(swapKeyFor(base)).toBe('login');
     expect(swapKeyFor({...base, route: 'splash'})).toBe('splash');

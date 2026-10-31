@@ -3,23 +3,28 @@ import {
   Animated,
   LayoutChangeEvent,
   PanResponder,
-  StyleSheet,
   Text as NativeText,
   View,
 } from 'react-native';
-import {
-  ArrowsClockwise,
-  Copy,
-  NotePencil,
-  PencilSimple,
-  Trash,
-} from 'phosphor-react-native';
+import {ArrowsClockwise} from 'phosphor-react-native/src/icons/ArrowsClockwise';
+import {Copy} from 'phosphor-react-native/src/icons/Copy';
+import {NotePencil} from 'phosphor-react-native/src/icons/NotePencil';
+import {PencilSimple} from 'phosphor-react-native/src/icons/PencilSimple';
+import {Trash} from 'phosphor-react-native/src/icons/Trash';
 
 import {PressableScale, Text} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
 import {localDateISO} from '../../lib/transactionsStore';
-import {colors, duration, easing, fonts, typography, withAlpha} from '../../theme';
+import {
+  colors,
+  duration,
+  easing,
+  fonts,
+  makeStyles,
+  typography,
+  withAlpha,
+} from '../../theme';
 import {CategoryIconSquare} from '../add/categoryIcons';
 import {highlightParts} from './mapActivity';
 import {ActivityTransaction} from './types';
@@ -52,6 +57,7 @@ const NO_HIGHLIGHT: string[] = [];
 
 /** Text with the search words picked out, so a result shows why it matched. */
 function Highlighted({text, tokens}: {text: string; tokens: string[]}) {
+  const styles = useStyles();
   return (
     <>
       {highlightParts(text, tokens).map((part, index) =>
@@ -99,6 +105,7 @@ export function SwipeableTxnRow({
   onDuplicate,
   highlight = NO_HIGHLIGHT,
 }: SwipeableTxnRowProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const x = useRef(new Animated.Value(REST)).current;
   const startX = useRef(REST);
@@ -333,12 +340,12 @@ export function SwipeableTxnRow({
             accessibilityLabel="Edit transaction"
             containerStyle={styles.actionHit}
             style={[styles.actionFace, styles.editFace]}>
-            <PencilSimple size={18} color={colors.text} weight="bold" />
+            <PencilSimple size={18} color={colors.onAccent} weight="bold" />
             <Text
               fontFamily={fonts.jakartaBold}
               fontSize={11}
               lineHeight={14}
-              color={colors.text}>
+              color={colors.onAccent}>
               Edit
             </Text>
           </PressableScale>
@@ -349,12 +356,12 @@ export function SwipeableTxnRow({
             accessibilityLabel="Delete transaction"
             containerStyle={styles.actionHit}
             style={[styles.actionFace, styles.deleteFace]}>
-            <Trash size={18} color={colors.text} weight="bold" />
+            <Trash size={18} color={colors.onAccent} weight="bold" />
             <Text
               fontFamily={fonts.jakartaBold}
               fontSize={11}
               lineHeight={14}
-              color={colors.text}>
+              color={colors.onAccent}>
               Delete
             </Text>
           </PressableScale>
@@ -364,7 +371,7 @@ export function SwipeableTxnRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   clip: {
     overflow: 'hidden',
   },
@@ -449,4 +456,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
   },
-});
+}));

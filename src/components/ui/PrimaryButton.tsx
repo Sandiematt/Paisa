@@ -1,7 +1,7 @@
 import React from 'react';
-import {StyleProp, StyleSheet, View, ViewStyle} from 'react-native';
+import {StyleProp, View, ViewStyle} from 'react-native';
 
-import {colors, layout, radii, spacing} from '../../theme';
+import {colors, layout, makeStyles, radii, spacing} from '../../theme';
 import {AppText} from './AppText';
 import {Loader} from './Loader';
 import {PressableScale} from './PressableScale';
@@ -28,7 +28,8 @@ export function PrimaryButton({
   style,
   accessibilityHint,
 }: PrimaryButtonProps) {
-  const labelColor = disabled ? colors.muted : colors.text;
+  const styles = useStyles();
+  const labelColor = disabled ? colors.muted : colors.onAccent;
   return (
     <PressableScale
       onPress={onPress}
@@ -40,7 +41,7 @@ export function PrimaryButton({
       containerStyle={style}
       style={[styles.surface, disabled && styles.surfaceDisabled]}>
       <View style={styles.row}>
-        {loading ? <Loader size={24} style={styles.loader} /> : null}
+        {loading ? <Loader size={24} color={labelColor} style={styles.loader} /> : null}
         <AppText
           variant="heading"
           color={labelColor}
@@ -57,7 +58,7 @@ export function PrimaryButton({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   surface: {
     height: layout.controlHeight,
     borderRadius: radii.pill,
@@ -79,4 +80,4 @@ const styles = StyleSheet.create({
   loader: {
     marginRight: spacing.sm,
   },
-});
+}));

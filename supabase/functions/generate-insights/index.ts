@@ -235,7 +235,15 @@ Deno.serve(async req => {
   const profile = profileRow ? mapProfileRow(profileRow as ProfileQueryRow) : null;
 
   const {stats, highlights} = calculateInsightStats(transactions, profile, referenceDate, period);
-  const {summary, aiGenerated} = await generateSummary(stats);
+  // Per-user hourly cap on AI spend (consume_function_quota migration). Over it,
+  // the rule-based summary is used; the statistics are always returned.
+  const {data: withinQuota, error: quotaError} = await supabase.rpc('consume_function_quota', {
+    p_function: 'generate-insights',
+  });
+  if (quotaError) {
+    console.error('generate-insights: quota check failed', quotaError);
+  }
+  const {summary, aiGenerated} = await generateSummary(stats, withinQuota !== false);
 
   const response: InsightsResponse = {
     summary,

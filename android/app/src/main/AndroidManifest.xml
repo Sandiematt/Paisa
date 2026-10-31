@@ -32,6 +32,13 @@
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="${usesCleartextTraffic}"
       android:supportsRtl="true">
+      <!-- EAS Update (expo-updates). Keep in sync with "updates" / "runtimeVersion" in app.json;
+           `eas update:configure` adds EXPO_UPDATE_URL once the EAS project exists. -->
+      <meta-data android:name="expo.modules.updates.ENABLED" android:value="true" />
+      <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ERROR_RECOVERY_ONLY" />
+      <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0" />
+      <meta-data android:name="expo.modules.updates.EXPO_RUNTIME_VERSION" android:value="@string/expo_runtime_version" />
+      <meta-data android:name="expo.modules.updates.ENABLE_BSDIFF_PATCH_SUPPORT" android:value="true" />
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"

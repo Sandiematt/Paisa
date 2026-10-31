@@ -3,12 +3,12 @@ import {
   Alert,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   TextInput,
   View,
 } from 'react-native';
 
-import {MagnifyingGlass, XCircle} from 'phosphor-react-native';
+import {MagnifyingGlass} from 'phosphor-react-native/src/icons/MagnifyingGlass';
+import {XCircle} from 'phosphor-react-native/src/icons/XCircle';
 
 import {
   Card,
@@ -17,6 +17,7 @@ import {
   Text,
 } from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
+import {recurringRootId} from '../../lib/recurring';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {
   TransactionRow,
@@ -26,7 +27,7 @@ import {
   localDateISO,
   updateTransaction,
 } from '../../lib/transactionsStore';
-import {colors, fonts, layout, radii} from '../../theme';
+import {colors, fonts, layout, makeStyles, radii} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {ActivitySkeleton} from './ActivitySkeleton';
 import {FloatingReceipt} from './FloatingReceipt';
@@ -112,6 +113,7 @@ export function ActivityScreen({
   focusDate,
   loading = false,
 }: ActivityScreenProps) {
+  const styles = useStyles();
   const [query, setQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const searchTarget = useTutorialTarget('activity.search');
@@ -432,13 +434,27 @@ export function ActivityScreen({
                   onEdit={() => item.source && onEdit(item.source)}
                   onDelete={() => onDelete(item)}
                   onToggleRecurring={() =>
-                    run(
-                      () =>
-                        updateTransaction(item.id, {
-                          isRecurring: !item.recurring,
-                        }),
-                      'Could not update',
-                    )
+                    run(async () => {
+                      const next = !item.recurring;
+                      // A saved copy belongs to a series; turning it off ends
+                      // the series, or the next month would add it again.
+                      const rootId = item.source
+                        ? recurringRootId(item.source)
+                        : null;
+                      if (rootId && !next) {
+                        const root = transactions.find(
+                          row => row.id === rootId,
+                        );
+                        if (root?.isRecurring) {
+                          onUpsert(
+                            await updateTransaction(rootId, {
+                              isRecurring: false,
+                            }),
+                          );
+                        }
+                      }
+                      return updateTransaction(item.id, {isRecurring: next});
+                    }, 'Could not update')
                   }
                   onDuplicate={() =>
                     run(
@@ -456,7 +472,7 @@ export function ActivityScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   header: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -547,4 +563,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-});
+}));

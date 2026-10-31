@@ -1,9 +1,7 @@
 import React from 'react';
-import {
-  BellRinging,
-  PersonSimpleCircle,
-  TerminalWindow,
-} from 'phosphor-react-native';
+import {BellRinging} from 'phosphor-react-native/src/icons/BellRinging';
+import {PersonSimpleCircle} from 'phosphor-react-native/src/icons/PersonSimpleCircle';
+import {TerminalWindow} from 'phosphor-react-native/src/icons/TerminalWindow';
 
 import {AppText, SettingsGroup, SettingsRow} from '../../components/ui';
 import {

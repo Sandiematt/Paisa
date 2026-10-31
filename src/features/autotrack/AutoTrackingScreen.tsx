@@ -1,7 +1,8 @@
 import React, {useEffect, useState} from 'react';
-import {Alert, Modal, ScrollView, StyleSheet, View} from 'react-native';
+import {Alert, Modal, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {NotePencil, ShieldWarning} from 'phosphor-react-native';
+import {NotePencil} from 'phosphor-react-native/src/icons/NotePencil';
+import {ShieldWarning} from 'phosphor-react-native/src/icons/ShieldWarning';
 
 import {
   AppText,
@@ -13,8 +14,9 @@ import {
   Stagger,
   ToggleSwitch,
 } from '../../components/ui';
+import {isDeveloperModeEnabled} from '../../lib/autotrack/nativeUpiDetector';
 import {DEFAULT_TRACKING_METHOD} from '../../lib/autotrack/types';
-import {colors, spacing} from '../../theme';
+import {colors, makeStyles, spacing} from '../../theme';
 import {ActivitySkeleton} from '../activity/ActivitySkeleton';
 import {useLoadingGate} from '../insights/loadingGate';
 import {AllowanceCard} from './AllowanceCard';
@@ -43,6 +45,7 @@ export function AutoTrackingScreen({
   currencySymbol,
   onOpenBudget,
 }: AutoTrackingScreenProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const {
     supported,
@@ -66,12 +69,15 @@ export function AutoTrackingScreen({
     shareReport,
   } = useAutoTrack();
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  // Diagnostics are for debugging only: shown when Developer options are on.
+  const [developerMode, setDeveloperMode] = useState(false);
   const showSkeleton = useLoadingGate(loading);
 
   // Permissions are granted in system settings, so look again on every open.
   useEffect(() => {
     if (visible) {
       refreshStatus();
+      isDeveloperModeEnabled().then(setDeveloperMode, () => setDeveloperMode(false));
     }
   }, [refreshStatus, visible]);
 
@@ -82,7 +88,7 @@ export function AutoTrackingScreen({
   }, [visible]);
 
   // The detector only streams its log while the panel is expanded.
-  const showLog = visible && diagnosticsOpen;
+  const showLog = visible && developerMode && diagnosticsOpen;
   useEffect(() => {
     if (!showLog) {
       return;
@@ -251,17 +257,19 @@ export function AutoTrackingScreen({
                 {payments}
               </Stagger>
 
-              <Stagger index={5} style={styles.diagnostics}>
-                <DiagnosticsSection
-                  open={diagnosticsOpen}
-                  onToggle={() => setDiagnosticsOpen(value => !value)}
-                  log={log}
-                  onShareReport={() => {
-                    shareReport().catch(() => {});
-                  }}
-                  onClearHistory={confirmClear}
-                />
-              </Stagger>
+              {developerMode ? (
+                <Stagger index={5} style={styles.diagnostics}>
+                  <DiagnosticsSection
+                    open={diagnosticsOpen}
+                    onToggle={() => setDiagnosticsOpen(value => !value)}
+                    log={log}
+                    onShareReport={() => {
+                      shareReport().catch(() => {});
+                    }}
+                    onClearHistory={confirmClear}
+                  />
+                </Stagger>
+              ) : null}
             </>
           ) : null}
         </ScrollView>
@@ -270,7 +278,7 @@ export function AutoTrackingScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   screen: {
     flex: 1,
   },
@@ -303,4 +311,4 @@ const styles = StyleSheet.create({
   diagnostics: {
     marginTop: 26,
   },
-});
+}));

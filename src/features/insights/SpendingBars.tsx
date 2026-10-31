@@ -1,9 +1,9 @@
 import React, {useMemo, useState} from 'react';
-import {LayoutChangeEvent, StyleSheet, Text, View} from 'react-native';
+import {LayoutChangeEvent, Text, View} from 'react-native';
 import Svg, {ClipPath, Defs, G, Line, LinearGradient, Rect, Stop} from 'react-native-svg';
 
 import {formatMoney} from '../../lib/formatMoney';
-import {colors, fonts, gradients, withAlpha} from '../../theme';
+import {colors, fonts, gradients, makeStyles, useTheme, withAlpha} from '../../theme';
 import {compactNumber, type SpendingBar} from './insightsMath';
 
 const CHART_HEIGHT = 120;
@@ -29,10 +29,13 @@ function barWidthFor(count: number, slot: number): number {
 /**
  * Rounded gradient bars with a dashed pace line. Finished bars use the primary
  * gradient, bars over the budget pace use the rose gradient, and the running
- * bucket is hatched. Captions are laid out as flex columns so they line up with
+ * bucket is hatched (violet on `wash` in light). Captions are laid out as flex columns so they line up with
  * the SVG slots at any width.
  */
 export function SpendingBars({bars, pace, currencySymbol, bucketNoun}: SpendingBarsProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
+  const light = scheme === 'light';
   const [width, setWidth] = useState(0);
   const count = bars.length;
   const slot = count > 0 ? width / count : 0;
@@ -101,7 +104,7 @@ export function SpendingBars({bars, pace, currencySymbol, bucketNoun}: SpendingB
                       y1={CHART_HEIGHT}
                       x2={x + offset + h}
                       y2={y}
-                      stroke={colors.lavender}
+                      stroke={light ? colors.violet : colors.lavender}
                       strokeOpacity={0.7}
                       strokeWidth={2}
                     />,
@@ -109,7 +112,7 @@ export function SpendingBars({bars, pace, currencySymbol, bucketNoun}: SpendingB
                 }
                 return (
                   <G key={`bar-${index}`} clipPath={`url(#insightsClip${index})`}>
-                    <Rect x={x} y={y} width={barWidth} height={h} fill={withAlpha(colors.violet, 0.18)} />
+                    <Rect x={x} y={y} width={barWidth} height={h} fill={light ? colors.wash : withAlpha(colors.violet, 0.18)} />
                     {lines}
                   </G>
                 );
@@ -162,7 +165,7 @@ export function SpendingBars({bars, pace, currencySymbol, bucketNoun}: SpendingB
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   chart: {
     height: CHART_HEIGHT,
   },
@@ -196,4 +199,4 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
   },
-});
+}));

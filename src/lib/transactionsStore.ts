@@ -8,6 +8,7 @@ import {
   TransactionSource,
 } from './supabase/database.types';
 import {dataErrorMessage} from './supabase/errors';
+import {isMissingSchema} from './supabase/schema';
 
 export type {TransactionKind, TransactionSource};
 
@@ -24,6 +25,11 @@ export type TransactionRow = {
   notes: string | null;
   kind: TransactionKind;
   isRecurring: boolean;
+  /**
+   * A one-off expense set aside from the month like a bill (fees, repairs),
+   * so it never comes out of a day's limit.
+   */
+  isFixed?: boolean;
   /** 'upi_auto' for payments saved by the UPI detector, 'receipt_scan' for scanned receipts. Absent means manual. */
   source?: TransactionSource;
   /** Dedupe key from the UPI detector or a receipt scan; null for manual rows. */
@@ -44,6 +50,7 @@ export type NewTransaction = {
   notes?: string | null;
   kind: TransactionKind;
   isRecurring?: boolean;
+  isFixed?: boolean;
   source?: TransactionSource;
   externalRef?: string | null;
   upiRef?: string | null;
@@ -59,6 +66,8 @@ export type TransactionPatch = {
   paymentMethod?: string | null;
   notes?: string | null;
   isRecurring?: boolean;
+  isFixed?: boolean;
+  externalRef?: string | null;
 };
 
 function asAmount(value: number | string | null): number {
@@ -103,6 +112,7 @@ function mapRow(row: {
   notes: string | null;
   kind: TransactionKind;
   is_recurring?: boolean | null;
+  is_fixed?: boolean | null;
   source?: TransactionSource | null;
   external_ref?: string | null;
   upi_ref?: string | null;
@@ -122,6 +132,7 @@ function mapRow(row: {
     notes: row.notes,
     kind: row.kind,
     isRecurring: Boolean(row.is_recurring),
+    ...(row.is_fixed ? {isFixed: true} : {}),
     source: row.source ?? 'manual',
     externalRef: row.external_ref ?? null,
     upiRef: row.upi_ref ?? null,
@@ -130,21 +141,72 @@ function mapRow(row: {
   };
 }
 
-const SELECT_COLUMNS =
+const BASE_COLUMNS =
   'id, user_id, type, amount, category_id, description, merchant, transaction_date, payment_method, notes, kind, is_recurring, source, external_ref, upi_ref, created_at, updated_at';
+const FIXED_COLUMNS =
+  'id, user_id, type, amount, category_id, description, merchant, transaction_date, payment_method, notes, kind, is_recurring, is_fixed, source, external_ref, upi_ref, created_at, updated_at';
 
-export async function loadTransactions(): Promise<TransactionRow[]> {
-  const {data, error} = await supabase
-    .from('transactions')
-    .select(SELECT_COLUMNS)
-    .order('transaction_date', {ascending: true})
-    .order('created_at', {ascending: true});
+/**
+ * Whether the database has transactions.is_fixed yet. It is assumed until a
+ * query says otherwise; then rows are read and written without it, and no
+ * expense can be marked fixed (see supabase/schema.ts).
+ */
+let hasFixedColumn = true;
 
-  if (error) {
-    throw new Error(dataErrorMessage(error));
+// Typed as the full list either way: rows read without is_fixed just lack
+// it, which mapRow treats as false.
+function selectColumns(): typeof FIXED_COLUMNS {
+  return hasFixedColumn ? FIXED_COLUMNS : (BASE_COLUMNS as typeof FIXED_COLUMNS);
+}
+
+/** Runs a query, once more without is_fixed when the database does not have it yet. */
+async function withFixedColumn<T extends {error: {code?: string} | null}>(
+  run: (columns: typeof FIXED_COLUMNS) => PromiseLike<T>,
+): Promise<T> {
+  const result = await run(selectColumns());
+  if (hasFixedColumn && isMissingSchema(result.error)) {
+    hasFixedColumn = false;
+    return run(selectColumns());
   }
+  return result;
+}
 
-  return (data ?? []).map(mapRow);
+/** For tests: start again as if the column exists. */
+export function resetSchemaFallbacks() {
+  hasFixedColumn = true;
+}
+
+/** PostgREST caps one response (max_rows in supabase/config.toml). */
+const LOAD_PAGE_SIZE = 1000;
+
+/**
+ * Every transaction of the signed-in user, oldest first. Paged, because a
+ * single select stops at the API's row cap and, ordered oldest first, would
+ * silently drop the newest rows.
+ */
+export async function loadTransactions(): Promise<TransactionRow[]> {
+  const rows: TransactionRow[] = [];
+  for (let from = 0; ; from += LOAD_PAGE_SIZE) {
+    const {data, error} = await withFixedColumn(columns =>
+      supabase
+        .from('transactions')
+        .select(columns)
+        .order('transaction_date', {ascending: true})
+        .order('created_at', {ascending: true})
+        .order('id', {ascending: true})
+        .range(from, from + LOAD_PAGE_SIZE - 1),
+    );
+
+    if (error) {
+      throw new Error(dataErrorMessage(error));
+    }
+
+    const batch = data ?? [];
+    rows.push(...batch.map(mapRow));
+    if (batch.length < LOAD_PAGE_SIZE) {
+      return rows;
+    }
+  }
 }
 
 export async function createTransaction(
@@ -156,26 +218,29 @@ export async function createTransaction(
     throw new Error('Sign in to save this transaction.');
   }
 
-  const {data, error} = await supabase
-    .from('transactions')
-    .insert({
-      user_id: sessionData.user.id,
-      type: input.type,
-      amount: input.amount,
-      category_id: input.categoryId,
-      description: input.description ?? null,
-      merchant: input.merchant ?? null,
-      transaction_date: input.transactionDate,
-      payment_method: input.paymentMethod ?? null,
-      notes: input.notes ?? null,
-      kind: input.kind,
-      is_recurring: input.isRecurring ?? false,
-      source: input.source ?? 'manual',
-      external_ref: input.externalRef ?? null,
-      upi_ref: input.upiRef ?? null,
-    })
-    .select(SELECT_COLUMNS)
-    .single();
+  const {data, error} = await withFixedColumn(columns =>
+    supabase
+      .from('transactions')
+      .insert({
+        user_id: sessionData.user.id,
+        type: input.type,
+        amount: input.amount,
+        category_id: input.categoryId,
+        description: input.description ?? null,
+        merchant: input.merchant ?? null,
+        transaction_date: input.transactionDate,
+        payment_method: input.paymentMethod ?? null,
+        notes: input.notes ?? null,
+        kind: input.kind,
+        is_recurring: input.isRecurring ?? false,
+        ...(input.isFixed && columns === FIXED_COLUMNS ? {is_fixed: true} : {}),
+        source: input.source ?? 'manual',
+        external_ref: input.externalRef ?? null,
+        upi_ref: input.upiRef ?? null,
+      })
+      .select(columns)
+      .single(),
+  );
 
   if (error || !data) {
     throw new Error(dataErrorMessage(error));
@@ -223,8 +288,26 @@ export async function upsertDetectedTransaction(
     }
   };
 
+  // A UPI ref often arrives after the first sync (from the payment
+  // notification); only fills one the row does not have yet.
+  const addUpiRef = async () => {
+    if (!pending.upiRef) {
+      return;
+    }
+    const {error} = await supabase
+      .from('transactions')
+      .update({upi_ref: pending.upiRef})
+      .eq('user_id', userId)
+      .eq('external_ref', pending.externalRef)
+      .is('upi_ref', null);
+    if (error) {
+      throw new Error(dataErrorMessage(error));
+    }
+  };
+
   if (pending.alreadySynced) {
     await addNote();
+    await addUpiRef();
     return pending.remoteId;
   }
 
@@ -306,6 +389,29 @@ export function openingBalanceDate(dates: string[], today: string): string {
     }
   }
   return earliest;
+}
+
+/**
+ * Whether seedOpeningBalance would change anything for this ledger: there is
+ * no opening row yet, or it is dated after today or after another row. Lets
+ * callers holding the ledger skip its queries on every refresh.
+ */
+export function needsOpeningSeed(
+  rows: TransactionRow[],
+  today = localDateISO(),
+): boolean {
+  const opening = rows.find(isOpeningBalance);
+  if (!opening) {
+    return true;
+  }
+  return (
+    opening.transactionDate > today ||
+    rows.some(
+      row =>
+        !isOpeningBalance(row) &&
+        row.transactionDate < opening.transactionDate,
+    )
+  );
 }
 
 export async function seedOpeningBalance(amount: number): Promise<boolean> {
@@ -435,13 +541,22 @@ export async function updateTransaction(
   if (patch.isRecurring !== undefined) {
     payload.is_recurring = patch.isRecurring;
   }
+  if (patch.externalRef !== undefined) {
+    payload.external_ref = patch.externalRef;
+  }
 
-  const {data, error} = await supabase
-    .from('transactions')
-    .update(payload)
-    .eq('id', id)
-    .select(SELECT_COLUMNS)
-    .single();
+  const {data, error} = await withFixedColumn(columns =>
+    supabase
+      .from('transactions')
+      .update(
+        patch.isFixed !== undefined && columns === FIXED_COLUMNS
+          ? {...payload, is_fixed: patch.isFixed}
+          : payload,
+      )
+      .eq('id', id)
+      .select(columns)
+      .single(),
+  );
 
   if (error || !data) {
     throw new Error(dataErrorMessage(error));
@@ -471,6 +586,7 @@ export async function duplicateTransaction(
     notes: row.notes,
     kind: 'regular',
     isRecurring: row.isRecurring,
+    isFixed: row.isFixed,
   });
 }
 

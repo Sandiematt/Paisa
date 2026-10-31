@@ -13,10 +13,12 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {AppText, PressableScale} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {
+  brand,
   colors,
   duration,
   easing,
   layout,
+  makeStyles,
   radii,
   shadows,
   spacing,
@@ -58,6 +60,7 @@ export function TutorialOverlay({
   onSkip,
   onFinish,
 }: TutorialOverlayProps) {
+  const styles = useStyles();
   const insets = useSafeAreaInsets();
   const screen = useWindowDimensions();
   const reducedMotion = useReducedMotion();
@@ -263,7 +266,7 @@ export function TutorialOverlay({
             accessibilityRole="button"
             accessibilityLabel={last ? 'Finish tour' : 'Next step'}
             style={[styles.pill, styles.pillPrimary]}>
-            <AppText variant="label" color={colors.text}>
+            <AppText variant="label" color={colors.onAccent}>
               {last ? 'Finish' : 'Next'}
             </AppText>
           </PressableScale>
@@ -273,7 +276,7 @@ export function TutorialOverlay({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   layer: {
     position: 'absolute',
     top: 0,
@@ -307,7 +310,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: radii.tile,
     borderWidth: 2,
-    borderColor: colors.lavender,
+    // Drawn on the fixed dark scrim, so the brand lavender in both schemes
+    // (the light palette's lavender is indigo, which vanishes on it).
+    borderColor: brand.lavender,
   },
   card: {
     position: 'absolute',
@@ -367,4 +372,4 @@ const styles = StyleSheet.create({
   pillPrimary: {
     backgroundColor: colors.violet,
   },
-});
+}));

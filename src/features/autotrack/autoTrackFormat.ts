@@ -170,13 +170,13 @@ export function lastSyncLabel(lastSyncAt: number | null, now = new Date()): stri
   return `Last synced ${date}, ${clock}`;
 }
 
-/** Fraction of this week's budget already spent (today included), 0 to 1. */
-export function weekProgress(allowance: DailyAllowance): number {
-  const spent = allowance.spentWeekBeforeToday + allowance.spentToday;
-  if (allowance.weekBudget <= 0) {
+/** Fraction of the month's day-to-day money already spent (today included), 0 to 1. */
+export function monthProgress(allowance: DailyAllowance): number {
+  const spent = allowance.spentBeforeToday + allowance.spentToday;
+  if (allowance.budget <= 0) {
     return spent > 0 ? 1 : 0;
   }
-  return Math.max(0, Math.min(1, spent / allowance.weekBudget));
+  return Math.max(0, Math.min(1, spent / allowance.budget));
 }
 
 export function daysLabel(days: number, suffix: string): string {

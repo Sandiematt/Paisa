@@ -71,7 +71,7 @@ const noop = async () => {};
 describe('InsightsScreen', () => {
   beforeEach(() => mockUseInsights.mockReset());
 
-  it('shows example data with an offline banner and retry when the load fails', async () => {
+  it('shows an unavailable state, never example numbers, when the load fails', async () => {
     const reload = jest.fn(noop);
     mockUseInsights.mockReturnValue({
       data: null,
@@ -83,13 +83,12 @@ describe('InsightsScreen', () => {
     const tree = await render(<InsightsScreen currencySymbol="₹" />);
     const json = textOf(tree);
     expect(json).toContain("You're offline");
-    expect(json).toContain('Spent in ');
-    expect(json).toContain('Where it went');
-    expect(json).toContain('AI summary');
-    expect(json).toContain('What changed');
+    expect(json).toContain('Insights unavailable');
+    expect(json).not.toContain('Where it went');
+    expect(json).not.toContain('AI summary');
     // Insights is a root tab: there is no back button.
     expect(json).not.toContain('Go back');
-    // Sharing example numbers is disabled.
+    // There is nothing to share.
     const share = tree.root.findByProps({accessibilityLabel: 'Share this summary'});
     expect(share.props.accessibilityState).toEqual({disabled: true});
 

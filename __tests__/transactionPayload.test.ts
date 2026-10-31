@@ -37,6 +37,7 @@ describe('create', () => {
       ok: true,
       mode: 'create',
       payload: {
+        isRecurring: false,
         kind: 'regular',
         type: 'expense',
         amount: 12.5,
@@ -115,6 +116,32 @@ describe('edit', () => {
     );
     expect(result).toMatchObject({
       patch: {paymentMethod: 'upi', isRecurring: true, amount: 12.5},
+    });
+  });
+});
+
+describe('monthly repeat', () => {
+  it('is off for a new transaction unless asked for', () => {
+    expect(buildTransactionPayload(base)).toMatchObject({
+      payload: {isRecurring: false},
+    });
+    expect(buildTransactionPayload({...base, isRecurring: true})).toMatchObject({
+      payload: {isRecurring: true},
+    });
+  });
+
+  it('lets an edit turn the repeat off or on', () => {
+    const existing = {
+      merchant: 'Food',
+      description: 'Food',
+      paymentMethod: null,
+      isRecurring: true,
+    };
+    expect(
+      buildTransactionPayload({...base, existing, isRecurring: false}),
+    ).toMatchObject({patch: {isRecurring: false}});
+    expect(buildTransactionPayload({...base, existing})).toMatchObject({
+      patch: {isRecurring: true},
     });
   });
 });

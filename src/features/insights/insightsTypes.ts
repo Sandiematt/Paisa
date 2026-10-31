@@ -55,6 +55,11 @@ export type InsightsData = {
   isPeriodComplete: boolean;
   currentTotal: number;
   previousTotal: number;
+  /**
+   * False when tracking started after the previous window: its zero is "no
+   * data", not "spent nothing", so nothing is compared against it.
+   */
+  hasPrevious: boolean;
   /** Null for "new" / "no-change" — those render a label instead of a percentage. */
   changePct: number | null;
   changeKind: ChangeKind;

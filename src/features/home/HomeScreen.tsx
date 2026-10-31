@@ -4,17 +4,14 @@ import {
   Image,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   View,
 } from 'react-native';
 
-import {
-  CaretRight,
-  ChartBar,
-  Plus,
-  Warning,
-  X,
-} from 'phosphor-react-native';
+import {CaretRight} from 'phosphor-react-native/src/icons/CaretRight';
+import {ChartBar} from 'phosphor-react-native/src/icons/ChartBar';
+import {Plus} from 'phosphor-react-native/src/icons/Plus';
+import {Warning} from 'phosphor-react-native/src/icons/Warning';
+import {X} from 'phosphor-react-native/src/icons/X';
 
 import {
   AnimatedNumber,
@@ -30,16 +27,29 @@ import {
   SegmentedControl,
   TileLottieIcon,
   BannerPill,
+  ThemeToggle,
 } from '../../components/ui';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
-import {colors, dataReveal, fonts, layout, radii, withAlpha} from '../../theme';
+import {
+  Palette,
+  colors,
+  dataReveal,
+  fonts,
+  layout,
+  makeStyles,
+  palettes,
+  radii,
+  shadows,
+  useTheme,
+} from '../../theme';
 import {useFloatingNavClearance, useFloatingNavDockHeight, useFloatingNavScroll} from '../NavBar/FloatingNavScroll';
 import {isLocalAvatarUri} from '../profile/avatarImage';
 import {useNotifications} from '../notifications/NotificationsProvider';
 import {useTutorialTarget} from '../tutorial/TutorialProvider';
 import {AreaChart} from './charts';
+import {spotlightGradient} from './DetailsParts';
 import {
   dayMonthLabel,
   daysToGo,
@@ -48,7 +58,9 @@ import {
   recentTransactions,
   weeklySpendNudge,
 } from './homeInsights';
-import {HomeRange, HomeReport, SavingsState, rangeNoun, rangeScopeLabel} from './homeReport';
+import {MonthState} from '../../lib/budgetEngine';
+import {budgetCardFigures, budgetStripLine, dayMonth} from './budgetCopy';
+import {HomeRange, HomeReport, rangeNoun, rangeScopeLabel} from './homeReport';
 import {RelatedTransactions} from './RelatedTransactions';
 
 const RECENT_LIMIT = 5;
@@ -71,6 +83,8 @@ type HomeScreenProps = {
   /** Jumps to the Activity tab. */
   onSeeAllPress?: () => void;
   report: HomeReport;
+  /** This cycle's rolling budget (src/lib/budgetEngine.ts); null when no budget is set. */
+  budget?: MonthState | null;
   transactions: TransactionRow[];
   categories: CategoryRow[];
   status: DashboardStatus;
@@ -92,10 +106,13 @@ const RANGE_OPTIONS = [
 
 const AVATAR_RING = 46;
 const AVATAR_PHOTO = 36;
-const CARD_GRADIENT = [colors.surfaceRaised, colors.surface, withAlpha(colors.glow, 0.77)];
-const CARD_GRADIENT_POSITIONS = [0, 0.62, 1];
 
 const tabular = {fontVariant: ['tabular-nums'] as const};
+
+const isLight = (palette: Palette) => palette === palettes.light;
+
+/** Light cards lift off the ground with a soft shadow; dark cards sit flat on their hairline. */
+const lightLift = (palette: Palette) => (isLight(palette) ? shadows.cardSoft : null);
 
 function isSafeAvatarUrl(url: string | undefined): url is string {
   if (!url) {
@@ -178,7 +195,18 @@ function RingingBell({unreadCount}: {unreadCount: number}) {
     previous.current = unreadCount;
   }, [unreadCount]);
 
-  return <TileLottieIcon kind="bell" size={20} replayKey={rings} playOnMount={false} />;
+  // The bell sits on the glass pill, not a gradient square, so it takes the
+  // text colour instead of the artwork's baked white.
+  useTheme();
+  return (
+    <TileLottieIcon
+      kind="bell"
+      size={20}
+      color={colors.text}
+      replayKey={rings}
+      playOnMount={false}
+    />
+  );
 }
 
 type StatTileProps = {
@@ -189,6 +217,7 @@ type StatTileProps = {
 };
 
 function StatTile({label, amount, icon, accessibilityLabel}: StatTileProps) {
+  const styles = useStyles();
   return (
     <View
       accessible
@@ -246,6 +275,7 @@ function GoalCard({
   onAddPress,
   addLabel,
 }: GoalCardProps) {
+  const styles = useStyles();
   return (
     <PressableScale
       onPress={onPress}
@@ -278,6 +308,7 @@ function GoalCard({
         stroke={10}
         progress={ringProgress}
         gradient={ringGradient}
+        trackColor={colors.track}
         style={styles.ring}>
         <View style={styles.ringCenter}>
           {centerTop}
@@ -308,6 +339,7 @@ function RingPercent({
   percent?: number;
   color?: string;
 }) {
+  const styles = useStyles();
   if (percent != null) {
     return (
       <AnimatedNumber
@@ -332,25 +364,24 @@ function RingPercent({
 
 function BudgetGoalCard({
   budget,
-  remainingBudget,
   currencySymbol,
   range,
-  showBudget,
   onPress,
   onEditPress,
 }: {
-  budget: number;
-  remainingBudget: number;
+  /** This cycle's budget; null when none is set. */
+  budget: MonthState | null;
   currencySymbol: string;
   range: HomeRange;
-  showBudget: boolean;
   onPress?: () => void;
   onEditPress?: () => void;
 }) {
-  const icon = <TileLottieIcon kind="wallet" size={20} replayKey={remainingBudget} />;
   const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
+  const icon = (
+    <TileLottieIcon kind="wallet" size={20} replayKey={budget ? budget.remaining : 0} />
+  );
 
-  if (!showBudget) {
+  if (!budget) {
     return (
       <GoalCard
         icon={icon}
@@ -368,11 +399,44 @@ function BudgetGoalCard({
     );
   }
 
-  const used = Math.max(0, budget - remainingBudget);
-  const progress = budget > 0 ? Math.max(0, Math.min(1, used / budget)) : 0;
-  const over = remainingBudget < 0;
-  const usedPct = budget > 0 ? Math.min(100, Math.round((used / budget) * 100)) : 0;
+  if (budget.kind !== 'active') {
+    const waiting = budget.kind === 'waiting' && budget.startsOn !== null;
+    const value = waiting
+      ? `Starts ${dayMonth(budget.startsOn as string)}`
+      : 'Bills and goal over budget';
+    return (
+      <GoalCard
+        icon={icon}
+        iconGradient="primary"
+        ringProgress={0}
+        ringGradient={waiting ? 'primary' : 'rose'}
+        centerTop={
+          <RingPercent
+            text={waiting ? 'Soon' : 'Fix'}
+            color={waiting ? colors.lavender : colors.roseLight}
+          />
+        }
+        title="Budget"
+        value={value}
+        valueTone={waiting ? colors.muted : colors.roseLight}
+        accessibilityLabel={`Budget, ${value}`}
+        onPress={onPress}
+        onAddPress={onEditPress}
+        addLabel="Edit budget"
+      />
+    );
+  }
+
+  const {budget: total, used, over} = budgetCardFigures(budget, range);
+  const progress = total > 0 ? Math.max(0, Math.min(1, used / total)) : 0;
+  const usedPct = total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
   const scope = rangeScopeLabel(range);
+  const overBy = range === 'week' ? used - total : budget.overspentBy;
+  const value = over
+    ? range === 'week'
+      ? `${money(overBy)} over the week's limits`
+      : `Overspent by ${money(overBy)}`
+    : `${money(used)} of ${money(total)}`;
 
   return (
     <GoalCard
@@ -387,16 +451,13 @@ function BudgetGoalCard({
           <RingPercent text={`${usedPct}%`} percent={usedPct} />
         )
       }
+      // Bills and the savings goal are already set aside, so the ring is day-to-day spending.
       centerSub={over ? 'budget' : 'used'}
       title="Budget"
-      value={
-        over
-          ? `${money(Math.abs(remainingBudget))} over ${money(budget)}`
-          : `${money(used)} of ${money(budget)}`
-      }
+      value={value}
       valueTone={over ? colors.roseLight : colors.muted}
-      accessibilityLabel={`Budget, ${money(Math.abs(remainingBudget))} ${
-        over ? `over ${scope}` : `left ${scope}`
+      accessibilityLabel={`Budget, ${
+        over ? `${money(overBy)} over ${scope}` : `${money(total - used)} left ${scope}`
       }, ${usedPct} percent used`}
       onPress={onPress}
       onAddPress={onEditPress}
@@ -406,108 +467,65 @@ function BudgetGoalCard({
 }
 
 function SavingsGoalCard({
-  actualSavings,
-  periodSavingsTarget,
-  savingsVsTarget,
-  savingsState,
+  budget,
   currencySymbol,
-  range,
   onPress,
 }: {
-  actualSavings: number;
-  periodSavingsTarget: number;
-  savingsVsTarget: number;
-  savingsState: SavingsState;
+  budget: MonthState | null;
   currencySymbol: string;
-  range: HomeRange;
   onPress?: () => void;
 }) {
-  const scope = rangeScopeLabel(range);
-  const icon = (
-    <TileLottieIcon kind="piggy" size={20} replayKey={Math.max(0, actualSavings)} />
-  );
+  const styles = useStyles();
   const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
+  const goal = budget?.savingsGoal ?? 0;
+  const extra = budget && budget.kind === 'active' ? budget.projectedExtra : 0;
+  const icon = <TileLottieIcon kind="piggy" size={20} replayKey={goal + extra} />;
 
-  if (savingsState.kind === 'no-income') {
+  if (!budget || (goal <= 0 && budget.kind !== 'active')) {
     return (
       <GoalCard
         icon={icon}
         iconGradient="savings"
         ringProgress={0}
         ringGradient="savings"
-        centerTop={<RingPercent text="No" color={colors.muted} />}
-        centerSub="income"
-        title="Savings"
-        value="No income recorded"
-        accessibilityLabel={`Savings goal, no income recorded ${scope}`}
-        onPress={onPress}
-      />
-    );
-  }
-
-  if (savingsState.kind === 'negative') {
-    const overspend = money(savingsState.overspend);
-    const line = `You spent ${overspend} more than you earned this ${rangeNoun(range)}`;
-    return (
-      <GoalCard
-        icon={icon}
-        iconGradient="savings"
-        ringProgress={1}
-        ringGradient="rose"
-        centerTop={<Warning size={26} weight="fill" color={colors.roseLight} />}
-        centerSub="overspent"
-        title="Savings"
-        value={line}
-        valueTone={colors.roseLight}
-        accessibilityLabel={`Savings goal, negative ${overspend}. ${line}`}
-        onPress={onPress}
-      />
-    );
-  }
-
-  const saved = Math.max(0, actualSavings);
-  if (periodSavingsTarget <= 0) {
-    return (
-      <GoalCard
-        icon={icon}
-        iconGradient="savings"
-        ringProgress={0}
-        ringGradient="savings"
-        centerTop={
-          <AppText
-            style={[styles.ringAmount, tabular]}
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.6}>
-            {money(saved)}
-          </AppText>
-        }
-        centerSub="saved"
+        centerTop={<RingPercent text="Set up" color={colors.lavender} />}
         title="Savings"
         value="No goal set"
-        accessibilityLabel={`Savings, ${money(saved)} saved ${scope}, no goal set`}
+        accessibilityLabel="Savings, no goal set"
         onPress={onPress}
       />
     );
   }
 
-  const onTrack = savingsVsTarget >= 0;
-  const progress = Math.max(0, Math.min(1, saved / periodSavingsTarget));
-  const pct = Math.round(progress * 100);
+  // The goal is set aside from the first day, so it is always whole; what is
+  // left unspent at month end is extra savings on top.
+  const line = budget.overspent
+    ? 'No extra this month'
+    : extra > 0
+      ? `+${money(extra)} if you don't spend it`
+      : goal > 0
+        ? 'Saved this month'
+        : 'No goal set';
   return (
     <GoalCard
       icon={icon}
       iconGradient="savings"
-      ringProgress={progress}
+      ringProgress={goal > 0 ? 1 : 0}
       ringGradient="savings"
-      centerTop={<RingPercent text={`${pct}%`} percent={pct} />}
-      centerSub="of goal"
+      centerTop={
+        <AppText
+          style={[styles.ringAmount, tabular]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}>
+          {money(goal > 0 ? goal : extra)}
+        </AppText>
+      }
+      centerSub={goal > 0 ? 'goal' : 'extra'}
       title="Savings"
-      value={`${money(saved)} of ${money(periodSavingsTarget)}`}
-      valueTone={onTrack ? colors.muted : colors.roseLight}
-      accessibilityLabel={`Savings goal, ${money(saved)} saved ${scope}, ${pct} percent of goal, ${
-        onTrack ? 'on track' : 'off track'
-      }`}
+      value={line}
+      valueTone={budget.overspent ? colors.roseLight : colors.muted}
+      accessibilityLabel={`Savings, ${money(goal)} goal set aside this month. ${line}`}
       onPress={onPress}
     />
   );
@@ -525,6 +543,7 @@ export function HomeScreen({
   onNotificationsPress,
   onSeeAllPress,
   report: data,
+  budget = null,
   transactions,
   categories,
   status,
@@ -537,6 +556,8 @@ export function HomeScreen({
   dismissedNudgeKey,
   onDismissNudge,
 }: HomeScreenProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
   const navClearance = useFloatingNavClearance();
   const navDockHeight = useFloatingNavDockHeight();
   const navScroll = useFloatingNavScroll();
@@ -570,7 +591,6 @@ export function HomeScreen({
   const noun = rangeNoun(range);
   const syncLabel = syncCaption(status, refreshing, error, updatedAt, data.empty);
   const syncing = refreshing || status === 'loading';
-  const showBudget = data.monthlyBudget > 0;
   const balanceText = money(data.balance);
   const balanceSize = balanceFontSize(balanceText);
   const change = data.balanceChange;
@@ -580,16 +600,16 @@ export function HomeScreen({
   const progressPct = Math.round(Math.max(0, Math.min(1, profileProgress)) * 100);
 
   let stripText: string;
-  if (data.empty) {
+  let stripOver = false;
+  if (budget) {
+    const line = budgetStripLine(budget, range, money);
+    stripText = line.text;
+    stripOver = line.tone === 'over';
+  } else if (data.empty) {
     stripText = 'Add your first transaction to get started';
-  } else if (showBudget) {
-    stripText = data.overBudget
-      ? `${money(Math.abs(data.remainingBudget))} over budget · ${daysLabel}`
-      : `${money(data.remainingBudget)} left in budget · ${daysLabel}`;
   } else {
     stripText = `${money(data.spent)} spent this ${noun} · ${daysLabel}`;
   }
-  const stripOver = !data.empty && showBudget && data.overBudget;
 
   const strip = (
     <GradientView
@@ -608,6 +628,8 @@ export function HomeScreen({
     </GradientView>
   );
 
+  const spotlightFill = spotlightGradient(scheme);
+
   const notificationsLabel =
     unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications';
 
@@ -615,6 +637,8 @@ export function HomeScreen({
   const notificationsTarget = useTutorialTarget('home.notifications');
   const balanceTarget = useTutorialTarget('home.balance');
   const totalsTarget = useTutorialTarget('home.totals');
+  const limitTarget = useTutorialTarget('home.limit');
+  const goalsTarget = useTutorialTarget('home.goals');
 
   return (
     <Screen edges={['top']} glow={300} bottomInset={navDockHeight}>
@@ -676,6 +700,7 @@ export function HomeScreen({
               accessibilityRole="header">
               {`${greetingForHour(new Date().getHours())} ${firstName}`}
             </AppText>
+            <ThemeToggle />
             <View ref={notificationsTarget} collapsable={false}>
               <PressableScale
                 onPress={onNotificationsPress}
@@ -698,15 +723,15 @@ export function HomeScreen({
 
         <View ref={balanceTarget} collapsable={false} style={styles.spotlight}>
           <GradientView
-            gradient={CARD_GRADIENT}
+            gradient={spotlightFill.stops}
             angle={160}
-            positions={CARD_GRADIENT_POSITIONS}
+            positions={spotlightFill.positions}
             style={styles.spotlightFill}>
             <View style={styles.spotlightBody}>
               <View style={styles.spotlightTop}>
                 <View style={styles.liveLabel}>
                   <AppText variant="caption" style={styles.liveLabelText}>
-                    Available balance
+                    Tracked balance
                   </AppText>
                 </View>
                 <SegmentedControl
@@ -732,7 +757,8 @@ export function HomeScreen({
                 numberOfLines={1}
               />
 
-              {data.empty ? null : (
+              {/* A brand-new wallet has only its starting balance: no change to report yet. */}
+              {data.empty || (change === 0 && data.startedThisPeriod) ? null : (
                 <AppText style={styles.changeLine} numberOfLines={1}>
                   {change === 0 ? (
                     <AppText style={styles.changeMuted}>{`No change since ${sinceLabel}`}</AppText>
@@ -779,7 +805,9 @@ export function HomeScreen({
               </View>
             </View>
 
-            {strip}
+            <View ref={limitTarget} collapsable={false}>
+              {strip}
+            </View>
           </GradientView>
         </View>
 
@@ -802,7 +830,7 @@ export function HomeScreen({
           <BannerPill
             style={styles.nudge}
             iconGradient={nudge.direction === 'under' ? 'savings' : 'rose'}
-            icon={<ChartBar size={20} weight="fill" color={colors.text} />}
+            icon={<ChartBar size={20} weight="fill" color={colors.onAccent} />}
             title={`${money(nudge.amount)} ${nudge.direction} last week`}
             subtitle={
               nudge.category
@@ -826,23 +854,17 @@ export function HomeScreen({
         ) : null}
 
         <SectionTitle title="Budget and savings" style={styles.goalsTitle} />
-        <View style={styles.goals}>
+        <View ref={goalsTarget} collapsable={false} style={styles.goals}>
           <BudgetGoalCard
-            budget={data.budget}
-            remainingBudget={data.remainingBudget}
+            budget={budget}
             currencySymbol={currencySymbol}
             range={range}
-            showBudget={showBudget}
             onPress={onBudgetPress}
             onEditPress={onEditBudgetPress}
           />
           <SavingsGoalCard
-            actualSavings={data.actualSavings}
-            periodSavingsTarget={data.periodSavingsTarget}
-            savingsVsTarget={data.savingsVsTarget}
-            savingsState={data.savingsState}
+            budget={budget}
             currencySymbol={currencySymbol}
-            range={range}
             onPress={onSavingsPress}
           />
         </View>
@@ -862,7 +884,7 @@ export function HomeScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(c => ({
   scroll: {
     flex: 1,
     backgroundColor: 'transparent',
@@ -908,7 +930,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    gap: 8,
+    gap: 14,
   },
   greetingText: {
     flex: 1,
@@ -940,11 +962,14 @@ const styles = StyleSheet.create({
     borderRadius: radii.cardHero,
     borderWidth: 1,
     borderColor: colors.line,
-    overflow: 'hidden',
     backgroundColor: colors.surface,
+    ...lightLift(c),
   },
   spotlightFill: {
     width: '100%',
+    // Clip here rather than on the card so the light shadow is not clipped.
+    borderRadius: radii.cardHero - 1,
+    overflow: 'hidden',
   },
   spotlightBody: {
     paddingTop: 18,
@@ -962,11 +987,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: radii.pill,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: isLight(c) ? colors.wash : 'rgba(255, 255, 255, 0.1)',
   },
   liveLabelText: {
     fontFamily: fonts.jakartaMedium,
-    color: colors.text,
+    color: isLight(c) ? colors.indigo : colors.text,
   },
   rangeControl: {
     width: 136,
@@ -1020,7 +1045,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.jakartaSemiBold,
     fontSize: 14,
     lineHeight: 20,
-    color: colors.text,
+    color: colors.onAccent,
   },
   tiles: {
     flexDirection: 'row',
@@ -1040,6 +1065,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.surface,
+    ...lightLift(c),
   },
   tileText: {
     flex: 1,
@@ -1052,6 +1078,7 @@ const styles = StyleSheet.create({
   },
   nudge: {
     marginTop: 14,
+    ...lightLift(c),
   },
   nudgeClose: {
     width: 28,
@@ -1080,6 +1107,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.surface,
+    ...lightLift(c),
   },
   goalAdd: {
     width: 28,
@@ -1123,4 +1151,4 @@ const styles = StyleSheet.create({
   goalText: {
     gap: 2,
   },
-});
+}));

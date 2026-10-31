@@ -1,8 +1,8 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
+import {View} from 'react-native';
 
 import {AppText, Stagger} from '../../../components/ui';
-import {colors, layout, spacing} from '../../../theme';
+import {colors, layout, makeStyles, spacing} from '../../../theme';
 
 type StepLayoutProps = {
   title: string;
@@ -15,6 +15,7 @@ type StepLayoutProps = {
  * the step's own blocks continue the stagger from index 1.
  */
 export function StepLayout({title, subtitle, children}: StepLayoutProps) {
+  const styles = useStyles();
   return (
     <View style={styles.root}>
       <Stagger index={0}>
@@ -31,7 +32,7 @@ export function StepLayout({title, subtitle, children}: StepLayoutProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   root: {
     paddingHorizontal: layout.screenPadding,
     paddingBottom: spacing.section,
@@ -50,4 +51,4 @@ const styles = StyleSheet.create({
   body: {
     marginTop: spacing.xxxl,
   },
-});
+}));

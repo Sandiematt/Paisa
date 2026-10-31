@@ -7,6 +7,17 @@ jest.mock('expo-dev-client', () => ({}));
 
 jest.mock('react-native-url-polyfill/auto', () => ({}));
 
+jest.mock('@shopify/react-native-skia', () => {
+  const {View} = require('react-native');
+  return {
+    Canvas: View,
+    Circle: View,
+    Image: View,
+    ImageShader: View,
+    makeImageFromView: async () => null,
+  };
+});
+
 jest.mock('lottie-react-native', () => {
   const {View} = require('react-native');
   return {__esModule: true, default: View};
@@ -67,6 +78,36 @@ jest.mock('./src/lib/supabase/client', () => ({
       stopAutoRefresh: () => {},
     },
   },
+}));
+
+// expo-updates is off in jest, as in development; tests drive the update flow
+// through useOtaUpdate's injected api instead.
+jest.mock('expo-updates', () => ({
+  isEnabled: false,
+  channel: null,
+  runtimeVersion: null,
+  updateId: null,
+  isEmbeddedLaunch: true,
+  isEmergencyLaunch: false,
+  checkForUpdateAsync: jest.fn(async () => ({
+    isAvailable: false,
+    isRollBackToEmbedded: false,
+    manifest: undefined,
+    reason: 'noUpdateAvailableOnServer',
+  })),
+  fetchUpdateAsync: jest.fn(async () => ({
+    isNew: false,
+    isRollBackToEmbedded: false,
+    manifest: undefined,
+  })),
+  reloadAsync: jest.fn(async () => {}),
+  addListener: jest.fn(() => ({remove: () => {}})),
+  useUpdates: () => ({
+    isUpdateAvailable: false,
+    isUpdatePending: false,
+    isChecking: false,
+    isDownloading: false,
+  }),
 }));
 
 jest.mock('expo-image-picker', () => ({

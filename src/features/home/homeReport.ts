@@ -1,10 +1,20 @@
 import {colors} from '../../theme/colors';
+import {cycleFor, getActivePayday, isCalendarCycle, previousCycle} from '../../lib/budgetCycle';
 import {CategoryRow} from '../../lib/categoriesStore';
+import {
+  BillCommitment,
+  PendingBill,
+  billCommitments,
+  committedTotals,
+  isBillRow,
+  monthlyBillTotal,
+} from '../../lib/recurring';
 import {
   TransactionRow,
   isBalanceAdjustment,
   isLedgerSpecial,
   isOpeningBalance,
+  localDateISO,
   roundMoney,
 } from '../../lib/transactionsStore';
 
@@ -23,6 +33,20 @@ export type MoneyPlan = {
   monthlyIncome: number;
   monthlyBudget: number;
   monthlySavingsGoal: number;
+  /** Payday; the budget "month" runs from it. Null keeps calendar months. */
+  payday?: number | null;
+  /** Bills picked at sign-up that are not in the ledger yet. */
+  pendingBills?: PendingBill[];
+};
+
+/** How the last finished budget month ended for savings. */
+export type MonthSavings = {
+  /** "October", or "25 Sep – 24 Oct" with a payday. */
+  label: string;
+  /** Income that came in less everything spent, bills included; negative when spending ran over. */
+  saved: number;
+  /** The monthly savings goal it is judged against; 0 when none is set. */
+  goal: number;
 };
 
 export const EMPTY_MONEY_PLAN: MoneyPlan = {
@@ -41,16 +65,28 @@ export type HomeReport = {
   balance: number;
   /** Wallet balance at the start of the period (before its first day). */
   startBalance: number;
-  /** Wallet balance now minus `startBalance`: what the period added or took. */
+  /**
+   * What income, spending and adjustments added or took this period. The
+   * starting balance entered at sign-up is not a change, so it is left out.
+   */
   balanceChange: number;
-  /** First day of the period as `{day, monthIndex}` for "since 1 October". */
+  /**
+   * Day the change counts from, as `{day, monthIndex}` for "since 1 October":
+   * the first day of the period, or the first ledger day when tracking started
+   * inside it.
+   */
   periodStart: {day: number; monthIndex: number};
+  /** Tracking started inside this period, so there is nothing before it. */
+  startedThisPeriod: boolean;
   changePct: number | null;
   changeAmount: number;
   income: number;
   spent: number;
   remainingBudget: number;
+  /** The period's budget after the month's bills: what day-to-day spending gets. */
   budget: number;
+  /** The period's spending with bill payments left out; `budget` is judged on it. */
+  budgetSpent: number;
   monthlyIncome: number;
   monthlyBudget: number;
   monthlySpent: number;
@@ -62,11 +98,22 @@ export type HomeReport = {
   monthlyActualSavings: number;
   monthlySavingsVsTarget: number;
   monthlySavingsState: SavingsState;
+  /** Monthly bills due this budget month, set aside before day-to-day spending. */
+  monthlyCommitted: number;
+  /** The part of monthlyCommitted not paid yet; remainingBudget already leaves it out. */
+  monthlyUpcomingBills: number;
+  /** Every monthly bill, including ones that start next cycle; the budget is shown after these. */
+  monthlyBills: number;
+  bills: BillCommitment[];
+  /** The budget month before this one, once it was tracked and had income; null otherwise. */
+  lastMonthSavings: MonthSavings | null;
   periodSavingsTarget: number;
   plannedSavings: number;
   periodPlannedSavings: number;
   actualSavings: number;
   savingsVsTarget: number;
+  /** Savings the goal asks for from the period start (or tracking start) through today. */
+  savingsTargetToDate: number;
   savingsState: SavingsState;
   planFeasible: boolean;
   overBudget: boolean;
@@ -92,12 +139,15 @@ export type HomeReport = {
 
 const WEEK_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-const EMPTY_SLICE: SpendSlice = {
-  id: 'empty',
-  label: 'Nothing yet',
-  color: colors.inkMuted,
-  percent: 100,
-};
+/** Built per call so its colour follows the active scheme. */
+function emptySlice(): SpendSlice {
+  return {
+    id: 'empty',
+    label: 'Nothing yet',
+    color: colors.inkMuted,
+    percent: 100,
+  };
+}
 
 type Period = {
   start: Date;
@@ -127,7 +177,11 @@ export function daysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
 
-export function periodFor(range: HomeRange, now = new Date()): Period {
+export function periodFor(
+  range: HomeRange,
+  now = new Date(),
+  payday: number | null = getActivePayday(),
+): Period {
   const today = startOfDay(now);
 
   if (range === 'week') {
@@ -138,15 +192,15 @@ export function periodFor(range: HomeRange, now = new Date()): Period {
     return {start, end, prevStart, prevEnd};
   }
 
-  const start = new Date(today.getFullYear(), today.getMonth(), 1);
-  const end = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    daysInMonth(today.getFullYear(), today.getMonth()),
-  );
-  const prevStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const prevEnd = new Date(today.getFullYear(), today.getMonth(), 0);
-  return {start, end, prevStart, prevEnd};
+  // The budget month: the calendar month, or payday to payday.
+  const cycle = cycleFor(today, payday);
+  const previous = previousCycle(today, payday);
+  return {
+    start: cycle.start,
+    end: cycle.end,
+    prevStart: previous.start,
+    prevEnd: previous.end,
+  };
 }
 
 /** Calendar day from `YYYY-MM-DD` or a full ISO timestamp. */
@@ -197,16 +251,33 @@ function walletParts(rows: TransactionRow[]) {
   };
 }
 
-/** Spending in the calendar month containing `now`, ledger adjustments excluded. */
+/** Spending in the budget month containing `now`, ledger adjustments excluded. */
 export function monthlySpentFor(
   transactions: TransactionRow[],
   now = new Date(),
+  payday: number | null = getActivePayday(),
 ): number {
-  const period = periodFor('month', now);
+  const period = periodFor('month', now, payday);
   const rows = transactions.filter(row =>
     inRange(row.transactionDate, period.start, period.end),
   );
   return roundMoney(walletParts(rows).spent);
+}
+
+/**
+ * Day-to-day spending in the budget month containing `now`: monthly bill
+ * payments are left out, since the budget is judged after bills.
+ */
+export function dayToDaySpentFor(
+  transactions: TransactionRow[],
+  now = new Date(),
+  payday: number | null = getActivePayday(),
+): number {
+  const period = periodFor('month', now, payday);
+  const rows = transactions.filter(row =>
+    inRange(row.transactionDate, period.start, period.end),
+  );
+  return roundMoney(walletParts(rows).spent - billSpend(rows));
 }
 
 function changePercent(current: number, previous: number): number | null {
@@ -261,7 +332,7 @@ function healthBreakdown(
     return {
       health: 0,
       healthLabel: 'No data',
-      healthHint: 'Add starting money or a salary to open your wallet',
+      healthHint: 'Add your starting balance or a salary to start tracking',
       healthTone: 'empty',
       savingsRate: 0,
       spendRatio: 0,
@@ -273,7 +344,7 @@ function healthBreakdown(
     return {
       health: 0,
       healthLabel: 'Poor',
-      healthHint: 'The wallet is empty. Add income to keep going',
+      healthHint: 'Your tracked balance is used up. Log income to keep going',
       healthTone: 'poor',
       savingsRate: 0,
       spendRatio: 100,
@@ -287,7 +358,7 @@ function healthBreakdown(
     return {
       health: 0,
       healthLabel: 'Poor',
-      healthHint: 'Spending used up the wallet this period',
+      healthHint: 'Spending used up your tracked balance this period',
       healthTone: 'poor',
       savingsRate: 0,
       spendRatio,
@@ -298,7 +369,7 @@ function healthBreakdown(
     return {
       health: remainingPct,
       healthLabel: 'Good',
-      healthHint: `${remainingPct}% of your wallet is still left`,
+      healthHint: `${remainingPct}% of your tracked balance is still left`,
       healthTone: 'good',
       savingsRate: remainingPct,
       spendRatio,
@@ -308,28 +379,34 @@ function healthBreakdown(
   return {
     health: remainingPct,
     healthLabel: 'Fair',
-    healthHint: `Spending used ${spendRatio}% of the wallet this period`,
+    healthHint: `Spending used ${spendRatio}% of your tracked balance this period`,
     healthTone: 'fair',
     savingsRate: remainingPct,
     spendRatio,
   };
 }
 
-export function budgetForDay(monthlyAmount: number, day: Date): number {
+/** A day's share of a monthly amount: the amount over the days of its budget month. */
+export function budgetForDay(
+  monthlyAmount: number,
+  day: Date,
+  payday: number | null = getActivePayday(),
+): number {
   if (!Number.isFinite(monthlyAmount) || monthlyAmount <= 0) {
     return 0;
   }
-  return monthlyAmount / daysInMonth(day.getFullYear(), day.getMonth());
+  return monthlyAmount / cycleFor(day, payday).length;
 }
 
 export function budgetForSpan(
   monthlyAmount: number,
   start: Date,
   end: Date,
+  payday: number | null = getActivePayday(),
 ): number {
   let total = 0;
   for (let day = startOfDay(start); day.getTime() <= end.getTime(); day = addDays(day, 1)) {
-    total += budgetForDay(monthlyAmount, day);
+    total += budgetForDay(monthlyAmount, day, payday);
   }
   return roundMoney(total);
 }
@@ -338,12 +415,50 @@ export function scaleMonthly(
   amount: number,
   range: HomeRange,
   now: Date,
+  payday: number | null = getActivePayday(),
 ): number {
   if (!Number.isFinite(amount) || amount <= 0) {
     return 0;
   }
-  const period = periodFor(range, now);
-  return budgetForSpan(amount, period.start, period.end);
+  const period = periodFor(range, now, payday);
+  return budgetForSpan(amount, period.start, period.end, payday);
+}
+
+/**
+ * The part of a monthly goal due from the start of the period (or
+ * `trackingStart`, when later) through `now`, at goal / days-in-budget-month
+ * a day.
+ */
+export function savingsDueBy(
+  monthlyGoal: number,
+  range: HomeRange,
+  now: Date,
+  trackingStart: Date | null = null,
+  payday: number | null = getActivePayday(),
+): number {
+  if (!Number.isFinite(monthlyGoal) || monthlyGoal <= 0) {
+    return 0;
+  }
+  const period = periodFor(range, now, payday);
+  const today = startOfDay(now);
+  const from =
+    trackingStart && startOfDay(trackingStart) > period.start
+      ? startOfDay(trackingStart)
+      : period.start;
+  const to = today < period.end ? today : period.end;
+  return from > to ? 0 : budgetForSpan(monthlyGoal, from, to, payday);
+}
+
+/** Earliest ledger day, or null for an empty ledger. */
+export function firstLedgerDay(transactions: TransactionRow[]): Date | null {
+  let first: Date | null = null;
+  for (const row of transactions) {
+    const day = parseCalendarDate(row.transactionDate);
+    if (!Number.isNaN(day.getTime()) && (first === null || day < first)) {
+      first = day;
+    }
+  }
+  return first;
 }
 
 export function yearlyFromMonthly(amount: number): number {
@@ -389,10 +504,12 @@ function savingsStateFor(income: number, spent: number): SavingsState {
 type PlanInsight = {
   remainingBudget: number;
   budget: number;
+  budgetSpent: number;
   monthlyIncome: number;
   monthlyBudget: number;
   monthlySavingsGoal: number;
   periodSavingsTarget: number;
+  savingsTargetToDate: number;
   plannedSavings: number;
   periodPlannedSavings: number;
   actualSavings: number;
@@ -412,6 +529,13 @@ type PlanInsight = {
   spendRatio: number;
 };
 
+const NO_BILLS = {committed: 0, spent: 0};
+
+/** What rows spent on monthly bills, which come off the budget up front. */
+function billSpend(rows: TransactionRow[]): number {
+  return rows.reduce((sum, row) => (isBillRow(row) ? sum + row.amount : sum), 0);
+}
+
 function planInsight(
   plan: MoneyPlan,
   spent: number,
@@ -419,18 +543,30 @@ function planInsight(
   range: HomeRange,
   now: Date,
   empty: boolean,
+  trackingStart: Date | null = null,
+  /** The budget month's bills, and how much of `spent` went on bills. */
+  bills: {committed: number; spent: number} = NO_BILLS,
 ): PlanInsight {
+  const payday = plan.payday ?? null;
   const monthlyIncome = roundMoney(Math.max(0, plan.monthlyIncome));
   const monthlyBudget = roundMoney(Math.max(0, plan.monthlyBudget));
   const monthlySavingsGoal = roundMoney(Math.max(0, plan.monthlySavingsGoal));
-  const periodBudget = scaleMonthly(monthlyBudget, range, now);
-  const periodPlannedIncome = scaleMonthly(monthlyIncome, range, now);
-  const periodSavingsTarget = scaleMonthly(monthlySavingsGoal, range, now);
+  // The budget is shown and judged after bills: they come off it up front,
+  // and what is left is weighed against day-to-day spending, bills left out.
+  const dayToDay = monthlyBudget - Math.max(0, bills.committed);
+  const budgetSpent = roundMoney(Math.max(0, spent - Math.max(0, bills.spent)));
+  const periodBudget = dayToDay > 0 ? scaleMonthly(dayToDay, range, now, payday) : 0;
+  // Bills over the budget leave it short before anything is spent.
+  const periodShortfall = dayToDay < 0 ? scaleMonthly(-dayToDay, range, now, payday) : 0;
+  const periodPlannedIncome = scaleMonthly(monthlyIncome, range, now, payday);
+  const periodSavingsTarget = scaleMonthly(monthlySavingsGoal, range, now, payday);
   const noun = rangeNoun(range);
-  const remainingBudget = roundMoney(periodBudget - spent);
-  const overBudget = periodBudget > 0 && spent > periodBudget + 0.004;
+  const remainingBudget = roundMoney(periodBudget - budgetSpent - periodShortfall);
+  const overBudget = monthlyBudget > 0 && remainingBudget < -0.004;
   const plannedSavings = roundMoney(monthlyIncome - monthlyBudget);
-  const periodPlannedSavings = roundMoney(periodPlannedIncome - periodBudget);
+  const periodPlannedSavings = roundMoney(
+    periodPlannedIncome - scaleMonthly(monthlyBudget, range, now, payday),
+  );
   const planFeasible =
     monthlySavingsGoal <= 0 || plannedSavings + 0.004 >= monthlySavingsGoal;
   const savingsState = savingsStateFor(actualIncome, spent);
@@ -440,9 +576,23 @@ function planInsight(
       : savingsState.kind === 'negative'
         ? -savingsState.overspend
         : 0;
-  const savingsVsTarget = roundMoney(actualSavings - periodSavingsTarget);
+  // Like the budget, the goal is spread over the days of the month, so the
+  // period is judged on what is due by today, not on the whole period's goal
+  // from its first day. Days before tracking started are not counted.
+  const savingsTargetToDate = savingsDueBy(
+    monthlySavingsGoal,
+    range,
+    now,
+    trackingStart,
+    payday,
+  );
+  const savingsVsTarget = roundMoney(actualSavings - savingsTargetToDate);
   const spendRatio =
-    periodBudget > 0 ? Math.round((spent / periodBudget) * 100) : 0;
+    periodBudget > 0
+      ? Math.round((budgetSpent / periodBudget) * 100)
+      : overBudget
+        ? 100
+        : 0;
 
   const planLabel = monthlySavingsGoal > 0 && !planFeasible ? 'Off track' : 'On track';
   const planTone: HealthTone =
@@ -460,10 +610,12 @@ function planInsight(
     return {
       remainingBudget,
       budget: periodBudget,
+      budgetSpent,
       monthlyIncome,
       monthlyBudget,
       monthlySavingsGoal,
       periodSavingsTarget,
+      savingsTargetToDate,
       plannedSavings,
       periodPlannedSavings,
       actualSavings,
@@ -473,7 +625,7 @@ function planInsight(
       overBudget: false,
       health: 0,
       healthLabel: 'No data',
-      healthHint: 'Add starting money or a salary to open your wallet',
+      healthHint: 'Add your starting balance or a salary to start tracking',
       healthTone: 'empty',
       insightKicker: 'Health score',
       planLabel: 'No data',
@@ -484,14 +636,16 @@ function planInsight(
     };
   }
 
-  if (periodBudget > 0 && overBudget) {
+  if (monthlyBudget > 0 && overBudget) {
     return {
       remainingBudget,
       budget: periodBudget,
+      budgetSpent,
       monthlyIncome,
       monthlyBudget,
       monthlySavingsGoal,
       periodSavingsTarget,
+      savingsTargetToDate,
       plannedSavings,
       periodPlannedSavings,
       actualSavings,
@@ -501,7 +655,10 @@ function planInsight(
       overBudget,
       health: 0,
       healthLabel: 'Off track',
-      healthHint: `You've spent more than this ${noun}'s budget.`,
+      healthHint:
+        dayToDay < 0
+          ? 'Your monthly bills are more than your budget.'
+          : `You've spent more than this ${noun}'s budget.`,
       healthTone: 'poor',
       insightKicker: 'Spending',
       planLabel,
@@ -512,14 +669,16 @@ function planInsight(
     };
   }
 
-  if (periodBudget > 0) {
+  if (monthlyBudget > 0) {
     return {
       remainingBudget,
       budget: periodBudget,
+      budgetSpent,
       monthlyIncome,
       monthlyBudget,
       monthlySavingsGoal,
       periodSavingsTarget,
+      savingsTargetToDate,
       plannedSavings,
       periodPlannedSavings,
       actualSavings,
@@ -543,10 +702,12 @@ function planInsight(
   return {
     remainingBudget,
     budget: periodBudget,
+    budgetSpent,
     monthlyIncome,
     monthlyBudget,
     monthlySavingsGoal,
     periodSavingsTarget,
+    savingsTargetToDate,
     plannedSavings,
     periodPlannedSavings,
     actualSavings,
@@ -579,7 +740,7 @@ function bucketIndex(
       Math.min(6, Math.round((date.getTime() - periodStart.getTime()) / 86400000)),
     );
   }
-  return Math.max(0, date.getDate() - 1);
+  return Math.max(0, Math.round((date.getTime() - periodStart.getTime()) / 86400000));
 }
 
 function seriesPointCount(
@@ -599,25 +760,40 @@ function seriesPointCount(
   if (today.getTime() < period.start.getTime()) {
     return 1;
   }
-  if (today.getTime() > period.end.getTime()) {
-    return daysInMonth(period.start.getFullYear(), period.start.getMonth());
-  }
-  return today.getDate();
+  const last = today.getTime() > period.end.getTime() ? period.end : today;
+  return Math.round((last.getTime() - period.start.getTime()) / 86400000) + 1;
 }
 
+/**
+ * Running wallet balance per day of the period, up to today. When tracking
+ * started inside the period the line starts that day, and the starting
+ * balance is its baseline rather than a jump up from zero: days before the
+ * account existed have no balance to draw.
+ */
 function walletSeries(
   range: HomeRange,
   period: Period,
   transactions: TransactionRow[],
   now: Date,
+  trackingStart: Date | null = null,
 ): number[] {
   const prior = walletParts(
     transactions.filter(row => compareDate(row.transactionDate, period.start, false)),
   );
   const count = seriesPointCount(range, period, now);
+  const startedInside =
+    trackingStart !== null && trackingStart.getTime() > period.start.getTime();
+  const first = startedInside
+    ? Math.min(count - 1, bucketIndex(range, localDateISO(trackingStart), period.start))
+    : 0;
   const buckets = Array.from({length: count}, () => 0);
+  let running = prior.balance;
   for (const row of transactions) {
     if (!inRange(row.transactionDate, period.start, period.end)) {
+      continue;
+    }
+    if (startedInside && isOpeningBalance(row)) {
+      running += row.amount;
       continue;
     }
     const index = bucketIndex(range, row.transactionDate, period.start);
@@ -626,30 +802,70 @@ function walletSeries(
     }
     buckets[index] += row.type === 'income' ? row.amount : -row.amount;
   }
-  let running = prior.balance;
-  return buckets.map(value => {
+  return buckets.slice(first).map(value => {
     running += value;
     return Number(running.toFixed(2));
   });
 }
 
-function highlightStamp(range: HomeRange, index: number): string {
+function highlightStamp(range: HomeRange, index: number, periodStart: Date): string {
   if (range === 'week') {
     return WEEK_LABELS[index]?.toUpperCase() ?? '';
   }
-  return String(index + 1);
+  return String(addDays(periodStart, index).getDate());
 }
 
-function rangeLabel(range: HomeRange, now: Date): string {
+function shortDay(date: Date): string {
+  return `${date.getDate()} ${date.toLocaleDateString('en-US', {month: 'short'})}`;
+}
+
+/**
+ * Savings for the finished budget month before `monthPeriod`: what came in
+ * less what went out, so income above the plan counts as saved. Null when
+ * tracking started after it ended or no income was recorded in it.
+ */
+function lastMonthSavings(
+  transactions: TransactionRow[],
+  monthPeriod: Period,
+  payday: number | null,
+  plan: MoneyPlan,
+  trackingStart: Date | null,
+): MonthSavings | null {
+  const {prevStart, prevEnd} = monthPeriod;
+  if (trackingStart === null || trackingStart > prevEnd) {
+    return null;
+  }
+  const parts = walletParts(
+    transactions.filter(row => inRange(row.transactionDate, prevStart, prevEnd)),
+  );
+  if (parts.income <= 0) {
+    return null;
+  }
+  return {
+    label: isCalendarCycle(payday)
+      ? prevStart.toLocaleDateString('en-US', {month: 'long'})
+      : `${shortDay(prevStart)} – ${shortDay(prevEnd)}`,
+    saved: parts.net,
+    goal: roundMoney(Math.max(0, plan.monthlySavingsGoal)),
+  };
+}
+
+function rangeLabel(range: HomeRange, now: Date, period: Period, payday: number | null): string {
   if (range === 'week') {
     return 'THIS WEEK';
+  }
+  if (!isCalendarCycle(payday)) {
+    return `${shortDay(period.start)} – ${shortDay(period.end)}`.toUpperCase();
   }
   return now.toLocaleDateString('en-US', {month: 'long'}).toUpperCase();
 }
 
-function compareLabel(range: HomeRange, now: Date): string {
+function compareLabel(range: HomeRange, now: Date, payday: number | null): string {
   if (range === 'week') {
     return 'vs last week';
+  }
+  if (!isCalendarCycle(payday)) {
+    return 'vs last pay cycle';
   }
   const previous = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   return `vs ${previous.toLocaleDateString('en-US', {month: 'long'})}`;
@@ -663,7 +879,7 @@ function spendSlices(
     row => row.type === 'expense' && row.amount > 0 && !isLedgerSpecial(row),
   );
   if (spentRows.length === 0) {
-    return [EMPTY_SLICE];
+    return [emptySlice()];
   }
 
   const byCategory = new Map<string, number>();
@@ -717,7 +933,8 @@ export function buildHomeReport(
   now = new Date(),
   plan: MoneyPlan = EMPTY_MONEY_PLAN,
 ): HomeReport {
-  const period = periodFor(range, now);
+  const payday = plan.payday ?? null;
+  const period = periodFor(range, now, payday);
   const currentRows = transactions.filter(row =>
     inRange(row.transactionDate, period.start, period.end),
   );
@@ -740,6 +957,10 @@ export function buildHomeReport(
     ),
   ).balance;
   const empty = transactions.length === 0;
+  const trackingStart = firstLedgerDay(transactions);
+  const startedThisPeriod =
+    trackingStart !== null && trackingStart > period.start;
+  const changeFrom = startedThisPeriod && trackingStart ? trackingStart : period.start;
   const change = rangeChange(
     current.net,
     previous.net,
@@ -747,11 +968,17 @@ export function buildHomeReport(
     startBalance,
     empty,
   );
-  const series = walletSeries(range, period, transactions, now);
+  const series = walletSeries(range, period, transactions, now, trackingStart);
   const highlightIndex = Math.max(0, series.length - 1);
   const highlightValue = series[highlightIndex] ?? lifetime.balance;
   const periodEmpty = currentRows.length === 0;
-  const monthPeriod = range === 'month' ? period : periodFor('month', now);
+  const monthPeriod = range === 'month' ? period : periodFor('month', now, payday);
+  const bills = billCommitments(
+    transactions,
+    {start: localDateISO(monthPeriod.start), end: localDateISO(monthPeriod.end)},
+    plan.pendingBills,
+  );
+  const billTotals = committedTotals(bills);
   const monthRows =
     range === 'month'
       ? currentRows
@@ -761,18 +988,35 @@ export function buildHomeReport(
   const monthParts = range === 'month' ? current : walletParts(monthRows);
   const hasBudget = plan.monthlyBudget > 0;
   const hasPlan = hasBudget || plan.monthlySavingsGoal > 0;
-  const insight = planInsight(
+  // The month's bills come off the budget up front, for every range: a
+  // week's or day's budget is its share of what the bills leave.
+  const incomeInsight = planInsight(
     plan,
     current.spent,
     current.income,
     range,
     now,
     empty,
+    trackingStart,
+    {committed: billTotals.committed, spent: billSpend(currentRows)},
   );
-  const monthInsight =
+  // Savings with a budget are the goal plus extra savings, from the rolling
+  // budget (src/lib/budgetEngine.ts); the report keeps income less spending.
+  const insight = incomeInsight;
+  const monthIncomeInsight =
     range === 'month'
-      ? insight
-      : planInsight(plan, monthParts.spent, monthParts.income, 'month', now, empty);
+      ? incomeInsight
+      : planInsight(
+          plan,
+          monthParts.spent,
+          monthParts.income,
+          'month',
+          now,
+          empty,
+          trackingStart,
+          {committed: billTotals.committed, spent: billSpend(monthRows)},
+        );
+  const monthInsight = range === 'month' ? insight : monthIncomeInsight;
   const monthSlices =
     range === 'month' ? spendSlices(currentRows, categories) : spendSlices(monthRows, categories);
   const health = hasBudget
@@ -795,6 +1039,9 @@ export function buildHomeReport(
       period.prevEnd.getDate(),
     ),
     previousRows.length === 0,
+    trackingStart,
+    // Judged against this month's bills, so the health change compares like with like.
+    {committed: billTotals.committed, spent: billSpend(previousRows)},
   );
   const previousHealth = hasBudget
     ? previousInsight
@@ -808,22 +1055,24 @@ export function buildHomeReport(
 
   return {
     range,
-    rangeLabel: rangeLabel(range, now),
-    compareLabel: compareLabel(range, now),
+    rangeLabel: rangeLabel(range, now, period, payday),
+    compareLabel: compareLabel(range, now, payday),
     net: current.net,
     balance: lifetime.balance,
     startBalance,
-    balanceChange: roundMoney(lifetime.balance - startBalance),
+    balanceChange: roundMoney(lifetime.balance - startBalance - current.opening),
     periodStart: {
-      day: period.start.getDate(),
-      monthIndex: period.start.getMonth(),
+      day: changeFrom.getDate(),
+      monthIndex: changeFrom.getMonth(),
     },
+    startedThisPeriod,
     changePct: change.changePct,
     changeAmount: change.changeAmount,
     income: roundMoney(current.income),
     spent: roundMoney(current.spent),
     remainingBudget: insight.remainingBudget,
     budget: insight.budget,
+    budgetSpent: insight.budgetSpent,
     monthlyIncome: insight.monthlyIncome,
     monthlyBudget: insight.monthlyBudget,
     monthlySpent: roundMoney(monthParts.spent),
@@ -835,18 +1084,29 @@ export function buildHomeReport(
     monthlyActualSavings: monthInsight.actualSavings,
     monthlySavingsVsTarget: monthInsight.savingsVsTarget,
     monthlySavingsState: monthInsight.savingsState,
+    monthlyCommitted: billTotals.committed,
+    monthlyUpcomingBills: billTotals.upcoming,
+    monthlyBills: monthlyBillTotal(bills),
+    bills,
+    lastMonthSavings: lastMonthSavings(transactions, monthPeriod, payday, plan, trackingStart),
     periodSavingsTarget: insight.periodSavingsTarget,
     plannedSavings: insight.plannedSavings,
     periodPlannedSavings: insight.periodPlannedSavings,
     actualSavings: insight.actualSavings,
     savingsVsTarget: insight.savingsVsTarget,
+    savingsTargetToDate: insight.savingsTargetToDate,
     savingsState: insight.savingsState,
     planFeasible: insight.planFeasible,
     overBudget: insight.overBudget,
     series,
     highlightIndex,
     highlightValue,
-    highlightStamp: highlightStamp(range, highlightIndex),
+    // The series may start part way into the period, on the first ledger day.
+    highlightStamp: highlightStamp(
+      range,
+      highlightIndex + seriesPointCount(range, period, now) - series.length,
+      period.start,
+    ),
     slices: spendSlices(currentRows, categories),
     health: health.health,
     healthLabel: health.healthLabel,
@@ -862,4 +1122,20 @@ export function buildHomeReport(
     empty,
     periodEmpty,
   };
+}
+
+/** "Saved ₹2,400 against a ₹2,000 goal", or how far short or over it ended. */
+export function lastMonthLine(
+  month: MonthSavings,
+  money: (amount: number) => string,
+): string {
+  if (month.saved < 0) {
+    return `Spent ${money(-month.saved)} more than came in`;
+  }
+  if (month.goal <= 0) {
+    return `Saved ${money(month.saved)}`;
+  }
+  return month.saved >= month.goal
+    ? `Saved ${money(month.saved)} against a ${money(month.goal)} goal`
+    : `Saved ${money(month.saved)}, ${money(month.goal - month.saved)} short of the ${money(month.goal)} goal`;
 }

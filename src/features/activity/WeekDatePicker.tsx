@@ -1,18 +1,16 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {ScrollView, StyleSheet, View} from 'react-native';
-import {
-  CalendarBlank,
-  CaretDown,
-  CaretLeft,
-  CaretRight,
-  CaretUp,
-} from 'phosphor-react-native';
+import {ScrollView, View} from 'react-native';
+import {CalendarBlank} from 'phosphor-react-native/src/icons/CalendarBlank';
+import {CaretDown} from 'phosphor-react-native/src/icons/CaretDown';
+import {CaretLeft} from 'phosphor-react-native/src/icons/CaretLeft';
+import {CaretRight} from 'phosphor-react-native/src/icons/CaretRight';
+import {CaretUp} from 'phosphor-react-native/src/icons/CaretUp';
 
 import {PressableScale, Text} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {formatMoney} from '../../lib/formatMoney';
 import {localDateISO} from '../../lib/transactionsStore';
-import {colors, fonts, layout, radii, withAlpha} from '../../theme';
+import {colors, fonts, layout, makeStyles, palettes, radii, withAlpha} from '../../theme';
 import {ActivityTransaction} from './types';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const;
@@ -135,6 +133,7 @@ export function WeekDatePicker({
   daySummaries,
   searching = false,
 }: WeekDatePickerProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const scroller = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const viewport = useRef(0);
@@ -478,7 +477,7 @@ export function WeekDatePicker({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(palette => ({
   wrap: {
     marginTop: 18,
   },
@@ -535,7 +534,8 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   disabled: {
-    opacity: 0.35,
+    // 0.35 of a dark glyph on a light tile all but vanishes.
+    opacity: palette === palettes.light ? 0.5 : 0.35,
   },
   picker: {
     marginTop: 12,
@@ -602,7 +602,7 @@ const styles = StyleSheet.create({
     borderColor: colors.text,
   },
   futureDay: {
-    opacity: 0.35,
+    opacity: palette === palettes.light ? 0.55 : 0.35,
   },
   dayFoot: {
     height: 13,
@@ -638,4 +638,4 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: radii.pill,
   },
-});
+}));

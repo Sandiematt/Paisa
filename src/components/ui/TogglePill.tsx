@@ -1,7 +1,7 @@
 import React, {useEffect, useRef} from 'react';
-import {Animated, StyleSheet} from 'react-native';
+import {Animated} from 'react-native';
 
-import {colors, duration, easing, radii, spacing, typography} from '../../theme';
+import {colors, duration, easing, makeStyles, radii, spacing, typography} from '../../theme';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {PressableScale} from './PressableScale';
 
@@ -17,6 +17,7 @@ type TogglePillProps = {
  * never sits unreadable on a half-swapped fill.
  */
 export function TogglePill({label, selected, onPress}: TogglePillProps) {
+  const styles = useStyles();
   const reducedMotion = useReducedMotion();
   const active = useRef(new Animated.Value(selected ? 1 : 0)).current;
 
@@ -57,7 +58,7 @@ export function TogglePill({label, selected, onPress}: TogglePillProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   pill: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
@@ -67,4 +68,4 @@ const styles = StyleSheet.create({
   label: {
     ...typography.bodyStrong,
   },
-});
+}));

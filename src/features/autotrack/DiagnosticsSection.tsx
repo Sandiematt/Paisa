@@ -1,6 +1,7 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
-import {CaretDown, CaretUp} from 'phosphor-react-native';
+import {View} from 'react-native';
+import {CaretDown} from 'phosphor-react-native/src/icons/CaretDown';
+import {CaretUp} from 'phosphor-react-native/src/icons/CaretUp';
 
 import {
   AppText,
@@ -8,7 +9,7 @@ import {
   PressableScale,
   SecondaryButton,
 } from '../../components/ui';
-import {colors, spacing} from '../../theme';
+import {colors, makeStyles, spacing} from '../../theme';
 import {MAX_LOG_LINES} from './autoTrackFormat';
 
 type DiagnosticsSectionProps = {
@@ -28,6 +29,7 @@ export function DiagnosticsSection({
   onShareReport,
   onClearHistory,
 }: DiagnosticsSectionProps) {
+  const styles = useStyles();
   const lines = log.slice(0, MAX_LOG_LINES);
   const Caret = open ? CaretUp : CaretDown;
 
@@ -92,7 +94,7 @@ export function DiagnosticsSection({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -121,4 +123,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

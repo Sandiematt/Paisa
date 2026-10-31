@@ -1,12 +1,20 @@
 /* Size-driven geometry; StyleSheet cannot take the `size` argument. */
 /* eslint-disable react-native/no-inline-styles */
 import React, {useLayoutEffect, useMemo, useRef, useState} from 'react';
-import {Animated, LayoutChangeEvent, StyleSheet, View} from 'react-native';
+import {Animated, LayoutChangeEvent, View} from 'react-native';
 import Svg, {Defs, LinearGradient, Path, Stop} from 'react-native-svg';
 
 import {AppText} from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
-import {colors, dataReveal, easing, spring} from '../../theme';
+import {
+  colors,
+  dataReveal,
+  easing,
+  makeStyles,
+  palettes,
+  spring,
+  useTheme,
+} from '../../theme';
 import {HealthTone, SpendSlice} from './homeReport';
 
 type AreaChartProps = {
@@ -54,8 +62,9 @@ function smoothPath(points: Point[]): string {
 
 /**
  * DX balance spotlight chart: violet area fill, a soft glow under a
- * lavender-violet line and a white dot on the latest value. Fills the width
- * it is given.
+ * lavender-violet line (indigo-orb on light) and a dot on the latest value
+ * (white on dark; violet ringed in white on light). Fills the width it is
+ * given.
  *
  * New data draws in left to right, then the latest-value dot pops and sends
  * out one ripple. The wipe is two views sliding against each other (the
@@ -63,6 +72,9 @@ function smoothPath(points: Point[]): string {
  * so the whole reveal runs on the native driver without touching the SVG.
  */
 export function AreaChart({values, height = 92, accessibilityLabel}: AreaChartProps) {
+  const styles = useStyles();
+  const {scheme} = useTheme();
+  const light = scheme === 'light';
   const reducedMotion = useReducedMotion();
   const [width, setWidth] = useState(0);
   const signature = values.join(',');
@@ -167,12 +179,16 @@ export function AreaChart({values, height = 92, accessibilityLabel}: AreaChartPr
             <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
               <Defs>
                 <LinearGradient id={`${id}Fill`} x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor={colors.violet} stopOpacity={0.45} />
+                  <Stop
+                    offset="0"
+                    stopColor={colors.violet}
+                    stopOpacity={light ? 0.22 : 0.45}
+                  />
                   <Stop offset="1" stopColor={colors.violet} stopOpacity={0} />
                 </LinearGradient>
                 <LinearGradient id={`${id}Stroke`} x1="0" y1="0" x2="1" y2="0">
-                  <Stop offset="0" stopColor={colors.violet} />
-                  <Stop offset="1" stopColor={colors.lavender} />
+                  <Stop offset="0" stopColor={light ? colors.indigo : colors.violet} />
+                  <Stop offset="1" stopColor={light ? colors.orb : colors.lavender} />
                 </LinearGradient>
               </Defs>
               <Path d={area} fill={`url(#${id}Fill)`} />
@@ -238,6 +254,7 @@ type DonutChartProps = {
 const TICKS = 48;
 
 export function DonutChart({slices, size = 132, children}: DonutChartProps) {
+  const styles = useStyles();
   const ticks: string[] = [];
   slices.forEach(slice => {
     const count = Math.max(1, Math.round((slice.percent / 100) * TICKS));
@@ -304,14 +321,22 @@ type ScoreGaugeProps = {
   tone?: HealthTone;
 };
 
-const GAUGE_COLOR: Record<HealthTone, string> = {
-  good: colors.mint,
-  fair: colors.violet,
-  poor: colors.roseLight,
-  empty: colors.muted,
-};
+/** Read at render so the tone follows the active scheme. */
+function gaugeColor(tone: HealthTone): string {
+  switch (tone) {
+    case 'good':
+      return colors.mint;
+    case 'fair':
+      return colors.violet;
+    case 'poor':
+      return colors.roseLight;
+    default:
+      return colors.muted;
+  }
+}
 
 export function ScoreGauge({score, size = 88, tone = 'good'}: ScoreGaugeProps) {
+  const styles = useStyles();
   const ticks = 40;
   const filled = Math.round((Math.max(0, Math.min(100, score)) / 100) * ticks);
   const stroke = 8;
@@ -331,7 +356,7 @@ export function ScoreGauge({score, size = 88, tone = 'good'}: ScoreGaugeProps) {
             height: stroke,
             borderRadius: 2,
             backgroundColor:
-              index < filled ? GAUGE_COLOR[tone] : colors.line,
+              index < filled ? gaugeColor(tone) : colors.line,
             transform: [
               {rotate: `${(index / ticks) * 360}deg`},
               {translateY: -radius},
@@ -356,16 +381,26 @@ export function ScoreGauge({score, size = 88, tone = 'good'}: ScoreGaugeProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(c => ({
   wipe: {
     overflow: 'hidden',
   },
-  endDot: {
-    position: 'absolute',
-    backgroundColor: colors.text,
-  },
+  // Light: a violet dot ringed in white (surface), so it reads on the pale card.
+  endDot:
+    c === palettes.light
+      ? {
+          position: 'absolute',
+          backgroundColor: colors.violet,
+          borderWidth: 2,
+          borderColor: colors.surface,
+        }
+      : {
+          position: 'absolute',
+          backgroundColor: colors.text,
+        },
   endRipple: {
     backgroundColor: colors.lavender,
+    borderWidth: 0,
   },
   donutHole: {
     position: 'absolute',
@@ -379,4 +414,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

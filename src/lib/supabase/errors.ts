@@ -34,7 +34,7 @@ export function authErrorMessage(error: {message?: string} | null): string {
     return 'An account with that email already exists. Sign in instead.';
   }
   if (normalized.includes('password should be at least')) {
-    return 'Use a password with at least 6 characters.';
+    return 'Use a password with at least 8 characters.';
   }
   if (
     normalized.includes('token has expired') ||

@@ -1,6 +1,8 @@
 import React from 'react';
-import {StyleSheet, View} from 'react-native';
-import {DeviceMobile, Lightning, WarningCircle} from 'phosphor-react-native';
+import {View} from 'react-native';
+import {DeviceMobile} from 'phosphor-react-native/src/icons/DeviceMobile';
+import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
+import {WarningCircle} from 'phosphor-react-native/src/icons/WarningCircle';
 
 import {
   AppText,
@@ -12,7 +14,8 @@ import {
   DetectorStatus,
   UPI_APP_NAMES,
 } from '../../lib/autotrack/types';
-import {colors, radii, spacing, withAlpha} from '../../theme';
+import {colors, makeStyles, radii, spacing, withAlpha} from '../../theme';
+import type {ColorToken} from '../../theme';
 import {AutoTrackState, lastSyncLabel} from './autoTrackFormat';
 
 type StatusHeroProps = {
@@ -25,32 +28,32 @@ type StatusHeroProps = {
 
 const COPY: Record<
   AutoTrackState | 'needs-shizuku',
-  {title: string; body: string; tone: string}
+  {title: string; body: string; tone: ColorToken}
 > = {
   checking: {
     title: 'Checking…',
     body: 'Looking at which permissions are on.',
-    tone: colors.text,
+    tone: 'text',
   },
   active: {
     title: 'Active',
     body: 'Paisa is watching for UPI payments and saves them to Activity.',
-    tone: colors.mint,
+    tone: 'mint',
   },
   'needs-permission': {
     title: 'Needs permission',
     body: 'Turn on both permissions below so Paisa can see your UPI payments.',
-    tone: colors.gold,
+    tone: 'gold',
   },
   'needs-shizuku': {
     title: 'Needs setup',
     body: 'Finish the Shizuku and notification steps below so Paisa can see your UPI payments.',
-    tone: colors.gold,
+    tone: 'gold',
   },
   unavailable: {
     title: 'Not available',
     body: 'Auto-tracking works on Android only. On this device, add payments by hand.',
-    tone: colors.text,
+    tone: 'text',
   },
 };
 
@@ -58,20 +61,20 @@ function HeroIcon({state}: {state: AutoTrackState}) {
   if (state === 'unavailable') {
     return (
       <GradientIconSquare size={48} gradient="savings">
-        <DeviceMobile size={24} color={colors.text} weight="fill" />
+        <DeviceMobile size={24} color={colors.onAccent} weight="fill" />
       </GradientIconSquare>
     );
   }
   if (state === 'needs-permission') {
     return (
       <GradientIconSquare size={48} gradient="rose">
-        <WarningCircle size={24} color={colors.text} weight="fill" />
+        <WarningCircle size={24} color={colors.onAccent} weight="fill" />
       </GradientIconSquare>
     );
   }
   return (
     <GradientIconSquare size={48} glow={state === 'active'}>
-      <Lightning size={24} color={colors.text} weight="fill" />
+      <Lightning size={24} color={colors.onAccent} weight="fill" />
     </GradientIconSquare>
   );
 }
@@ -84,6 +87,7 @@ export function StatusHero({
   lastSyncAt,
   onSyncNow,
 }: StatusHeroProps) {
+  const styles = useStyles();
   const copy =
     COPY[
       state === 'needs-permission' && status?.trackingMethod === 'shizuku'
@@ -107,7 +111,7 @@ export function StatusHero({
           </AppText>
           <AppText
             variant="heading"
-            color={copy.tone}
+            color={colors[copy.tone]}
             accessibilityRole="header">
             {copy.title}
           </AppText>
@@ -166,7 +170,7 @@ export function StatusHero({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   card: {
     borderRadius: radii.cardHero,
     borderWidth: 1,
@@ -234,4 +238,4 @@ const styles = StyleSheet.create({
   syncButton: {
     marginRight: -spacing.lg,
   },
-});
+}));

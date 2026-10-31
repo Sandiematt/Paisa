@@ -1,7 +1,7 @@
 import React from 'react';
-import {StyleProp, StyleSheet, View, ViewProps, ViewStyle} from 'react-native';
+import {StyleProp, View, ViewProps, ViewStyle} from 'react-native';
 
-import {colors, radii, spacing} from '../../theme';
+import {colors, makeStyles, radii, spacing} from '../../theme';
 
 type CardProps = ViewProps & {
   /** Corner radius. DX cards are 22 to 24; tiles are 18. Default 22. */
@@ -22,6 +22,7 @@ export function Card({
   children,
   ...rest
 }: CardProps) {
+  const styles = useStyles();
   return (
     <View
       {...rest}
@@ -39,10 +40,10 @@ export function Card({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   card: {
     borderWidth: 1,
     borderColor: colors.line,
     overflow: 'hidden',
   },
-});
+}));

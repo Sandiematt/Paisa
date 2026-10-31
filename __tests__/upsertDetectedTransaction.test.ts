@@ -238,7 +238,12 @@ describe('upsertDetectedTransaction', () => {
       const update = builder({});
       const from = mockFrom(update);
       const id = await upsertDetectedTransaction(
-        pending({alreadySynced: true, remoteId: 'remote-9', note: ' later '}),
+        pending({
+          alreadySynced: true,
+          remoteId: 'remote-9',
+          note: ' later ',
+          upiRef: null,
+        }),
         'user-1',
       );
       expect(id).toBe('remote-9');
@@ -255,11 +260,33 @@ describe('upsertDetectedTransaction', () => {
       const from = mockFrom();
       expect(
         await upsertDetectedTransaction(
-          pending({alreadySynced: true, remoteId: 'remote-9', note: null}),
+          pending({
+            alreadySynced: true,
+            remoteId: 'remote-9',
+            note: null,
+            upiRef: null,
+          }),
           'u',
         ),
       ).toBe('remote-9');
       expect(from).not.toHaveBeenCalled();
+    });
+
+    it('fills in a UPI ref that arrived after the first sync', async () => {
+      const update = builder({});
+      const from = mockFrom(update);
+      const id = await upsertDetectedTransaction(
+        pending({alreadySynced: true, remoteId: 'remote-9', note: null}),
+        'user-1',
+      );
+      expect(id).toBe('remote-9');
+      expect(from).toHaveBeenCalledTimes(1);
+      expect(update.calls).toEqual([
+        {method: 'update', args: [{upi_ref: '123456789012'}]},
+        {method: 'eq', args: ['user_id', 'user-1']},
+        {method: 'eq', args: ['external_ref', 'upi:install-1:5']},
+        {method: 'is', args: ['upi_ref', null]},
+      ]);
     });
 
     it('throws when the update fails', async () => {

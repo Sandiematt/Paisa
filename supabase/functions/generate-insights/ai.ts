@@ -152,10 +152,14 @@ export function buildFallbackSummary(stats: CalculatedStats): string {
   return `${sentence}.`;
 }
 
-export async function generateSummary(stats: CalculatedStats): Promise<{summary: string; aiGenerated: boolean}> {
+/** `allowAi` false (the caller is over its quota) always returns the rule-based summary. */
+export async function generateSummary(
+  stats: CalculatedStats,
+  allowAi = true,
+): Promise<{summary: string; aiGenerated: boolean}> {
   const fallback = buildFallbackSummary(stats);
   const apiKey = Deno.env.get('OPEN_ROUTER_API_KEY');
-  if (!apiKey) {
+  if (!apiKey || !allowAi) {
     return {summary: fallback, aiGenerated: false};
   }
 

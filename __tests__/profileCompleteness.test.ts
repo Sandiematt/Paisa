@@ -9,15 +9,14 @@ const full = {
   monthlyIncome: '60000',
   monthlyBudget: '40000',
   monthlySavingsGoal: '5000',
-  categoryIds: ['housing', 'dining', 'groceries'],
 };
 
 describe('profileCompleteness', () => {
   it('is complete when every goal is set', () => {
     const result = profileCompleteness(full);
     expect(result).toEqual({
-      done: 4,
-      total: 4,
+      done: 3,
+      total: 3,
       ratio: 1,
       missing: [],
       next: null,
@@ -26,8 +25,8 @@ describe('profileCompleteness', () => {
 
   it('reports the savings goal as the missing item', () => {
     const result = profileCompleteness({...full, monthlySavingsGoal: ''});
-    expect(result.done).toBe(3);
-    expect(result.ratio).toBe(0.75);
+    expect(result.done).toBe(2);
+    expect(result.ratio).toBe(2 / 3);
     expect(result.missing).toEqual(['savings']);
     expect(result.next).toBe('savings');
   });
@@ -37,11 +36,10 @@ describe('profileCompleteness', () => {
       monthlyIncome: '0',
       monthlyBudget: ' ',
       monthlySavingsGoal: 'abc',
-      categoryIds: ['housing'],
     });
     expect(result.done).toBe(0);
     expect(result.ratio).toBe(0);
-    expect(result.missing).toEqual(['income', 'budget', 'savings', 'categories']);
+    expect(result.missing).toEqual(['income', 'budget', 'savings']);
     expect(result.next).toBe('income');
   });
 
@@ -49,15 +47,6 @@ describe('profileCompleteness', () => {
     expect(
       profileCompleteness({...full, monthlyBudget: '1,20,000'}).missing,
     ).toEqual([]);
-  });
-
-  it('needs the minimum number of categories', () => {
-    expect(
-      profileCompleteness({...full, categoryIds: ['housing', 'dining']}).next,
-    ).toBe('categories');
-    expect(
-      profileCompleteness({...full, categoryIds: ['housing', 'dining']}, 2).next,
-    ).toBeNull();
   });
 });
 

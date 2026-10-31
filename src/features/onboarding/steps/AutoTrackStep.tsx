@@ -1,11 +1,9 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {AppState, StyleSheet, View} from 'react-native';
-import {
-  Lightning,
-  LockSimple,
-  NotePencil,
-  ShieldWarning,
-} from 'phosphor-react-native';
+import {AppState, View} from 'react-native';
+import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
+import {LockSimple} from 'phosphor-react-native/src/icons/LockSimple';
+import {NotePencil} from 'phosphor-react-native/src/icons/NotePencil';
+import {ShieldWarning} from 'phosphor-react-native/src/icons/ShieldWarning';
 
 import {
   AppText,
@@ -25,7 +23,7 @@ import {
   DetectorStatus,
   TrackingMethod,
 } from '../../../lib/autotrack/types';
-import {colors, radii, spacing} from '../../../theme';
+import {colors, makeStyles, radii, spacing} from '../../../theme';
 import {screenReadingOn} from '../../autotrack/autoTrackFormat';
 import {PermissionsGroup, SHIZUKU_HELP} from '../../autotrack/PermissionsGroup';
 import {TrackingMethodPicker} from '../../autotrack/TrackingMethodPicker';
@@ -51,6 +49,7 @@ const ICON_SIZE = 24;
  * and are applied to the account once it exists.
  */
 export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
+  const styles = useStyles();
   const copy = STEP_TITLES.autotrack;
   const [status, setStatus] = useState<DetectorStatus | null>(null);
 
@@ -100,7 +99,7 @@ export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
       <Stagger index={1}>
         <View style={styles.banner}>
           <GradientIconSquare size={40} gradient={ready ? 'primary' : 'savings'}>
-            <Lightning size={20} color={colors.text} weight="fill" />
+            <Lightning size={20} color={colors.onAccent} weight="fill" />
           </GradientIconSquare>
           <View style={styles.bannerText}>
             <AppText variant="bodyStrong">
@@ -181,7 +180,7 @@ export function AutoTrackStep({draft, onChange}: AutoTrackStepProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -216,4 +215,4 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     paddingHorizontal: spacing.xs,
   },
-});
+}));

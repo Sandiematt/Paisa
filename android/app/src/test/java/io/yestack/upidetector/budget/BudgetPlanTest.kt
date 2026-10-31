@@ -50,15 +50,15 @@ class BudgetPlanTest {
             assertNotNull("$name: expected an allowance", actual)
             actual!!
             assertEquals("$name: date", LocalDate.parse(e.getString("date")), actual.date)
-            assertEquals("$name: weekStart", LocalDate.parse(e.getString("weekStart")), actual.weekStart)
-            assertEquals("$name: weekEnd", LocalDate.parse(e.getString("weekEnd")), actual.weekEnd)
-            assertEquals("$name: daysLeftInWeek", e.getInt("daysLeftInWeek"), actual.daysLeftInWeek)
-            assertMoney(name, "weekBudget", num(e, "weekBudget"), actual.weekBudget)
-            assertMoney(name, "spentWeekBeforeToday", num(e, "spentWeekBeforeToday"), actual.spentWeekBeforeToday)
+            assertEquals("$name: cycleStart", LocalDate.parse(e.getString("cycleStart")), actual.cycleStart)
+            assertEquals("$name: cycleEnd", LocalDate.parse(e.getString("cycleEnd")), actual.cycleEnd)
+            assertEquals("$name: daysLeft", e.getInt("daysLeft"), actual.daysLeft)
+            assertMoney(name, "budget", num(e, "budget"), actual.budget)
+            assertMoney(name, "spentBeforeToday", num(e, "spentBeforeToday"), actual.spentBeforeToday)
             assertMoney(name, "dailyLimit", num(e, "dailyLimit"), actual.dailyLimit)
             assertMoney(name, "spentToday", num(e, "spentToday"), actual.spentToday)
             assertMoney(name, "remainingToday", num(e, "remainingToday"), actual.remainingToday)
-            assertMoney(name, "remainingWeek", num(e, "remainingWeek"), actual.remainingWeek)
+            assertMoney(name, "remainingMonth", num(e, "remainingMonth"), actual.remainingMonth)
         }
     }
 
@@ -73,7 +73,7 @@ class BudgetPlanTest {
 
     @Test
     fun unsyncedSpendTodayIsAddedToSpentToday() {
-        // First vector: Tuesday 2026-10-27, B 31000, Paisa spent 200 today.
+        // First vector: Tuesday 2026-10-27, B 31000, Paisa spent 200 today; 9500 left over 5 days.
         val s = snapshot("2026-10", 31000, "2026-10-05" to 20000, "2026-10-26" to 1500, "2026-10-27" to 200)
         val a = BudgetPlan.allowance(s, extra("2026-10-27" to 300), LocalDate.parse("2026-10-27"))!!
         assertMoney("extra today", "spentToday", BigDecimal(500), a.spentToday)
@@ -82,19 +82,12 @@ class BudgetPlanTest {
     }
 
     @Test
-    fun unsyncedSpendEarlierThisWeekLowersTheLimit() {
+    fun unsyncedSpendEarlierLowersTheLimit() {
         val s = snapshot("2026-10", 31000, "2026-10-05" to 20000, "2026-10-26" to 1500, "2026-10-27" to 200)
         val a = BudgetPlan.allowance(s, extra("2026-10-26" to 500), LocalDate.parse("2026-10-27"))!!
-        assertMoney("extra earlier", "spentWeekBeforeToday", BigDecimal(2000), a.spentWeekBeforeToday)
-        // (11000 - 2000) / 5 days left
+        assertMoney("extra earlier", "spentBeforeToday", BigDecimal(22000), a.spentBeforeToday)
+        // (31000 - 22000) / 5 days left
         assertMoney("extra earlier", "dailyLimit", BigDecimal(1800), a.dailyLimit)
-    }
-
-    @Test
-    fun unsyncedSpendBeforeTheWeekLowersTheWeekBudget() {
-        val s = snapshot("2026-10", 31000, "2026-10-26" to 1500)
-        val a = BudgetPlan.allowance(s, extra("2026-10-05" to 20000), LocalDate.parse("2026-10-27"))!!
-        assertMoney("extra month", "weekBudget", BigDecimal(11000), a.weekBudget)
     }
 
     @Test
@@ -102,7 +95,7 @@ class BudgetPlanTest {
         val s = snapshot("2026-09", 31000, "2026-09-30" to 5000)
         val a = BudgetPlan.allowance(s, extra("2026-10-27" to 100), LocalDate.parse("2026-10-27"))!!
         assertMoney("stale", "spentToday", BigDecimal(100), a.spentToday)
-        assertMoney("stale", "weekBudget", BigDecimal(31000), a.weekBudget)
+        assertMoney("stale", "dailyLimit", BigDecimal(6200), a.dailyLimit)
     }
 
     @Test
@@ -110,7 +103,33 @@ class BudgetPlanTest {
         val s = snapshot("2026-10", 31000, "2026-09-15" to 9999, "2026-11-02" to 9999)
         val a = BudgetPlan.allowance(s, extra("2026-09-20" to 777, "2026-11-01" to 777), LocalDate.parse("2026-10-27"))!!
         assertMoney("outside", "spentToday", BigDecimal.ZERO, a.spentToday)
-        assertMoney("outside", "weekBudget", BigDecimal(31000), a.weekBudget)
+        assertMoney("outside", "spentBeforeToday", BigDecimal.ZERO, a.spentBeforeToday)
+    }
+
+    @Test
+    fun unsyncedSpendBeforeTrackingStartIsIgnored() {
+        val s = BudgetSnapshot("2026-10", BigDecimal(1700), emptyMap(), trackingStart = LocalDate.parse("2026-10-15"))
+        val a = BudgetPlan.allowance(s, extra("2026-10-10" to 500), LocalDate.parse("2026-10-15"))!!
+        assertMoney("before tracking", "dailyLimit", BigDecimal(100), a.dailyLimit)
+        assertNull(BudgetPlan.allowance(s, emptyMap(), LocalDate.parse("2026-10-14")))
+    }
+
+    @Test
+    fun trackingStartRoundTrips() {
+        val with = BudgetJson.parseSnapshot("""{"monthKey":"2026-11","monthlyBudget":100,"trackingStart":"2026-11-01"}""")!!
+        assertEquals(LocalDate.parse("2026-11-01"), with.trackingStart)
+        assertEquals(with.trackingStart, BudgetJson.parseSnapshot(BudgetJson.snapshotToJson(with))!!.trackingStart)
+        assertNull(BudgetJson.parseSnapshot("""{"monthKey":"2026-11","monthlyBudget":100}""")!!.trackingStart)
+    }
+
+    @Test
+    fun allowanceJsonCarriesTheRollingFields() {
+        val a = BudgetPlan.allowance(snapshot("2026-11", 2000), emptyMap(), LocalDate.parse("2026-11-01"))!!
+        val json = JSONObject(BudgetJson.allowanceToJson(a))
+        assertEquals("2026-11-30", json.getString("cycleEnd"))
+        assertEquals(30, json.getInt("daysLeft"))
+        assertEquals(66.66, json.getDouble("dailyLimit"), 0.0)
+        assertEquals(2000.0, json.getDouble("remainingMonth"), 0.0)
     }
 
     @Test

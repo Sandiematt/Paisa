@@ -1,5 +1,10 @@
 import {btoaPolyfill, getRandomValues, sha256} from '../src/lib/webCrypto';
 
+// TextEncoder is a DOM global this project's TypeScript config does not include.
+function ascii(text: string): Uint8Array {
+  return Uint8Array.from(text, char => char.charCodeAt(0));
+}
+
 function hex(bytes: Uint8Array): string {
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -12,7 +17,7 @@ test('hashes the empty string', () => {
 });
 
 test('hashes abc', () => {
-  expect(hex(sha256(new TextEncoder().encode('abc')))).toBe(
+  expect(hex(sha256(ascii('abc')))).toBe(
     'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
   );
 });
@@ -31,7 +36,7 @@ test('fills a typed array from getRandomValues', () => {
 
 test('hashes a message that crosses a block boundary', () => {
   const message = 'a'.repeat(64);
-  expect(hex(sha256(new TextEncoder().encode(message)))).toBe(
+  expect(hex(sha256(ascii(message)))).toBe(
     'ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb',
   );
 });

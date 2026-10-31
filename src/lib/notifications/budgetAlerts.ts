@@ -18,7 +18,11 @@ export type BudgetAlertPlan = {
   consume: string[];
 };
 
-/** Budget periods are calendar months, so the key resets on the 1st. */
+/**
+ * A budget period's key: the month its cycle starts in (the calendar month,
+ * or the month of the payday the cycle runs from), so the key resets when a
+ * new cycle starts.
+ */
 export function budgetPeriodKey(now: Date): string {
   const month = String(now.getMonth() + 1).padStart(2, '0');
   return `${now.getFullYear()}-${month}`;
@@ -56,10 +60,12 @@ function amount(value: number, symbol: string): string {
 export type BudgetAlertInput = {
   userId: string;
   now: Date;
-  /** Spending so far in the month containing `now`. */
+  /** Day-to-day spending so far this budget cycle. */
   spent: number;
-  /** Monthly budget; zero or less means none is set. */
+  /** What the cycle has for day-to-day spending; zero or less means none is set. */
   budget: number;
+  /** The cycle's key (budgetPeriodKey of its first day); the calendar month of `now` when absent. */
+  period?: string;
   currencySymbol: string;
   prefs: Pick<NotificationPrefs, 'budgetExceeded' | 'budgetWarning'>;
   /** Keys already handled for this user. */
@@ -81,7 +87,7 @@ export function planBudgetAlert(input: BudgetAlertInput): BudgetAlertPlan {
     return {fire: null, consume: []};
   }
 
-  const period = budgetPeriodKey(now);
+  const period = input.period ?? budgetPeriodKey(now);
   const crossed = ([80, 100] as BudgetThreshold[]).filter(
     threshold =>
       spendCrossed(spent, budget, threshold) &&
@@ -101,14 +107,16 @@ export function planBudgetAlert(input: BudgetAlertInput): BudgetAlertPlan {
     if (!prefs.budgetExceeded) {
       return {fire: null, consume};
     }
+    // Sent once, the first time the month goes over (handbook 3.2). It asks
+    // for a bigger budget, which is what turns the daily limits back on.
     const over = roundMoney(spent - budget);
     return {
       consume,
       fire: {
         id,
         kind: 'budget_exceeded',
-        title: 'Monthly budget exceeded',
-        body: `You've spent ${amount(spent, currencySymbol)} against your ${amount(budget, currencySymbol)} budget this month, ${amount(over, currencySymbol)} over.`,
+        title: "You've gone over this month's budget",
+        body: `${amount(over, currencySymbol)} over so far. Increase your budget to keep your daily limits on track.`,
       },
     };
   }

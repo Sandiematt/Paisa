@@ -8,7 +8,6 @@ import React, {
 import {
   Animated,
   StyleProp,
-  StyleSheet,
   TextInput,
   TextInputProps,
   View,
@@ -20,9 +19,11 @@ import {
   duration,
   easing,
   layout,
+  makeStyles,
   radii,
   spacing,
   typography,
+  useTheme,
 } from '../../theme';
 import {AppText} from './AppText';
 
@@ -64,6 +65,9 @@ export function TextField({
   onBlur,
   ...rest
 }: TextFieldProps) {
+  const styles = useStyles();
+  // Interpolations below capture colours; rebuild them on a scheme change.
+  const {colors: palette} = useTheme();
   const [focused, setFocused] = useState(false);
   // Mirrors the text for uncontrolled usage; `value` wins when it is provided.
   const [text, setText] = useState(defaultValue ?? '');
@@ -124,23 +128,23 @@ export function TextField({
 
   const borderColor = useMemo(() => {
     if (error) {
-      return colors.danger;
+      return palette.danger;
     }
     return focus.interpolate({
       inputRange: [0, 1],
-      outputRange: [colors.line, colors.lavender],
+      outputRange: [palette.line, palette.lavender],
     });
-  }, [error, focus]);
+  }, [error, focus, palette]);
 
   const labelColor = useMemo(() => {
     if (error) {
-      return colors.danger;
+      return palette.danger;
     }
     return focus.interpolate({
       inputRange: [0, 1],
-      outputRange: [colors.muted, colors.lavender],
+      outputRange: [palette.muted, palette.lavender],
     });
-  }, [error, focus]);
+  }, [error, focus, palette]);
 
   const labelStyle = useMemo(
     () => ({
@@ -214,7 +218,7 @@ export function TextField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   field: {
     marginTop: LABEL_SLOT,
     height: layout.controlHeight,
@@ -250,4 +254,4 @@ const styles = StyleSheet.create({
   footer: {
     marginTop: spacing.sm,
   },
-});
+}));

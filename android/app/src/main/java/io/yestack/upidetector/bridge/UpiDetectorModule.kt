@@ -153,6 +153,16 @@ class UpiDetectorModule(private val reactContext: ReactApplicationContext) : Rea
         ).toString()
     }
 
+    /** True when Android's Developer options are switched on; gates the Diagnostics panel. */
+    @ReactMethod
+    fun isDeveloperModeEnabled(promise: Promise) = onMain(promise) {
+        Settings.Global.getInt(
+            reactContext.applicationContext.contentResolver,
+            Settings.Global.DEVELOPMENT_SETTINGS_ENABLED,
+            0,
+        ) != 0
+    }
+
     @ReactMethod
     fun openAccessibilitySettings(promise: Promise) = onMain(promise) {
         startSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS)
