@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UPI Detector</string>
+
+    <string name="notification_listener_label">UPI Detector notification check</string>
+    <string name="notification_access_on">Notification access: on</string>
+    <string name="notification_access_off">Notification access: off. Used only to cross-check payments; notifications never create records.</string>
+    <string name="open_notification_settings">Open notification access settings</string>
+    <string name="restricted_settings_hint">Notification access greyed out? On Android 13+ Android blocks it for sideloaded apps until you allow it: Settings → Apps → UPI Detector → ⋮ (top right) → Allow restricted settings. Then come back here.</string>
+    <string name="dump_on">Capture: ON (via Shizuku)</string>
+    <string name="dump_off">Capture: OFF</string>
+    <string name="dump_shizuku_not_running">Shizuku is not running. Install Shizuku and start it (wireless debugging or adb), then come back.</string>
+    <string name="dump_shizuku_too_old">Shizuku is too old (needs v11 or later). Update Shizuku.</string>
+    <string name="dump_shizuku_no_permission">Shizuku is running, but UPI Detector has not been allowed to use it.</string>
+    <string name="dump_ready">Shizuku is ready. Start capture, then use GPay, PhonePe or Paytm as usual.</string>
+    <string name="dump_running">Reading GPay, PhonePe and Paytm screens while they are in front. Keeps running until you stop it.</string>
+    <string name="dump_start">Start capture</string>
+    <string name="dump_stop">Stop capture</string>
+    <string name="dump_grant">Grant Shizuku permission</string>
+    <string name="dump_denied">Shizuku permission denied</string>
+    <string name="dump_channel_name">Screen capture</string>
+    <string name="dump_notification_title">UPI Detector is reading UPI app screens</string>
+    <string name="dump_notification_text">Reads screens via Shizuku, only while GPay, PhonePe or Paytm is in front.</string>
+    <string name="tab_transactions">Transactions</string>
+    <string name="tab_log">Live log</string>
+    <string name="raw_capture">Capture raw screen text (memory only)</string>
+    <string name="share_report">Share report</string>
+    <string name="tab_raw">Raw</string>
+    <string name="keep">Keep</string>
+    <string name="merge">Merge</string>
+    <string name="possible_duplicate">POSSIBLE DUPLICATE</string>
+    <string name="merge_confirm_title">Merge as duplicate?</string>
+    <string name="merge_confirm_message">Removes this record as a duplicate of the earlier one. It cannot be undone.</string>
+    <string name="stats_note">Pending, failed, credit and flagged payments are not counted in the total.</string>
+    <string name="memory_note">Transactions, notes and the daily limit are saved on this phone. The live log and raw captures are memory only.</string>
+    <string name="empty_raw">No raw screens captured yet. Open GPay, PhonePe or Paytm with capture running and raw capture enabled. The last 30 screens are kept in memory only.</string>
+    <string name="share_title">Share report</string>
+    <string name="clear">Clear</string>
+    <string name="empty_transactions">No payments detected yet.\nStart capture, then make a small UPI payment (₹1) in GPay, PhonePe or Paytm.</string>
+    <string name="empty_log">Nothing logged yet. Open GPay, PhonePe or Paytm with capture running. The log is kept in memory only.</string>
+    <string name="clear_confirm_title">Clear all test data?</string>
+    <string name="clear_confirm_message">Deletes every saved transaction and note, and clears the log and raw captures. Your daily limit is kept.</string>
+    <string name="installed">installed</string>
+    <string name="not_installed">not installed</string>
+    <string name="stats_format">Expense total: ₹%1$s (success, debit, not flagged)
+Success %2$d · Failed %3$d · Pending %4$d · Flagged %5$d</string>
+    <string name="today_format">Today: ₹%1$s spent · daily limit ₹%2$s</string>
+    <string name="today_no_limit">Today: ₹%1$s spent · no daily limit set</string>
+    <string name="set_daily_limit">Set daily limit</string>
+    <string name="daily_limit_title">Daily spending limit (₹)</string>
+    <string name="daily_limit_message">One limit for GPay, PhonePe and Paytm combined. You are warned on the Pay screen when a payment would take today\'s spend over it.</string>
+    <string name="daily_limit_hint">e.g. 2000</string>
+    <string name="daily_limit_invalid">Enter an amount in rupees above 0, with at most 2 decimals.</string>
+    <string name="daily_limit_remove">Remove limit</string>
+    <string name="save">Save</string>
+
+    <string name="note_title">What was this for?</string>
+    <string name="note_details">₹%1$s to %2$s · %3$s</string>
+    <string name="note_unknown_merchant">unknown payee</string>
+    <string name="note_hint">e.g. lunch, groceries (optional)</string>
+    <string name="note_skip">Skip</string>
+    <string name="note_label">Note: %1$s</string>
+
+    <string name="limit_title">Over your daily limit</string>
+    <string name="limit_message">You have spent ₹%1$s today. Paying ₹%2$s brings it to ₹%3$s, over your daily limit of ₹%4$s.</string>
+    <string name="limit_note">This is a warning only: it cannot stop the payment.</string>
+    <string name="limit_cancel">Cancel</string>
+    <string name="limit_pay_anyway">Pay anyway</string>
+</resources>

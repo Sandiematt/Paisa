@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Lets the dashboard check that the UPI apps are installed (package visibility, API 30+). -->
+    <queries>
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+        <package android:name="com.phonepe.app" />
+        <package android:name="net.one97.paytm" />
+    </queries>
+
+    <!-- Screen capture (DumpCaptureService) runs as a foreground service while it polls the screen. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      Daily-limit warning and note pop-up over the UPI app. Granted through Shizuku when capture starts
+      (appops set ... SYSTEM_ALERT_WINDOW allow), so there is no settings screen to visit.
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.UpiDetector">
+
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Post-payment "what was this for?" screen, used when the note pop-up cannot be shown over the UPI app. -->
+        <activity
+            android:name=".ui.NoteActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@style/Theme.UpiDetector.Note"
+            android:windowSoftInputMode="stateVisible|adjustResize" />
+
+        <!--
+            Daily-limit warning over a UPI app's Pay screen. Started through Shizuku (the shell user), which needs it
+            exported; it reads nothing from the Intent, so starting it from elsewhere shows nothing.
+        -->
+        <activity
+            android:name=".ui.LimitWarningActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.UpiDetector.LimitWarning" />
+
+        <service
+            android:name=".service.UpiNotificationListener"
+            android:exported="true"
+            android:label="@string/notification_listener_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!--
+          Reads GPay / PhonePe / Paytm screens: polls them with `uiautomator dump` run as the shell user through
+          Shizuku (no root). Started from the dashboard.
+        -->
+        <service
+            android:name=".service.DumpCaptureService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Reads UPI payment screens (via Shizuku) while the user tests expense detection." />
+        </service>
+
+        <!-- Receives the Shizuku binder when Shizuku is running; required by the Shizuku API. -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
+    </application>
+</manifest>
