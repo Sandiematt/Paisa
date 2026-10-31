@@ -38,8 +38,7 @@ export const STEP_TITLES: Record<StepKey, {title: string; subtitle: string}> = {
   },
   autotrack: {
     title: 'Track UPI payments for you',
-    subtitle:
-      'Paisa can log what you pay in Google Pay, PhonePe and Paytm, so you never type an expense in again.',
+    subtitle: 'Optional. You can set this up later in Profile.',
   },
   lock: {
     title: 'Lock the app',

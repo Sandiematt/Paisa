@@ -525,9 +525,11 @@ export function ProfileScreen({
   const autoTrackRowValue =
     autoTrackStatus === 'active'
       ? 'On'
-      : autoTrackStatus === 'needs-permission'
-        ? 'Set up'
-        : undefined;
+      : autoTrackStatus === 'paused'
+        ? 'Paused'
+        : autoTrackStatus === 'setup-required'
+          ? 'Set up'
+          : undefined;
 
   const initials = initialsFrom(name);
   const monthName = new Date().toLocaleDateString('en-IN', {month: 'long'});

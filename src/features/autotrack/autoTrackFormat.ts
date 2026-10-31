@@ -12,7 +12,17 @@ export const MAX_LISTED_PAYMENTS = 50;
 /** Most log lines the diagnostics panel shows (native returns newest first). */
 export const MAX_LOG_LINES = 100;
 
-export type AutoTrackState = 'checking' | 'active' | 'needs-permission' | 'unavailable';
+/**
+ * - active: payment screens are being read (notification access is optional).
+ * - paused: Shizuku is set up but its reading was stopped (from its notification).
+ * - setup-required: the required step is not done yet.
+ */
+export type AutoTrackState =
+  | 'checking'
+  | 'active'
+  | 'paused'
+  | 'setup-required'
+  | 'unavailable';
 
 /**
  * Whether the chosen method is reading screens: the accessibility service is
@@ -27,7 +37,11 @@ export function screenReadingOn(status: DetectorStatus | null): boolean {
     : status.accessibilityEnabled;
 }
 
-/** Where auto-tracking stands, from platform support, the chosen method and its permissions. */
+/**
+ * Where auto-tracking stands, from platform support and the chosen method.
+ * Only reading payment screens is required: notification access only
+ * double-checks payments, so it never decides the state.
+ */
 export function autoTrackState(
   supported: boolean,
   status: DetectorStatus | null,
@@ -38,9 +52,13 @@ export function autoTrackState(
   if (!status) {
     return 'checking';
   }
-  return screenReadingOn(status) && status.notificationAccessEnabled
-    ? 'active'
-    : 'needs-permission';
+  if (screenReadingOn(status)) {
+    return 'active';
+  }
+  if (status.trackingMethod === 'shizuku' && status.shizukuState === 'ready') {
+    return 'paused';
+  }
+  return 'setup-required';
 }
 
 export type PaymentPill = {
@@ -153,6 +171,31 @@ export function groupPayments(
     }
   }
   return groups;
+}
+
+/** When the newest detection was made, or null when there is none. */
+export function lastDetectedAt(items: readonly DetectedTxn[]): number | null {
+  return items.reduce<number | null>(
+    (latest, item) =>
+      latest === null || item.detectedAtMillis > latest
+        ? item.detectedAtMillis
+        : latest,
+    null,
+  );
+}
+
+/** "Last payment detected 2:14 PM", with the date when it was not today. */
+export function lastDetectedLabel(at: number | null, now = new Date()): string {
+  if (at === null) {
+    return 'No payments detected yet';
+  }
+  const date = new Date(at);
+  const clock = formatClock(at);
+  if (localDateISO(date) === localDateISO(now)) {
+    return `Last payment detected ${clock}`;
+  }
+  const day = date.toLocaleDateString('en-US', {month: 'short', day: 'numeric'});
+  return `Last payment detected ${day}, ${clock}`;
 }
 
 /** "Last synced 2:14 PM", with the date when it was not today. */

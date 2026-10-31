@@ -1,32 +1,24 @@
 import React, {useEffect, useState} from 'react';
 import {Alert, Modal, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {NotePencil} from 'phosphor-react-native/src/icons/NotePencil';
-import {ShieldWarning} from 'phosphor-react-native/src/icons/ShieldWarning';
 
 import {
   AppText,
   BackButton,
   Screen,
   SectionTitle,
-  SettingsGroup,
-  SettingsRow,
   Stagger,
-  ToggleSwitch,
 } from '../../components/ui';
 import {isDeveloperModeEnabled} from '../../lib/autotrack/nativeUpiDetector';
-import {DEFAULT_TRACKING_METHOD} from '../../lib/autotrack/types';
-import {colors, makeStyles, spacing} from '../../theme';
+import {makeStyles, spacing} from '../../theme';
 import {ActivitySkeleton} from '../activity/ActivitySkeleton';
 import {useLoadingGate} from '../insights/loadingGate';
 import {AllowanceCard} from './AllowanceCard';
 import {useAutoTrack} from './AutoTrackProvider';
-import {autoTrackState, groupPayments} from './autoTrackFormat';
+import {AutoTrackSetup} from './AutoTrackSetup';
+import {groupPayments, lastDetectedAt} from './autoTrackFormat';
 import {DetectedPayments} from './DetectedPayments';
 import {DiagnosticsSection} from './DiagnosticsSection';
-import {PermissionsGroup, SHIZUKU_HELP} from './PermissionsGroup';
-import {StatusHero} from './StatusHero';
-import {TrackingMethodPicker} from './TrackingMethodPicker';
 
 type AutoTrackingScreenProps = {
   visible: boolean;
@@ -36,9 +28,11 @@ type AutoTrackingScreenProps = {
   onOpenBudget: () => void;
 };
 
-const ICON_SIZE = 24;
-
-/** Dashboard for UPI auto-tracking: status, permissions, allowance, toggles, payments. */
+/**
+ * Dashboard for UPI auto-tracking: the same setup as onboarding
+ * ([AutoTrackSetup]), then today's allowance and the detected payments.
+ * Auto-tracking stays optional: nothing here blocks the rest of Paisa.
+ */
 export function AutoTrackingScreen({
   visible,
   onClose,
@@ -62,7 +56,6 @@ export function AutoTrackingScreen({
     allowance,
     syncNow,
     syncing,
-    lastSyncAt,
     keep,
     merge,
     clearHistory,
@@ -97,7 +90,6 @@ export function AutoTrackingScreen({
     return () => setLogStreaming(false);
   }, [setLogStreaming, showLog]);
 
-  const state = autoTrackState(supported, status);
   // Cheap (50 rows), and re-run each render so Today/Yesterday stay current.
   const groups = groupPayments(transactions);
 
@@ -156,43 +148,27 @@ export function AutoTrackingScreen({
           ]}
           showsVerticalScrollIndicator={false}>
           <Stagger index={0}>
-            <StatusHero
-              state={state}
+            <AutoTrackSetup
+              supported={supported}
               status={status}
+              prefs={prefs}
+              prefsDisabled={!prefsLoaded}
+              onPrefsChange={updatePrefs}
+              onChangeMethod={method => {
+                setTrackingMethod(method).catch(() => {});
+              }}
+              lastDetectedAt={lastDetectedAt(transactions)}
               syncing={syncing}
-              lastSyncAt={lastSyncAt}
               onSyncNow={() => {
                 syncNow().catch(() => {});
               }}
+              onDone={onClose}
             />
           </Stagger>
 
           {supported ? (
             <>
               <Stagger index={1}>
-                <SectionTitle
-                  title="How Paisa reads payments"
-                  style={styles.sectionTitle}
-                />
-                <TrackingMethodPicker
-                  method={status?.trackingMethod ?? DEFAULT_TRACKING_METHOD}
-                  onChange={method => {
-                    setTrackingMethod(method).catch(() => {});
-                  }}
-                />
-                <SectionTitle title="Permissions" style={styles.sectionTitle} />
-                <PermissionsGroup status={status} />
-                {status?.trackingMethod === 'shizuku' ? (
-                  <AppText
-                    variant="caption"
-                    color={colors.muted}
-                    style={styles.footnote}>
-                    {SHIZUKU_HELP}
-                  </AppText>
-                ) : null}
-              </Stagger>
-
-              <Stagger index={2}>
                 <SectionTitle
                   title="Today's allowance"
                   style={styles.sectionTitle}
@@ -204,52 +180,7 @@ export function AutoTrackingScreen({
                 />
               </Stagger>
 
-              <Stagger index={3}>
-                <SectionTitle title="Settings" style={styles.sectionTitle} />
-                <SettingsGroup>
-                  <SettingsRow
-                    icon={<NotePencil size={ICON_SIZE} color={colors.text} />}
-                    label="Transaction notes"
-                    trailing={
-                      <ToggleSwitch
-                        value={prefs.notesEnabled}
-                        disabled={!prefsLoaded}
-                        onValueChange={next => updatePrefs({notesEnabled: next})}
-                        accessibilityLabel="Transaction notes"
-                      />
-                    }
-                  />
-                  <SettingsRow
-                    icon={<ShieldWarning size={ICON_SIZE} color={colors.text} />}
-                    label="Over-budget blocking"
-                    trailing={
-                      <ToggleSwitch
-                        value={prefs.blockingEnabled}
-                        disabled={!prefsLoaded}
-                        onValueChange={next => updatePrefs({blockingEnabled: next})}
-                        accessibilityLabel="Over-budget blocking"
-                      />
-                    }
-                  />
-                </SettingsGroup>
-                <AppText
-                  variant="caption"
-                  color={colors.muted}
-                  style={styles.footnote}>
-                  Ask what each detected payment was for. Notes appear on the
-                  payment in Activity.
-                </AppText>
-                <AppText
-                  variant="caption"
-                  color={colors.muted}
-                  style={styles.footnote}>
-                  Warn on the UPI Pay screen when a payment would go over
-                  today's limit. It can't stop a payment, but Cancel takes you
-                  back.
-                </AppText>
-              </Stagger>
-
-              <Stagger index={4}>
+              <Stagger index={2}>
                 <SectionTitle
                   title="Detected payments"
                   style={styles.sectionTitle}
@@ -258,7 +189,7 @@ export function AutoTrackingScreen({
               </Stagger>
 
               {developerMode ? (
-                <Stagger index={5} style={styles.diagnostics}>
+                <Stagger index={3} style={styles.diagnostics}>
                   <DiagnosticsSection
                     open={diagnosticsOpen}
                     onToggle={() => setDiagnosticsOpen(value => !value)}
@@ -303,10 +234,6 @@ const useStyles = makeStyles(() => ({
   sectionTitle: {
     paddingTop: 26,
     paddingBottom: 12,
-  },
-  footnote: {
-    paddingHorizontal: 4,
-    paddingTop: 10,
   },
   diagnostics: {
     marginTop: 26,
