@@ -13,6 +13,7 @@ import {TransactionRow} from '../../lib/transactionsStore';
 import {colors, makeStyles, radii, spacing} from '../../theme';
 import {dayLabel} from '../onboarding/constants';
 import {
+  capNote,
   dayMonth,
   daysLeftLabel,
   partialLabel,
@@ -226,6 +227,15 @@ export function BudgetDetailsScreen({
                     : `${money(budget.todayLeft)} left today`}
                 </AppText>
               </View>
+              {capNote(budget, money) ? (
+                <AppText
+                  variant="caption"
+                  color={colors.muted}
+                  style={planStyles.capNote}
+                  testID="rollover-cap-note">
+                  {capNote(budget, money)}
+                </AppText>
+              ) : null}
             </View>
 
             <View style={[planStyles.section, detailsStyles.divider]}>
@@ -246,6 +256,9 @@ export function BudgetDetailsScreen({
                   height={6}
                 />
               </View>
+              <AppText variant="caption" color={colors.muted}>
+                {`${dayMonth(budget.week.start)} – ${dayMonth(budget.week.end)}`}
+              </AppText>
             </View>
 
             <View style={[planStyles.section, planStyles.last, detailsStyles.divider]}>
@@ -411,5 +424,8 @@ const usePlanStyles = makeStyles(() => ({
   },
   last: {
     paddingBottom: 0,
+  },
+  capNote: {
+    marginTop: spacing.sm,
   },
 }));

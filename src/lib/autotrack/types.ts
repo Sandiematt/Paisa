@@ -15,7 +15,8 @@
 //   AutoTrackPrefs   {notesEnabled, blockingEnabled: Boolean}
 //   BudgetSnapshot   {monthKey: "YYYY-MM", monthlyBudget: Number, spendByDate: {"YYYY-MM-DD": Number},
 //                     dataAsOfMillis: Long, cycleStartDay: Int (optional, default 1),
-//                     trackingStart: "YYYY-MM-DD" (optional; no allowance before it)}
+//                     trackingStart: "YYYY-MM-DD" (optional; no allowance before it),
+//                     rolloverCap: Number (optional; a day's limit is at most this many usual days)}
 //
 // Ownership: native tags every detection with the owner set by setOwner(userId). getTransactions / getPending and the
 // unsynced spend only ever cover the current owner's rows. Detections made while signed out belong to the last owner.
@@ -133,6 +134,8 @@ export type BudgetSnapshot = {
   cycleStartDay?: number;
   /** First day whose spending counts, "YYYY-MM-DD". Before it there is no allowance (the budget has not started). */
   trackingStart?: string;
+  /** Rollover cap in usual days (1.5, 2, 3): a day's limit never goes above it. Absent means none. */
+  rolloverCap?: number;
 };
 
 /** The rolling daily allowance (see src/features/autotrack/dailyAllowance.ts). */

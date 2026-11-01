@@ -1,6 +1,7 @@
 import {useCallback, useMemo, useState} from 'react';
 
 import {isAutoTrackSupported} from '../../lib/autotrack/nativeUpiDetector';
+import {PIN_LENGTH} from '../../lib/biometricLock';
 import {emailRegistered} from '../../lib/emailRegistered';
 import {firstMissedRule} from '../../lib/passwordRules';
 import {validatePlan} from '../../lib/budgetEngine';
@@ -92,6 +93,14 @@ function draftFromAuthUser(
   const avatarUrl = str(meta.avatar_url) || str(meta.picture) || undefined;
 
   return {name, email, avatarUrl};
+}
+
+/** A lock the provider can adopt once sign-up finishes (see RootNavigator). */
+export function lockIsSet(draft: Pick<OnboardingDraft, 'appLock' | 'appLockPin'>): boolean {
+  if (draft.appLock === 'biometric') {
+    return true;
+  }
+  return draft.appLock === 'pin' && new RegExp(`^\\d{${PIN_LENGTH}}$`).test(draft.appLockPin ?? '');
 }
 
 function displayNameFromEmail(email?: string): string {
@@ -213,6 +222,11 @@ export function useOnboarding(
         next.billsPaid = "Say whether each of these bills is paid this month.";
       }
     }
+    // Continue on the lock step needs a lock that is fully set up: a scanned
+    // fingerprint, or a PIN typed twice. Not wanting one is "Skip for now".
+    if (!lockIsSet(draft)) {
+      next.appLock = 'Set up a fingerprint or PIN lock to continue, or skip it for now.';
+    }
     return next;
   }, [draft, knownBills, passwordless, takenEmails, today]);
 
@@ -232,7 +246,7 @@ export function useOnboarding(
       bills: {canContinue: !errors.bills, skippable: true},
       budget: {canContinue: !errors.billsPaid && !errors.monthlyBudget, skippable: true},
       autotrack: {canContinue: true, skippable: true},
-      lock: {canContinue: true, skippable: !draft.appLock},
+      lock: {canContinue: !errors.appLock, skippable: !draft.appLock},
       done: {canContinue: true, skippable: false},
     }),
     [draft.appLock, errors],

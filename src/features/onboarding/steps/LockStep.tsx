@@ -26,6 +26,8 @@ import {OnboardingDraft} from '../types';
 
 type LockStepProps = {
   draft: OnboardingDraft;
+  /** Shown after Continue is pressed without a finished lock. */
+  errors?: Partial<Record<keyof OnboardingDraft, string>>;
   onChange: <K extends keyof OnboardingDraft>(
     key: K,
     value: OnboardingDraft[K],
@@ -39,7 +41,7 @@ type Phase = 'choose' | 'pin' | 'confirm';
  * a PIN is typed twice. The account does not exist yet, so the choice rides
  * on the draft and the lock provider adopts it once sign-up finishes.
  */
-export function LockStep({draft, onChange}: LockStepProps) {
+export function LockStep({draft, errors = {}, onChange}: LockStepProps) {
   const styles = useStyles();
   const copy = STEP_TITLES.lock;
   const [support, setSupport] = useState<BiometricSupport | null>(null);
@@ -126,6 +128,15 @@ export function LockStep({draft, onChange}: LockStepProps) {
   };
 
   const biometricLabel = support?.available ? support.label : 'Fingerprint';
+  // A scan or PIN message is more specific, so it wins over the step's error.
+  const shown =
+    message ??
+    (errors.appLock && phase !== 'choose'
+      ? phase === 'pin'
+        ? 'Finish choosing your PIN to continue, or skip it for now.'
+        : 'Enter your PIN again to confirm it, or skip it for now.'
+      : errors.appLock) ??
+    null;
 
   if (lock) {
     return (
@@ -161,13 +172,14 @@ export function LockStep({draft, onChange}: LockStepProps) {
         }>
         <Stagger index={1}>
           <PinPad value={pin} onChange={enterPin} error={message !== null} />
-          {message ? (
+          {shown ? (
             <AppText
               variant="caption"
               color={colors.roseLight}
               align="center"
-              style={styles.message}>
-              {message}
+              style={styles.message}
+              testID="lock-error">
+              {shown}
             </AppText>
           ) : null}
           <GhostButton
@@ -205,9 +217,13 @@ export function LockStep({draft, onChange}: LockStepProps) {
           onPress={startPin}
         />
       </Stagger>
-      {message ? (
-        <AppText variant="caption" color={colors.roseLight} style={styles.message}>
-          {message}
+      {shown ? (
+        <AppText
+          variant="caption"
+          color={colors.roseLight}
+          style={styles.message}
+          testID="lock-error">
+          {shown}
         </AppText>
       ) : null}
       <AppText variant="caption" color={colors.muted} style={styles.note}>

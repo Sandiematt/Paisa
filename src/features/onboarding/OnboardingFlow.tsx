@@ -123,7 +123,7 @@ export function OnboardingFlow({
         case 'autotrack':
           return <AutoTrackStep draft={flow.draft} onChange={flow.update} />;
         case 'lock':
-          return <LockStep draft={flow.draft} onChange={flow.update} />;
+          return <LockStep draft={flow.draft} errors={flow.errors} onChange={flow.update} />;
         case 'done':
           return <DoneStep draft={flow.draft} today={flow.today} knownBills={flow.knownBills} />;
         default:

@@ -8,6 +8,8 @@ import {cycleStartDay} from '../../lib/budgetCycle';
 import {
   cycleRangeFor,
   remainingDays,
+  rollingDayLimits,
+  rolloverCapOf,
   toPaise,
 } from '../../lib/budgetEngine';
 import {BudgetFacts, budgetForCycle, hasBudget} from '../../lib/budgetInputs';
@@ -19,7 +21,8 @@ function rupees(paise: number): number {
 /**
  * Today's allowance from a snapshot: what is left of the cycle's day-to-day
  * money over the days left, today included (src/lib/budgetEngine.ts, the
- * one rolling limit). This is the form the phone's UPI spend guard runs
+ * one rolling limit, held at the snapshot's rollover cap when it has one).
+ * This is the form the phone's UPI spend guard runs
  * while Paisa is closed; the dashboard reads the engine directly.
  *
  * Mirrors the Kotlin BudgetPlan; both run the vectors in
@@ -55,12 +58,14 @@ export function dailyAllowance(
 
   let before = 0;
   let spentToday = 0;
+  const byDay = new Map<string, number>();
   const add = (spend: Record<string, number>) => {
     for (const [date, value] of Object.entries(spend)) {
       const amount = toPaise(value);
       if (date < from || date > cycle.end) {
         continue;
       }
+      byDay.set(date, (byDay.get(date) ?? 0) + amount);
       if (date < todayKey) {
         before += amount;
       } else if (date === todayKey) {
@@ -75,7 +80,8 @@ export function dailyAllowance(
 
   const daysLeft = remainingDays(todayKey, cycle);
   const left = budget - before;
-  const limit = daysLeft > 0 ? Math.floor(Math.max(0, left) / daysLeft) : 0;
+  const limit =
+    rollingDayLimits(budget, byDay, from, todayKey, cycle, snapshot.rolloverCap).limits.get(todayKey) ?? 0;
   return {
     date: todayKey,
     cycleStart: cycle.start,
@@ -122,6 +128,7 @@ export function snapshotForBudget(
   }
   const money = toPaise(state.spendable) - toPaise(state.alreadySpent);
   const active = hasBudget(facts) && state.kind !== 'invalid';
+  const cap = rolloverCapOf(facts.rolloverCap);
   return {
     monthKey: cycle.start.slice(0, 7),
     // Nothing left still keeps the guard on: a token paisa, so every payment warns.
@@ -130,6 +137,7 @@ export function snapshotForBudget(
     dataAsOfMillis,
     cycleStartDay: payday,
     ...(from > cycle.start || waiting ? {trackingStart: from} : {}),
+    ...(cap !== null ? {rolloverCap: cap} : {}),
   };
 }
 

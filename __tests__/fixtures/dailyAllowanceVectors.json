@@ -1,5 +1,5 @@
 {
-  "comment": "Shared vectors for the rolling daily allowance: dailyLimit = max(0, monthlyBudget - spentBeforeToday) / daysLeft, daysLeft counting today, rounded down to the paisa. Every amount is taken to the paisa (half up) before it is added. Used by __tests__/dailyAllowance.test.ts and android/app/src/test/.../BudgetPlanTest.kt. spendByDate entries outside today's budget cycle or before trackingStart (or a snapshot for another cycle) are ignored; before trackingStart there is no allowance. cycleStartDay (payday, default 1) makes the cycle run payday to the day before the next payday.",
+  "comment": "Shared vectors for the rolling daily allowance: dailyLimit = max(0, monthlyBudget - spentBeforeToday) / daysLeft, daysLeft counting today, rounded down to the paisa. Every amount is taken to the paisa (half up) before it is added. Used by __tests__/dailyAllowance.test.ts and android/app/src/test/.../BudgetPlanTest.kt. spendByDate entries outside today's budget cycle or before trackingStart (or a snapshot for another cycle) are ignored; before trackingStart there is no allowance. cycleStartDay (payday, default 1) makes the cycle run payday to the day before the next payday. rolloverCap (optional) caps a day's limit at rolloverCap usual days, a usual day being monthlyBudget over the counted days rounded down to the paisa: walking the days from the cycle start (or trackingStart), whatever is left above cap x days left is held back and no longer carries forward, then that day's spend comes off.",
   "vectors": [
     {
       "name": "late in the month, what is left over the days left",
@@ -108,6 +108,24 @@
       "today": "2026-11-10",
       "snapshot": {"monthKey": "2026-11", "monthlyBudget": 0.01, "spendByDate": {}},
       "expected": {"date": "2026-11-10", "cycleStart": "2026-11-01", "cycleEnd": "2026-11-30", "daysLeft": 21, "budget": 0.01, "spentBeforeToday": 0, "dailyLimit": 0, "spentToday": 0, "remainingToday": 0, "remainingMonth": 0.01}
+    },
+    {
+      "name": "a rollover cap holds a quiet month's limit at twice a usual day",
+      "today": "2026-11-17",
+      "snapshot": {"monthKey": "2026-11", "monthlyBudget": 3000, "spendByDate": {}, "rolloverCap": 2},
+      "expected": {"date": "2026-11-17", "cycleStart": "2026-11-01", "cycleEnd": "2026-11-30", "daysLeft": 14, "budget": 3000, "spentBeforeToday": 0, "dailyLimit": 200, "spentToday": 0, "remainingToday": 200, "remainingMonth": 3000}
+    },
+    {
+      "name": "an overspend under a rollover cap comes off the next day",
+      "today": "2026-11-18",
+      "snapshot": {"monthKey": "2026-11", "monthlyBudget": 3000, "spendByDate": {"2026-11-17": 1000}, "rolloverCap": 2},
+      "expected": {"date": "2026-11-18", "cycleStart": "2026-11-01", "cycleEnd": "2026-11-30", "daysLeft": 13, "budget": 3000, "spentBeforeToday": 1000, "dailyLimit": 138.46, "spentToday": 0, "remainingToday": 138.46, "remainingMonth": 2000}
+    },
+    {
+      "name": "a rollover cap counts its usual day from the tracking start",
+      "today": "2026-11-30",
+      "snapshot": {"monthKey": "2026-11", "monthlyBudget": 1000, "spendByDate": {}, "trackingStart": "2026-11-21", "rolloverCap": 1.5},
+      "expected": {"date": "2026-11-30", "cycleStart": "2026-11-01", "cycleEnd": "2026-11-30", "daysLeft": 1, "budget": 1000, "spentBeforeToday": 0, "dailyLimit": 150, "spentToday": 0, "remainingToday": 150, "remainingMonth": 1000}
     }
   ]
 }

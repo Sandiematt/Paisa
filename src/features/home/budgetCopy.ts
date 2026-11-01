@@ -77,6 +77,40 @@ export function budgetCardFigures(state: MonthState, range: 'week' | 'month') {
   };
 }
 
+/**
+ * How much of the month's day-to-day money is still unspent, 0 to 1: the
+ * extra savings bar starts full and drains as spending comes in. Empty once
+ * the month is overspent, or when there is nothing to spend.
+ */
+export function extraSavingsShare(
+  state: Pick<MonthState, 'kind' | 'spendable' | 'projectedExtra'>,
+): number {
+  if (state.kind !== 'active' || state.spendable <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, state.projectedExtra / state.spendable));
+}
+
+/** "2×", "1.5×": a rollover cap in usual days. */
+export function capLabel(cap: number): string {
+  return `${cap.toLocaleString('en-IN', {maximumFractionDigits: 1})}×`;
+}
+
+/**
+ * Why today's limit is not higher when the rollover cap holds it, or null
+ * when it does not.
+ */
+export function capNote(
+  state: Pick<MonthState, 'capped' | 'capLimit' | 'usualLimit' | 'heldBack'>,
+  money: (amount: number) => string,
+): string | null {
+  if (!state.capped || state.capLimit === null || state.usualLimit <= 0) {
+    return null;
+  }
+  const cap = Math.round((state.capLimit / state.usualLimit) * 10) / 10;
+  return `Held at your ${capLabel(cap)} rollover cap. ${money(state.heldBack)} above it stays as extra savings.`;
+}
+
 /** The notice for a budget bills and the goal take all of, or more than all of. */
 export function planNotice(state: MonthState, money: (amount: number) => string): string | null {
   if (state.kind === 'invalid') {

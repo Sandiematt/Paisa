@@ -3,7 +3,7 @@ import {
   snapshotForBudget,
   unsyncedSpendByDate,
 } from '../src/features/autotrack/dailyAllowance';
-import {BudgetFacts} from '../src/lib/budgetInputs';
+import {BudgetFacts, budgetForCycle} from '../src/lib/budgetInputs';
 import {
   BudgetSnapshot,
   DailyAllowance,
@@ -202,6 +202,24 @@ describe('snapshotForBudget', () => {
   it('follows the payday cycle', () => {
     const snapshot = snapshotForBudget(facts({payday: 25, transactions: []}), '2026-10-27');
     expect(snapshot).toMatchObject({monthKey: '2026-10', cycleStartDay: 25, monthlyBudget: 7000});
+  });
+
+  it('carries the rollover cap, so the guard holds the same limit as the dashboard', () => {
+    const lunch = tx({id: 'lunch', type: 'expense', amount: 600, transactionDate: '2026-11-21'});
+    const capped = facts({transactions: [rent, rentNov, lunch], rolloverCap: 2});
+    for (const today of ['2026-11-05', '2026-11-20', '2026-11-21', '2026-11-22', '2026-11-30']) {
+      const snapshot = snapshotForBudget(capped, today);
+      expect(snapshot.rolloverCap).toBe(2);
+      const dashboard = budgetForCycle(capped, today).state;
+      expect(dailyAllowance(snapshot, today)!.dailyLimit).toBe(dashboard.dailyLimit);
+    }
+    // Quiet to the 20th, so the cap holds: uncapped it would be 2,000 / 11.
+    expect(budgetForCycle(capped, '2026-11-20').state).toMatchObject({dailyLimit: 133.32, capped: true});
+  });
+
+  it('leaves the cap out when there is none', () => {
+    expect(snapshotForBudget(facts({rolloverCap: null}), '2026-11-05')).not.toHaveProperty('rolloverCap');
+    expect(snapshotForBudget(facts({rolloverCap: 0.5}), '2026-11-05')).not.toHaveProperty('rolloverCap');
   });
 });
 

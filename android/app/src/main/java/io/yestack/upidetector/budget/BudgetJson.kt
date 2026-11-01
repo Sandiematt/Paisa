@@ -33,6 +33,7 @@ object BudgetJson {
             o.optLong("dataAsOfMillis", 0L).coerceAtLeast(0L),
             o.optInt("cycleStartDay", 1).takeIf { it in 1..31 } ?: 1,
             o.optString("trackingStart", "").takeIf { it.isNotEmpty() }?.let { LocalDate.parse(it) },
+            o.opt("rolloverCap")?.toString()?.toBigDecimalOrNull()?.takeIf { it >= BigDecimal.ONE },
         )
     } catch (e: Exception) {
         null
@@ -48,6 +49,7 @@ object BudgetJson {
             .put("dataAsOfMillis", s.dataAsOfMillis)
             .put("cycleStartDay", s.cycleStartDay)
             .apply { s.trackingStart?.let { put("trackingStart", it.toString()) } }
+            .apply { s.rolloverCap?.let { put("rolloverCap", it.toDouble()) } }
             .toString()
     }
 

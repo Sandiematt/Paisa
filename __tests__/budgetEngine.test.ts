@@ -281,6 +281,70 @@ describe('section 7 scenarios', () => {
   });
 });
 
+describe('rollover cap', () => {
+  // ₹2,000 over 30 days: a usual day is 66.66, so a 2× cap is 133.32.
+  const capped = (patch: Partial<MonthInputs> = {}) => example({rolloverCap: 2, ...patch});
+
+  it('changes nothing while the rolling limit stays under the cap', () => {
+    for (const n of [1, 2, 8, 15]) {
+      expect(monthState(capped(), day(n)).dailyLimit).toBe(monthState(example(), day(n)).dailyLimit);
+    }
+    expect(monthState(capped(), day(8))).toMatchObject({capped: false, heldBack: 0, capLimit: 133.32});
+  });
+
+  it('holds the limit at the cap and keeps the excess as extra savings', () => {
+    // Nothing spent for 15 days: uncapped, day 16 would get 2,000 / 15 = 133.33.
+    expect(monthState(example(), day(16)).dailyLimit).toBe(133.33);
+    const state = monthState(capped(), day(16));
+    expect(state).toMatchObject({dailyLimit: 133.32, capped: true, heldBack: 0.2});
+    // The money is still the month's: nothing is spent, so it is all extra savings.
+    expect(state).toMatchObject({remaining: 2000, projectedExtra: 2000, overspent: false});
+    // A quiet capped day cannot carry forward either.
+    expect(monthState(capped(), day(17))).toMatchObject({dailyLimit: 133.32, heldBack: 133.52});
+    expect(closeMonth(capped()).extraSavings).toBe(2000);
+  });
+
+  it('carries an overspend into the next day even when the cap was holding money back', () => {
+    const inputs = capped({spendByDate: {[day(16)]: 500}});
+    const today = monthState(inputs, day(16));
+    expect(today.todayLeft).toBeCloseTo(133.32 - 500, 2);
+    const next = monthState(inputs, day(17));
+    // (1,999.80 - 500) / 14, where uncapped money would have padded it.
+    expect(next.dailyLimit).toBe(107.12);
+    expect(next.dailyLimit).toBeLessThan(today.dailyLimit);
+    expect(next.capped).toBe(false);
+    expect(closeMonth(inputs).extraSavings).toBe(1500);
+  });
+
+  it('keeps carrying a deficit until the month is overspent', () => {
+    const inputs = capped({spendByDate: {[day(5)]: 2500}});
+    const state = monthState(inputs, day(6));
+    expect(state).toMatchObject({dailyLimit: 0, overspent: true, overspentBy: 500});
+  });
+
+  it('sums the week from the capped limits', () => {
+    const inputs = capped();
+    const state = monthState(inputs, day(18)); // Wednesday; Monday was the 16th
+    expect(state.week).toMatchObject({start: day(16), end: day(22)});
+    expect(state.week.total).toBeCloseTo(133.32 * 7, 2);
+  });
+
+  it('ignores a cap below one usual day, or one that is not a number', () => {
+    for (const rolloverCap of [0, 0.5, Number.NaN, null]) {
+      const state = monthState(example({rolloverCap}), day(20));
+      expect(state).toMatchObject({capLimit: null, capped: false, heldBack: 0});
+      expect(state.dailyLimit).toBe(monthState(example(), day(20)).dailyLimit);
+    }
+  });
+
+  it('works out the usual day from the tracked days of a partial month', () => {
+    // From the 11th: 2,000 over 20 days is 100 a day, so the cap is 200.
+    const state = monthState(capped({countFrom: day(11)}), day(30));
+    expect(state.capLimit).toBe(200);
+    expect(state.dailyLimit).toBe(200);
+  });
+});
+
 describe('week display', () => {
   it('adds up the week\'s daily limits and is never enforced', () => {
     // Wednesday 11 November: Monday and Tuesday had their own limits.
@@ -294,11 +358,36 @@ describe('week display', () => {
     expect(state.week.spent).toBe(100);
   });
 
-  it('is clipped to the cycle and to the tracking start', () => {
-    // 1 November 2026 is a Sunday: its week has one day in the cycle.
-    expect(monthState(example(), day(1)).week).toMatchObject({start: day(1), end: day(1)});
+  it('shows a whole week of limits on a cycle that starts on a Sunday, not one day', () => {
+    // 1 November 2026 is a Sunday: the calendar week has one day in the cycle.
+    const state = monthState(example(), day(1));
+    expect(state.week).toMatchObject({start: day(1), end: day(7)});
+    expect(state.week.total).toBeCloseTo(state.dailyLimit * 7, 2);
+    expect(state.week.total).toBeGreaterThan(state.dailyLimit);
+  });
+
+  it('starts the week on the tracking start, still seven days long', () => {
+    // Joined Wednesday the 18th: 18th to 24th, not just Wednesday to Sunday.
     const joined = monthState(example({countFrom: day(18)}), day(19));
-    expect(joined.week.start).toBe(day(18));
+    expect(joined.week).toMatchObject({start: day(18), end: day(24)});
+  });
+
+  it('keeps the last week of a cycle seven days long, inside the cycle', () => {
+    // Monday 30 November is the cycle's last day: its calendar week is one day long.
+    const inputs = example({spendByDate: {[day(25)]: 40, [day(30)]: 10}});
+    const state = monthState(inputs, day(30));
+    expect(state.week).toMatchObject({start: day(24), end: day(30)});
+    expect(state.week.spent).toBe(50);
+    let total = 0;
+    for (let n = 24; n <= 30; n += 1) {
+      total += monthState(inputs, day(n)).dailyLimit;
+    }
+    expect(state.week.total).toBeCloseTo(total, 2);
+  });
+
+  it('never reaches outside a cycle shorter than a week of tracking', () => {
+    const late = monthState(example({countFrom: day(27)}), day(28));
+    expect(late.week).toMatchObject({start: day(27), end: day(30)});
   });
 });
 

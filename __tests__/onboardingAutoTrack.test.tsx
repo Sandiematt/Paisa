@@ -8,6 +8,7 @@ import {
   useOnboarding,
 } from '../src/features/onboarding/useOnboarding';
 
+jest.mock('expo-local-authentication', () => ({}));
 jest.mock('../src/theme/useAppFonts', () => ({useAppFonts: () => [true, null]}));
 jest.mock('../src/features/auth/AuthProvider', () => ({
   useAuth: () => ({user: null}),

@@ -61,6 +61,7 @@ import {
   startBudgetFlow,
   startNewAccountFlow,
 } from '../../lib/budgetFlow';
+import {saveRolloverCap} from '../../lib/rolloverCap';
 import {
   BudgetFacts,
   budgetForCycle,
@@ -310,6 +311,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       history: budgetData.history,
       flow: budgetData.flow ?? null,
       unsyncedSpend,
+      rolloverCap: budgetData.rolloverCap,
     }),
     [budgetData, monthlyTotal, payday, pendingBills, savingsGoal, transactions, unsyncedSpend],
   );
@@ -513,6 +515,17 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       setRefreshNonce(n => n + 1);
     },
     [onProfileSave, payday, restartPlan, today, user],
+  );
+
+  const saveCap = useCallback(
+    async (cap: number | null) => {
+      if (!user) {
+        return;
+      }
+      await saveRolloverCap(user.id, cap);
+      setRefreshNonce(n => n + 1);
+    },
+    [user],
   );
 
   const moneyMoved = useCallback(
@@ -1010,6 +1023,9 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
             bills={editable}
             onSaveBill={saveEditedBill}
             onRemoveBill={removeEditedBill}
+            rolloverCap={budgetData.rolloverCap}
+            usualDay={budgetState?.kind === 'active' ? budgetState.usualLimit : null}
+            onSaveRolloverCap={saveCap}
             onReplayTutorial={() => {
               setProfileOpen(false);
               openAfterHandoff(() => setTutorialRestart(value => value + 1));

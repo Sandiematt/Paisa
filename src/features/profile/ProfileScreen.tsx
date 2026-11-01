@@ -14,6 +14,7 @@ import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
 import {PencilSimple} from 'phosphor-react-native/src/icons/PencilSimple';
 import {PiggyBank} from 'phosphor-react-native/src/icons/PiggyBank';
 import {Receipt} from 'phosphor-react-native/src/icons/Receipt';
+import {Repeat} from 'phosphor-react-native/src/icons/Repeat';
 import {SealCheck} from 'phosphor-react-native/src/icons/SealCheck';
 import {SignOut} from 'phosphor-react-native/src/icons/SignOut';
 import {Target} from 'phosphor-react-native/src/icons/Target';
@@ -37,6 +38,7 @@ import {
 import {useReducedMotion} from '../../hooks/useReducedMotion';
 import {exportTransactionsCsv} from '../../lib/exportCsv';
 import {exportTransactionsPdf} from '../../lib/exportPdf';
+import {formatMoney} from '../../lib/formatMoney';
 import {transactionsInMonth} from '../../lib/exportMonth';
 import {
   isAutomaticBudget,
@@ -63,7 +65,7 @@ import {
   spacing,
   useTheme,
 } from '../../theme';
-import {planProblem} from '../home/budgetCopy';
+import {capLabel, planProblem} from '../home/budgetCopy';
 import {yearlyFromMonthly} from '../home/homeReport';
 import {cycleLength, cycleRangeFor, validatePlan} from '../../lib/budgetEngine';
 import {localDateISO} from '../../lib/transactionsStore';
@@ -85,6 +87,7 @@ import {
   MoneySheet,
   NameSheet,
   PaydaySheet,
+  RolloverCapSheet,
 } from './ProfileSheets';
 
 type ProfileScreenProps = {
@@ -107,6 +110,12 @@ type ProfileScreenProps = {
   bills?: EditableBill[];
   onSaveBill?: (bill: EditableBill | null, input: BillInput) => Promise<void>;
   onRemoveBill?: (bill: EditableBill) => Promise<void>;
+  /** The daily limit's rollover cap in usual days; null is none. */
+  rolloverCap?: number | null;
+  /** A usual day's limit this cycle, shown beside each cap; null without a budget. */
+  usualDay?: number | null;
+  /** Saves the rollover cap; the row shows only with it. */
+  onSaveRolloverCap?: (cap: number | null) => Promise<void>;
   onClose: () => void;
 };
 
@@ -118,7 +127,8 @@ type SheetKey =
   | 'bills'
   | 'savings'
   | 'payday'
-  | 'appLock';
+  | 'appLock'
+  | 'rollover';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const NO_BILLS: EditableBill[] = [];
@@ -229,6 +239,9 @@ export function ProfileScreen({
   bills = NO_BILLS,
   onSaveBill,
   onRemoveBill,
+  rolloverCap = null,
+  usualDay = null,
+  onSaveRolloverCap,
   onClose,
 }: ProfileScreenProps) {
   const styles = useStyles();
@@ -810,6 +823,14 @@ export function ProfileScreen({
               value={perMonth(monthlySavingsGoal)}
               onPress={() => setSheet('savings')}
             />
+            {onSaveRolloverCap ? (
+              <SettingsRow
+                icon={<Repeat size={ICON_SIZE} color={colors.text} />}
+                label="Rollover cap"
+                value={rolloverCap ? `${capLabel(rolloverCap)} a usual day` : 'Off'}
+                onPress={() => setSheet('rollover')}
+              />
+            ) : null}
           </SettingsGroup>
 
           {/* App settings */}
@@ -1037,6 +1058,16 @@ export function ProfileScreen({
           onSelect={setPayday}
           onClose={closeSheet}
         />
+        {onSaveRolloverCap ? (
+          <RolloverCapSheet
+            visible={sheet === 'rollover'}
+            value={rolloverCap}
+            usualDay={usualDay}
+            money={amount => formatMoney(amount, symbol, {decimals: 0})}
+            onChoose={onSaveRolloverCap}
+            onClose={closeSheet}
+          />
+        ) : null}
       </Screen>
     </Modal>
   );

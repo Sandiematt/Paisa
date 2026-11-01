@@ -5,6 +5,7 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {
   OnboardingController,
   OnboardingOptions,
+  lockIsSet,
   useOnboarding,
 } from '../src/features/onboarding/useOnboarding';
 import {hashPin, makePinRecord, pinMatches} from '../src/lib/biometricLock';
@@ -240,6 +241,70 @@ describe('bills step', () => {
         date: '2026-11-07',
       }),
     ]);
+  });
+});
+
+describe('lock step', () => {
+  /** Upgrade flow: whatsnew, payday, bills, budget, lock, done. */
+  async function toLockStep() {
+    mount({mode: 'upgrade', passwordless: true, today: '2026-11-01'});
+    for (let i = 0; i < 4; i += 1) {
+      await act(async () => {
+        await flow.goNext();
+      });
+    }
+    expect(flow.stepKey).toBe('lock');
+  }
+
+  it('does not continue until a lock is set up', async () => {
+    await toLockStep();
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('lock');
+    expect(flow.errors.appLock).toMatch(/fingerprint or PIN/);
+    expect(flow.skippable).toBe(true);
+  });
+
+  it('does not take a PIN lock without its PIN', async () => {
+    await toLockStep();
+    act(() => {
+      flow.update('appLock', 'pin');
+      flow.update('appLockPin', '12');
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('lock');
+    expect(lockIsSet({appLock: 'pin', appLockPin: undefined})).toBe(false);
+    expect(lockIsSet({appLock: 'pin', appLockPin: '12a4'})).toBe(false);
+  });
+
+  it('continues once a PIN is confirmed or a fingerprint is scanned', async () => {
+    await toLockStep();
+    act(() => {
+      flow.update('appLock', 'pin');
+      flow.update('appLockPin', '2468');
+    });
+    await act(async () => {
+      await flow.goNext();
+    });
+    expect(flow.stepKey).toBe('done');
+    expect(lockIsSet({appLock: 'biometric'})).toBe(true);
+    expect(lockIsSet({appLock: null})).toBe(false);
+  });
+
+  it('still lets the lock be skipped on purpose, dropping a half-set PIN', async () => {
+    await toLockStep();
+    act(() => {
+      flow.update('appLockPin', '24');
+    });
+    act(() => {
+      flow.skip();
+    });
+    expect(flow.stepKey).toBe('done');
+    expect(flow.draft.appLock).toBeNull();
+    expect(flow.draft.appLockPin).toBeUndefined();
   });
 });
 

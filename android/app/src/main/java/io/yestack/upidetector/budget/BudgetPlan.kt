@@ -28,6 +28,8 @@ data class BudgetSnapshot(
     val cycleStartDay: Int = 1,
     /** First day whose spending counts; before it the budget has not started and there is no allowance. */
     val trackingStart: LocalDate? = null,
+    /** Rollover cap in usual days (1.5, 2, 3): a day's limit never goes above it. Null means none. */
+    val rolloverCap: BigDecimal? = null,
 )
 
 /** One budget cycle, [start] to [end] inclusive (src/lib/budgetCycle.ts). */
@@ -57,8 +59,10 @@ data class Allowance(
  *
  *   dailyLimit = max(0, B - spentBeforeToday) / daysLeft      (daysLeft includes today; rounded down to the paisa)
  *
- * Money not spent raises the days after it and overspending lowers them; nothing is capped by week. Every amount is
- * taken to the paisa (half up) before it is added, the same as the JS side. Pure Kotlin.
+ * Money not spent raises the days after it and overspending lowers them; nothing is capped by week. With a rollover
+ * cap a day's limit is at most cap usual days (B over the counted days): walking the days, money above that is held
+ * back and no longer carries forward, so an overspend still lowers the next day. Every amount is taken to the paisa
+ * (half up) before it is added, the same as the JS side. Pure Kotlin.
  */
 object BudgetPlan {
 
@@ -83,9 +87,11 @@ object BudgetPlan {
 
         var before = BigDecimal.ZERO
         var spentToday = BigDecimal.ZERO
+        val byDay = HashMap<LocalDate, BigDecimal>()
         fun add(date: LocalDate, amount: BigDecimal) {
             if (date < from || date > cycle.end) return
             val value = paise(amount)
+            byDay.merge(date, value, BigDecimal::add)
             if (date < today) before += value else if (date == today) spentToday += value
         }
         if (snapshot.monthKey == YearMonth.from(cycle.start).toString()) {
@@ -95,7 +101,7 @@ object BudgetPlan {
 
         val daysLeft = daysBetweenInclusive(today, cycle.end)
         val left = budget.subtract(before)
-        val dailyLimit = left.max(BigDecimal.ZERO).divide(BigDecimal(daysLeft), 2, RoundingMode.DOWN)
+        val dailyLimit = limitOn(today, budget, byDay, from, cycle, snapshot.rolloverCap)
 
         return Allowance(
             date = today,
@@ -124,6 +130,37 @@ object BudgetPlan {
         val next = startIn(YearMonth.from(start).plusMonths(1))
         return Cycle(start, next.minusDays(1))
     }
+
+    /**
+     * [today]'s limit, walking the counted days from [from] with what is left of [budget]: what is left over the days
+     * left. With a rollover [cap] (at least 1), what is left above cap usual days times the days left is held back
+     * first. Mirrors rollingDayLimits in src/lib/budgetEngine.ts.
+     */
+    private fun limitOn(
+        today: LocalDate,
+        budget: BigDecimal,
+        spend: Map<LocalDate, BigDecimal>,
+        from: LocalDate,
+        cycle: Cycle,
+        cap: BigDecimal?,
+    ): BigDecimal {
+        val counted = daysBetweenInclusive(from, cycle.end)
+        val ceiling = cap?.takeIf { it >= BigDecimal.ONE && counted > 0 }
+            ?.let { limit(budget, counted).multiply(it).setScale(2, RoundingMode.DOWN) }
+        var pool = budget
+        var day = from
+        while (true) {
+            val days = daysBetweenInclusive(day, cycle.end)
+            if (ceiling != null) pool = pool.min(ceiling.multiply(BigDecimal(days)))
+            if (day >= today) return limit(pool, days)
+            pool = pool.subtract(spend[day] ?: BigDecimal.ZERO)
+            day = day.plusDays(1)
+        }
+    }
+
+    /** max(0, [left]) over [days], rounded down to the paisa. */
+    private fun limit(left: BigDecimal, days: Int): BigDecimal =
+        left.max(BigDecimal.ZERO).divide(BigDecimal(days), 2, RoundingMode.DOWN)
 
     private fun daysBetweenInclusive(from: LocalDate, to: LocalDate): Int = (to.toEpochDay() - from.toEpochDay()).toInt() + 1
 

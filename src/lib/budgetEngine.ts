@@ -13,7 +13,9 @@ import {cycleFor} from './budgetCycle';
  *
  * One rolling limit, recalculated every day: money not spent raises the days
  * after it, overspending lowers them, and what is left when the cycle ends is
- * extra savings. Weeks are only a way of showing it.
+ * extra savings. Weeks are only a way of showing it. An optional rollover cap
+ * holds a day's limit at a few usual days; what it holds back stops carrying
+ * forward and stays extra savings (rollingDayLimits).
  *
  * Money is worked in whole paise and limits round down to the paisa, so a
  * limit never offers money that is not there; the paise it drops stay in
@@ -81,6 +83,11 @@ export type MonthInputs = {
   spendByDate: Record<string, number>;
   /** False when bills and the goal take more than the budget (see validatePlan). */
   planValid?: boolean;
+  /**
+   * Rollover cap: a day's limit never goes above this many usual days (2 is
+   * twice the limit a day gets with nothing carried over). Unset is no cap.
+   */
+  rolloverCap?: number | null;
 };
 
 export type WeekDisplay = {
@@ -114,6 +121,17 @@ export type MonthState = {
   /** Days left in the cycle, today included. */
   remainingDays: number;
   dailyLimit: number;
+  /** A usual day: the day-to-day money over the counted days, nothing carried over. */
+  usualLimit: number;
+  /** The most a day may get under the rollover cap; null without one. */
+  capLimit: number | null;
+  /** Today's limit is held at the rollover cap. */
+  capped: boolean;
+  /**
+   * Unspent money the rollover cap kept out of the daily limits so far. It
+   * no longer raises the days after, and ends the month as extra savings.
+   */
+  heldBack: number;
   /** Today's limit less today's spending; negative when today went over. */
   todayLeft: number;
   /** Spendable less everything spent; negative when the month is overspent. */
@@ -323,9 +341,81 @@ function sumBetween(spend: Map<string, Paise>, from: string, toExclusive: string
   return sum;
 }
 
+/**
+ * The seven days the week display covers: Monday to Sunday, kept inside the
+ * counted part of the cycle. A week the budget's start or end cuts short
+ * slides to seven whole days instead, so the first and last days of a cycle
+ * still show a week's limits, not one day's.
+ */
+export function weekWindow(today: string, countFrom: string, cycleEnd: string): {start: string; end: string} {
+  const end = earlierOf(addDaysISO(laterOf(mondayOf(today), countFrom), 6), cycleEnd);
+  return {start: laterOf(countFrom, addDaysISO(end, -6)), end};
+}
+
 /** max(0, remaining) over the days left, rounded down to the paisa. */
 function limitPaise(remaining: Paise, days: number): Paise {
   return days > 0 ? Math.floor(positive(remaining) / days) : 0;
+}
+
+/** Rollover caps offered, in usual days. */
+export const ROLLOVER_CAPS = [1.5, 2, 3] as const;
+
+/** A usable rollover cap, or null for none: at least one usual day. */
+export function rolloverCapOf(cap: unknown): number | null {
+  if (cap === null || cap === undefined || cap === '') {
+    return null;
+  }
+  const value = Number(cap);
+  return Number.isFinite(value) && value >= 1 ? value : null;
+}
+
+export type DayLimits = {
+  /** Each day's limit, `from` to `through`, in paise. */
+  limits: Map<string, number>;
+  /** Paise the cap held back over those days. */
+  heldBack: number;
+  /** A usual day's limit in paise: `start` over the counted days. */
+  usual: number;
+  /** The cap's ceiling for a day, in paise; null without a cap. */
+  ceiling: number | null;
+};
+
+/**
+ * Every counted day's limit, the rolling formula day by day, in paise:
+ * `start` is the cycle's day-to-day money from `from` on, `spend` the paise
+ * spent per day. Without a cap a day gets what is left over the days left,
+ * so leftovers carry forward and overspending comes off the days after.
+ *
+ * With a rollover cap the ceiling is `cap` usual days, a usual day being
+ * `start` over the counted days. When what is left would give a day more,
+ * the excess is held back: it stops raising later days (an overspend then
+ * still lowers the next day) and stays unspent, extra savings at month end.
+ */
+export function rollingDayLimits(
+  start: number,
+  spend: ReadonlyMap<string, number>,
+  from: string,
+  through: string,
+  cycle: CycleRange,
+  cap?: number | null,
+): DayLimits {
+  const multiple = rolloverCapOf(cap);
+  const counted = remainingDays(from, cycle);
+  const usual = limitPaise(start, counted);
+  const ceiling = multiple === null || counted <= 0 ? null : Math.floor(usual * multiple);
+  const limits = new Map<string, number>();
+  let pool = start;
+  let heldBack = 0;
+  for (let day = from; day <= through && day <= cycle.end; day = addDaysISO(day, 1)) {
+    const days = remainingDays(day, cycle);
+    if (ceiling !== null && pool > ceiling * days) {
+      heldBack += pool - ceiling * days;
+      pool = ceiling * days;
+    }
+    limits.set(day, limitPaise(pool, days));
+    pool -= spend.get(day) ?? 0;
+  }
+  return {limits, heldBack, ceiling, usual};
 }
 
 /**
@@ -344,21 +434,29 @@ export function monthState(inputs: MonthInputs, today: string): MonthState {
   const before = already + sumBetween(spend, countFrom, today);
   const todaySpend = spend.get(today) ?? 0;
   const days = remainingDays(today, cycle);
-  const limit = limitPaise(spendable - before, days);
+  const {limits, heldBack, ceiling, usual} = rollingDayLimits(
+    spendable - already,
+    spend,
+    countFrom,
+    today,
+    cycle,
+    inputs.rolloverCap,
+  );
+  // Before the budget starts, today is not a counted day: it shows the
+  // limit the first one would get.
+  const limit =
+    limits.get(today) ??
+    limitPaise(ceiling === null ? spendable - before : Math.min(spendable - before, ceiling * days), days);
   const remaining = spendable - before - todaySpend;
 
   // Days before today get the limit they had; today and the rest of the
   // week are shown at today's limit, what they get if it is kept to.
-  const weekStart = laterOf(laterOf(mondayOf(today), cycle.start), countFrom);
-  const weekEnd = earlierOf(addDaysISO(mondayOf(today), 6), cycle.end);
+  const {start: weekStart, end: weekEnd} = weekWindow(today, countFrom, cycle.end);
   let weekTotal = 0;
   let weekSpent = 0;
   for (let day = weekStart; day <= weekEnd; day = addDaysISO(day, 1)) {
     if (day < today) {
-      weekTotal += limitPaise(
-        spendable - already - sumBetween(spend, countFrom, day),
-        remainingDays(day, cycle),
-      );
+      weekTotal += limits.get(day) ?? 0;
       weekSpent += spend.get(day) ?? 0;
     } else {
       weekTotal += limit;
@@ -391,6 +489,10 @@ export function monthState(inputs: MonthInputs, today: string): MonthState {
     spent: rupees(before + todaySpend),
     remainingDays: dayToCount > cycle.end ? 0 : days,
     dailyLimit: rupees(limit),
+    usualLimit: rupees(usual),
+    capLimit: ceiling === null ? null : rupees(ceiling),
+    capped: ceiling !== null && limit >= ceiling && heldBack > 0,
+    heldBack: rupees(heldBack),
     todayLeft: rupees(limit - todaySpend),
     remaining: rupees(remaining),
     overspent: remaining < 0,

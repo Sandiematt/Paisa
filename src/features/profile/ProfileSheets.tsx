@@ -21,6 +21,7 @@ import {
   TextField,
 } from '../../components/ui';
 import {useReducedMotion} from '../../hooks/useReducedMotion';
+import {ROLLOVER_CAPS} from '../../lib/budgetEngine';
 import {
   BiometricSupport,
   LockMethod,
@@ -36,6 +37,7 @@ import {
   radii,
   spacing,
 } from '../../theme';
+import {capLabel} from '../home/budgetCopy';
 import {PaydayGrid} from '../onboarding/components/PaydayGrid';
 import {StagedLock} from '../security/BiometricLockProvider';
 import {PinPad} from '../security/PinPad';
@@ -389,6 +391,123 @@ export function AppLockSheet({
               index > 0 && styles.goalGap,
               selected && styles.lockOptionSelected,
               option.disabled && styles.lockOptionDisabled,
+            ]}
+          >
+            <View style={styles.lockOptionText}>
+              <AppText variant="heading">{option.title}</AppText>
+              <AppText variant="caption" color={colors.muted}>
+                {option.detail}
+              </AppText>
+            </View>
+            {selected ? (
+              <CheckCircle size={22} color={colors.violet} weight="fill" />
+            ) : null}
+          </PressableScale>
+        );
+      })}
+      {message ? (
+        <AppText
+          variant="caption"
+          color={colors.roseLight}
+          style={styles.lockMessage}
+        >
+          {message}
+        </AppText>
+      ) : null}
+    </SheetFrame>
+  );
+}
+
+type RolloverCapSheetProps = {
+  visible: boolean;
+  /** The saved cap in usual days; null is none. */
+  value: number | null;
+  /** A usual day's limit this cycle, to put each cap in money; null without a budget. */
+  usualDay: number | null;
+  money: (amount: number) => string;
+  /** Saves the choice; a rejection is shown in the sheet. */
+  onChoose: (cap: number | null) => Promise<void>;
+  onClose: () => void;
+};
+
+/** How far unspent money may raise a day's limit: off, or a few usual days. */
+export function RolloverCapSheet({
+  visible,
+  value,
+  usualDay,
+  money,
+  onChoose,
+  onClose,
+}: RolloverCapSheetProps) {
+  const styles = useStyles();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (visible) {
+      setMessage(null);
+    }
+  }, [visible]);
+
+  const choose = async (cap: number | null) => {
+    if (busy) {
+      return;
+    }
+    if (cap === value) {
+      onClose();
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      await onChoose(cap);
+      onClose();
+    } catch (caught) {
+      setMessage(caught instanceof Error ? caught.message : 'Could not change this setting. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const options: {key: string; cap: number | null; title: string; detail: string}[] = [
+    {
+      key: 'off',
+      cap: null,
+      title: 'No cap',
+      detail: 'Everything you leave unspent raises the days after it',
+    },
+    ...ROLLOVER_CAPS.map(cap => ({
+      key: String(cap),
+      cap,
+      title: `${capLabel(cap)} a usual day`,
+      detail:
+        usualDay !== null && usualDay > 0
+          ? `At most ${money(Math.floor(usualDay * cap))} a day this month`
+          : 'Set a budget to see it in money',
+    })),
+  ];
+
+  return (
+    <SheetFrame visible={visible} title="Rollover cap" onClose={onClose}>
+      <AppText variant="body" color={colors.muted} style={styles.lead}>
+        Money you leave unspent rolls into the days after it, and overspending
+        comes off the next day. A cap stops a quiet stretch from making one
+        day's limit too big; anything above it stays as extra savings.
+      </AppText>
+      {options.map((option, index) => {
+        const selected = option.cap === value;
+        return (
+          <PressableScale
+            key={option.key}
+            onPress={() => choose(option.cap)}
+            disabled={busy}
+            accessibilityRole="radio"
+            accessibilityState={{checked: selected, disabled: busy}}
+            accessibilityLabel={`${option.title}. ${option.detail}`}
+            style={[
+              styles.lockOption,
+              index > 0 && styles.goalGap,
+              selected && styles.lockOptionSelected,
             ]}
           >
             <View style={styles.lockOptionText}>

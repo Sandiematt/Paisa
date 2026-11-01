@@ -6,6 +6,7 @@ import {cycleRangeFor} from '../../lib/budgetEngine';
 import {BudgetFlowState, loadBudgetFlow} from '../../lib/budgetFlow';
 import {BudgetHistory, EMPTY_HISTORY, loadBudgetHistory} from '../../lib/budgetMonths';
 import {CategoryRow, loadCategories} from '../../lib/categoriesStore';
+import {loadRolloverCap} from '../../lib/rolloverCap';
 import {saveDueRecurring} from '../../lib/recurring';
 import {applyScheduledSetup} from '../../lib/scheduledSetup';
 import {
@@ -35,9 +36,16 @@ export type BudgetData = {
   billMonths: BillMonth[];
   history: BudgetHistory;
   flow: BudgetFlowState | null | undefined;
+  /** The daily limit's rollover cap in usual days; null is none. */
+  rolloverCap: number | null;
 };
 
-const NO_BUDGET_DATA: BudgetData = {billMonths: [], history: EMPTY_HISTORY, flow: undefined};
+const NO_BUDGET_DATA: BudgetData = {
+  billMonths: [],
+  history: EMPTY_HISTORY,
+  flow: undefined,
+  rolloverCap: null,
+};
 
 export function useHomeDashboard(
   refreshNonce: number,
@@ -105,12 +113,13 @@ export function useHomeDashboard(
       fetchStartedAt = Date.now();
       // Bill statuses decide which due-day copies may be added below, so
       // when they cannot be read no copy is added this time round.
-      const [nextCategories, loaded, bills, history, flow] = await Promise.all([
+      const [nextCategories, loaded, bills, history, flow, rolloverCap] = await Promise.all([
         loadCategories(),
         loadTransactions(),
         loadBillMonths().catch(() => null),
         loadBudgetHistory().catch(() => null),
         loadBudgetFlow(user.id).catch(() => undefined),
+        loadRolloverCap(user.id).catch(() => undefined),
       ]);
       let nextTransactions = loaded;
       // Only touches the opening balance when it is missing or out of place.
@@ -152,6 +161,7 @@ export function useHomeDashboard(
         billMonths: bills?.months ?? current.billMonths,
         history: history ?? current.history,
         flow: flow === undefined ? current.flow : flow,
+        rolloverCap: rolloverCap === undefined ? current.rolloverCap : rolloverCap,
       }));
       setLedgerAsOf(fetchStartedAt);
       setUpdatedAt(new Date());

@@ -61,6 +61,7 @@ export type Database = {
           already_spent: number;
           budget_flow_started_on: string | null;
           budget_flow_source: BudgetFlowSource | null;
+          rollover_cap: number | null;
           created_at: string;
           updated_at: string;
         };
@@ -80,6 +81,7 @@ export type Database = {
           already_spent?: number;
           budget_flow_started_on?: string | null;
           budget_flow_source?: BudgetFlowSource | null;
+          rollover_cap?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -99,6 +101,7 @@ export type Database = {
           already_spent?: number;
           budget_flow_started_on?: string | null;
           budget_flow_source?: BudgetFlowSource | null;
+          rollover_cap?: number | null;
           created_at?: string;
           updated_at?: string;
         };

@@ -3,6 +3,7 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 
 import {ProgressBar} from '../src/components/ui';
 import {BudgetDetailsScreen, billStatusLine} from '../src/features/home/BudgetDetailsScreen';
+import {dayMonth} from '../src/features/home/budgetCopy';
 import {BudgetFacts, budgetForCycle} from '../src/lib/budgetInputs';
 import {TransactionRow} from '../src/lib/transactionsStore';
 
@@ -132,6 +133,40 @@ describe('BudgetDetailsScreen daily limit', () => {
     expect(text).toContain('Spent this week');
     expect(text).toContain(`₹450 of ${'₹'}${state.week.total.toLocaleString('en-IN', {maximumFractionDigits: 0})}`);
     expect(planBars(tree)).toHaveLength(1);
+  });
+
+  it('dates the week it shows: Monday 12 to Sunday 18 October', async () => {
+    const {state} = budgetFor(LEDGER);
+    const text = textOf(await render(screen({budget: state})));
+    expect(text).toContain(`${dayMonth('2026-10-12')} – ${dayMonth('2026-10-18')}`);
+  });
+
+  it('shows a week of limits, not one day, on a cycle that starts on a Sunday', async () => {
+    // 1 November 2026 is a Sunday: the week runs 1 to 7 November.
+    const {state} = budgetFor([], {}, '2026-11-01');
+    const text = textOf(await render(screen({budget: state})));
+    const weekly = Math.round(state.dailyLimit * 7).toLocaleString('en-IN');
+    expect(state.week.total).toBeCloseTo(state.dailyLimit * 7, 2);
+    expect(text).toContain(`₹0 of ₹${weekly}`);
+    expect(text).toContain(`${dayMonth('2026-11-01')} – ${dayMonth('2026-11-07')}`);
+  });
+
+  it('says why today is held at the rollover cap', async () => {
+    // Nothing spent for most of October: uncapped, the 28th would get 31,000 / 4.
+    const {state} = budgetFor([], {rolloverCap: 2}, '2026-10-28');
+    expect(state.capped).toBe(true);
+    const tree = await render(screen({budget: state}));
+    const text = textOf(tree);
+    expect(text).toContain('₹2,000');
+    // Held back from the 17th, the first day 31,000 over the days left passed 2,000.
+    expect(text).toContain('Held at your 2× rollover cap. ₹23,000 above it stays as extra savings.');
+    expect(tree.root.findAll(node => node.props.testID === 'rollover-cap-note')).not.toHaveLength(0);
+  });
+
+  it('says nothing about a cap that is not holding today back', async () => {
+    const {state} = budgetFor(LEDGER, {rolloverCap: 2});
+    const tree = await render(screen({budget: state}));
+    expect(tree.root.findAll(node => node.props.testID === 'rollover-cap-note')).toHaveLength(0);
   });
 
   it('marks today as over without blocking anything', async () => {

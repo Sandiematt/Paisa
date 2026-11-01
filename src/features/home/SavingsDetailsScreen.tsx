@@ -2,14 +2,14 @@ import React, {useMemo} from 'react';
 import {View} from 'react-native';
 import {Target} from 'phosphor-react-native/src/icons/Target';
 
-import {AppText, Card, GhostButton} from '../../components/ui';
+import {AppText, Card, GhostButton, ProgressBar} from '../../components/ui';
 import {MonthState} from '../../lib/budgetEngine';
 import {BudgetHistory, BudgetMonth} from '../../lib/budgetMonths';
 import {CategoryRow} from '../../lib/categoriesStore';
 import {formatMoney} from '../../lib/formatMoney';
 import {TransactionRow} from '../../lib/transactionsStore';
 import {colors, makeStyles, spacing} from '../../theme';
-import {dayMonth, partialLabel} from './budgetCopy';
+import {dayMonth, extraSavingsShare, partialLabel} from './budgetCopy';
 import {DetailsFrame, HeroCard, StatCard, StatRow, useDetailsStyles} from './DetailsParts';
 import {relatedTransactions} from './homeInsights';
 import {HomeRange, rangeScopeLabel, yearlyFromMonthly} from './homeReport';
@@ -130,6 +130,7 @@ export function SavingsDetailsScreen({
   const money = (amount: number) => formatMoney(amount, currencySymbol, {decimals: 0});
   const goal = budget?.savingsGoal ?? monthlySavingsGoal;
   const projected = budget && budget.kind === 'active' ? budget.projectedExtra : 0;
+  const extraLeft = budget ? extraSavingsShare(budget) : 0;
   const overspent = budget?.overspent ?? false;
   const goalsSoFar = history.months.reduce((sum, month) => sum + month.savingsGoal, 0);
   const items = useMemo(
@@ -187,6 +188,18 @@ export function SavingsDetailsScreen({
             {money(projected)}
           </AppText>
         </View>
+        {budget?.kind === 'active' && budget.spendable > 0 ? (
+          <View style={styles.extraMeter} testID="extra-savings-meter">
+            <ProgressBar
+              progress={extraLeft}
+              gradient={overspent ? 'rose' : 'savings'}
+              height={6}
+            />
+            <AppText variant="caption" color={colors.muted} style={styles.extraNote}>
+              {`${money(projected)} of ${money(budget.spendable)} still unspent`}
+            </AppText>
+          </View>
+        ) : null}
       </Card>
 
       <StatRow>
@@ -285,6 +298,12 @@ const useStyles = makeStyles(() => ({
   note: {
     marginTop: spacing.xs,
     marginBottom: spacing.sm,
+  },
+  extraMeter: {
+    paddingBottom: spacing.md,
+  },
+  extraNote: {
+    marginTop: spacing.sm,
   },
   actions: {
     flexDirection: 'row',

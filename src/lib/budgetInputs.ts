@@ -34,6 +34,8 @@ export type BudgetFacts = {
   flow?: BudgetFlowState | null;
   /** Detected payments not in the ledger yet, per day. */
   unsyncedSpend?: Record<string, number>;
+  /** The most a day's limit may be, in usual days (budgetEngine MonthInputs.rolloverCap); null is none. */
+  rolloverCap?: number | null;
 };
 
 export type CycleBudget = {
@@ -169,6 +171,7 @@ export function budgetForCycle(facts: BudgetFacts, day: string): CycleBudget {
     planValid:
       facts.total > 0 &&
       validatePlan(facts.total, plannedBillTotal(bills), facts.savingsGoal).status !== 'over',
+    rolloverCap: facts.rolloverCap ?? null,
   };
   return {cycle, inputs, bills, state: monthState(inputs, day)};
 }
