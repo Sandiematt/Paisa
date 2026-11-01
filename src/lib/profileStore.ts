@@ -18,6 +18,7 @@ import {
   seedOpeningBalance,
   walletBalanceFrom,
 } from './transactionsStore';
+import {saveRolloverCap} from './rolloverCap';
 
 const cacheKey = (userId: string) => `sikka.profile.${userId}`;
 
@@ -209,6 +210,17 @@ export type SaveProfileOptions = {
   keepCurrency?: boolean;
 };
 
+/**
+ * A saved draft as the app keeps holding it. The rollover cap is set once by
+ * onboarding and then changed from Profile, so a held copy must not ride along
+ * on a later profile save and undo that change.
+ */
+export function withoutRolloverCap(draft: OnboardingDraft): OnboardingDraft {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const {rolloverCap: _cap, ...rest} = draft;
+  return rest;
+}
+
 export async function saveProfile(
   userId: string,
   draft: OnboardingDraft,
@@ -222,6 +234,8 @@ export async function saveProfile(
     confirmPassword: _confirm,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     appLockPin: _pin,
+    // Kept on its own column and saved below, so a stale copy in a draft never undoes a later change.
+    rolloverCap,
     ...rest
   } = draft;
   await AsyncStorage.setItem(cacheKey(userId), JSON.stringify(rest));
@@ -237,6 +251,9 @@ export async function saveProfile(
     throw error;
   }
 
+  if (rolloverCap !== undefined) {
+    await saveRolloverCap(userId, rolloverCap).catch(() => {});
+  }
   await trySeedOpeningBalance(rest.startingBalance);
   await trySaveAccountFields(rest.payday, rest.budgetCustom);
 

@@ -613,57 +613,98 @@ function computeCategoryBreakdown(
 // Highlights (fully deterministic — the AI never touches these)
 // ---------------------------------------------------------------------------
 
-function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number): string {
   return `₹${new Intl.NumberFormat('en-IN', {maximumFractionDigits: 0}).format(Math.round(Math.abs(amount)))}`;
+}
+
+/** "2.5× your usual week": a big jump reads better as a multiple than as "+150%". */
+function aboveUsualText(percentAboveAverage: number, noun: string): string {
+  const ratio = 1 + percentAboveAverage / 100;
+  if (ratio >= 2) return `${Math.round(ratio * 10) / 10}× your usual ${noun}`;
+  return `${percentAboveAverage}% above your usual ${noun}`;
+}
+
+/** The single biggest category, for a period with nothing earlier to compare it with. */
+function topCategoryHighlight(stats: CalculatedStats, noun: string): Highlight | null {
+  const top = stats.categoryBreakdown[0];
+  if (!top) return null;
+  const amount = formatCurrency(top.currentAmount);
+  const isEverything = stats.categoryBreakdown.length === 1;
+  return {
+    category: top.category,
+    text: isEverything
+      ? `Everything this ${noun} went to ${top.category} — ${amount}`
+      : `${top.category} was your biggest spend this ${noun} — ${amount}`,
+    direction: 'flat',
+    tone: 'neutral',
+    amount: roundInt(top.currentAmount),
+  };
 }
 
 function buildHighlights(stats: CalculatedStats): Highlight[] {
   const highlights: Highlight[] = [];
-  const coveredCategories = new Set<string>();
+  const noun = periodNoun(stats.period);
   const comparisonLabel = previousPeriodLabel(stats.period);
+  // Nothing at all was spent in the previous period, usually because the user
+  // only just started tracking. Every category would then read as "new vs last
+  // week", which says nothing, so say where the money went instead.
+  const hasComparison = stats.periodComparison.previousTotal > 0;
 
-  for (const unusual of stats.unusualSpending) {
-    coveredCategories.add(unusual.category.toLowerCase());
-    const text = unusual.isNewSpending
-      ? `${unusual.category} spending is new this ${periodNoun(stats.period)} — ${formatCurrency(unusual.currentAmount)}`
-      : `${unusual.category} is ${unusual.percentAboveAverage}% above your usual ${periodNoun(stats.period)} (${formatCurrency(
-          unusual.currentAmount,
-        )})`;
-    highlights.push({
-      category: unusual.category,
-      text,
-      direction: 'up',
-      amount: roundInt(unusual.currentAmount - unusual.averageAmount),
-    });
-  }
+  if (hasComparison) {
+    const coveredCategories = new Set<string>();
 
-  for (const change of stats.categoryChanges) {
-    if (coveredCategories.has(change.category.toLowerCase())) continue;
-    coveredCategories.add(change.category.toLowerCase());
-
-    let text: string;
-    if (change.changeKind === 'new') {
-      text = `${change.category} is new spending vs ${comparisonLabel} — ${formatCurrency(change.currentAmount)}`;
-    } else {
-      const verb = change.direction === 'down' ? 'down' : 'up';
-      text = `${change.category} ${verb} ${formatCurrency(change.changeAmount)} vs ${comparisonLabel}`;
+    for (const unusual of stats.unusualSpending) {
+      coveredCategories.add(unusual.category.toLowerCase());
+      const amount = formatCurrency(unusual.currentAmount);
+      highlights.push({
+        category: unusual.category,
+        text:
+          unusual.isNewSpending || unusual.percentAboveAverage === null
+            ? `${amount} on ${unusual.category} — you don't usually spend here`
+            : `${unusual.category} is ${aboveUsualText(unusual.percentAboveAverage, noun)} — ${amount}`,
+        direction: 'up',
+        tone: 'bad',
+        amount: roundInt(unusual.currentAmount - unusual.averageAmount),
+      });
     }
 
-    highlights.push({
-      category: change.category,
-      text,
-      direction: change.changeKind === 'new' ? 'up' : change.direction,
-      amount: roundInt(Math.abs(change.changeAmount)),
-    });
-    if (highlights.length >= MAX_HIGHLIGHTS) break;
+    for (const change of stats.categoryChanges) {
+      if (highlights.length >= MAX_HIGHLIGHTS) break;
+      if (coveredCategories.has(change.category.toLowerCase())) continue;
+      coveredCategories.add(change.category.toLowerCase());
+
+      const isNew = change.changeKind === 'new';
+      const isDown = change.direction === 'down';
+      highlights.push({
+        category: change.category,
+        text: isNew
+          ? `${formatCurrency(change.currentAmount)} on ${change.category} — nothing there ${comparisonLabel}`
+          : `${change.category} ${isDown ? 'down' : 'up'} ${formatCurrency(change.changeAmount)} vs ${comparisonLabel}`,
+        direction: isNew ? 'up' : change.direction,
+        tone: isDown ? 'good' : 'bad',
+        amount: roundInt(Math.abs(change.changeAmount)),
+      });
+    }
+  } else {
+    const top = topCategoryHighlight(stats, noun);
+    if (top) highlights.push(top);
   }
 
-  if (highlights.length < MAX_HIGHLIGHTS && stats.savingsProgress.goalSet && stats.savingsProgress.percentOfGoal !== null) {
-    const {percentOfGoal, monthlySavingsGoal, savedSoFarThisMonth, onTrack} = stats.savingsProgress;
+  // Savings is income minus spending for the calendar month, whatever period is
+  // shown. At or below zero that is usually income not logged yet, which a
+  // "-40% of your goal" line would only confuse, so it is left out.
+  const {goalSet, monthlySavingsGoal, savedSoFarThisMonth, onTrack} = stats.savingsProgress;
+  if (highlights.length < MAX_HIGHLIGHTS && goalSet && monthlySavingsGoal !== null && savedSoFarThisMonth > 0) {
+    const saved = formatCurrency(savedSoFarThisMonth);
+    const goal = formatCurrency(monthlySavingsGoal);
+    const reached = savedSoFarThisMonth >= monthlySavingsGoal;
     highlights.push({
       category: 'Savings',
-      text: `${percentOfGoal}% of your ${formatCurrency(monthlySavingsGoal ?? 0)} savings goal reached`,
-      direction: onTrack ? 'up' : 'down',
+      text: reached
+        ? `Monthly savings goal of ${goal} reached — ${saved} saved this month`
+        : `${saved} of your ${goal} monthly savings goal saved${onTrack ? '' : ' — behind pace'}`,
+      direction: 'up',
+      tone: reached || onTrack ? 'good' : 'bad',
       amount: roundInt(savedSoFarThisMonth),
     });
   }
@@ -674,8 +715,9 @@ function buildHighlights(stats: CalculatedStats): Highlight[] {
       category: 'Recurring',
       text: `${items.length} recurring payment${items.length === 1 ? '' : 's'} totaling ${formatCurrency(
         currentTotal,
-      )} this ${periodNoun(stats.period)}`,
+      )} this ${noun}`,
       direction: 'flat',
+      tone: 'neutral',
       amount: roundInt(currentTotal),
     });
   }

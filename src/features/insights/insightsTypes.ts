@@ -43,7 +43,8 @@ export type CategoryMovement = {
 
 export type AiHighlight = {
   id: string;
-  tone: 'positive' | 'warning';
+  tone: 'positive' | 'warning' | 'neutral';
+  direction: 'up' | 'down' | 'flat';
   text: string;
 };
 

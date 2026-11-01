@@ -3,6 +3,7 @@ import {View} from 'react-native';
 
 import {AppText, Stagger, TextField, TogglePill} from '../../../components/ui';
 import {
+  ROLLOVER_CAPS,
   cycleLength,
   cycleRangeFor,
   nextCycleStart,
@@ -19,7 +20,7 @@ import {
 import {billPaidAnswerOf, billsStartingNextCycle} from '../../../lib/scheduledSetup';
 import {localDateISO} from '../../../lib/transactionsStore';
 import {colors, makeStyles, radii, spacing} from '../../../theme';
-import {dayMonth} from '../../home/budgetCopy';
+import {capLabel, dayMonth} from '../../home/budgetCopy';
 import {STEP_TITLES, currencyByCode} from '../constants';
 import {BillsPaidQuestion} from '../components/BillsPaidQuestion';
 import {StepLayout} from '../components/StepLayout';
@@ -218,8 +219,33 @@ export function BudgetStep({
         </View>
       </Stagger>
 
+      <Stagger index={4} style={styles.spaced}>
+        <AppText variant="label" color={colors.lavender}>
+          Rollover cap
+        </AppText>
+        <AppText variant="caption" color={colors.muted}>
+          Unspent money raises the days after it. A cap stops a quiet stretch from making one
+          day's limit too big; anything above it stays as extra savings.
+        </AppText>
+        <View style={styles.pills} accessibilityRole="radiogroup" testID="rollover-cap">
+          <TogglePill
+            label="No cap"
+            selected={(draft.rolloverCap ?? null) === null}
+            onPress={() => onChange('rolloverCap', null)}
+          />
+          {ROLLOVER_CAPS.map(cap => (
+            <TogglePill
+              key={`cap-${cap}`}
+              label={`${capLabel(cap)} a usual day`}
+              selected={draft.rolloverCap === cap}
+              onPress={() => onChange('rolloverCap', cap)}
+            />
+          ))}
+        </View>
+      </Stagger>
+
       {total > 0 ? (
-        <Stagger index={4} style={styles.spaced}>
+        <Stagger index={5} style={styles.spaced}>
           <View style={styles.readout}>
             <View style={styles.committed} testID="budget-breakdown">
               <BreakdownRow label="Monthly budget" value={money(total)} />

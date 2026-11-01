@@ -83,7 +83,7 @@ import {
   removeBill,
   saveBill,
 } from '../../lib/bills';
-import {SaveProfileOptions} from '../../lib/profileStore';
+import {SaveProfileOptions, withoutRolloverCap} from '../../lib/profileStore';
 import {
   billPaidAnswerOf,
   entriesStartingNextCycle,
@@ -509,7 +509,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
       }
       setRestartDone(true);
       if (completed) {
-        setProfileDraft(completed);
+        setProfileDraft(withoutRolloverCap(completed));
         await Promise.resolve(onProfileSave(completed, {keepCurrency: true})).catch(() => {});
       }
       setRefreshNonce(n => n + 1);
@@ -1020,10 +1020,9 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
               setRefreshNonce(value => value + 1);
             }}
             onSignOut={onSignOut}
-            onOpenAutoTracking={() => {
-              setProfileOpen(false);
-              openAfterHandoff(() => setAutoTrackOpen(true));
-            }}
+            // Stacks over Profile (which stays mounted underneath) so Back is
+            // a plain slide-down with no flash of Home in between.
+            onOpenAutoTracking={() => setAutoTrackOpen(true)}
             monthlyBills={plannedBills}
             billsQuestion={billsQuestion}
             bills={editable}
@@ -1074,7 +1073,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
             onRequestClose={() => finishRestart(null)}>
             <OnboardingFlow
               mode="restart"
-              initialDraft={profileDraft}
+              initialDraft={{...profileDraft, rolloverCap: budgetData.rolloverCap}}
               passwordless
               knownBills={editable.map(bill => ({key: bill.key, label: bill.label, amount: bill.amount}))}
               onComplete={completed => finishRestart(completed)}
@@ -1085,13 +1084,11 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
           <AutoTrackingScreen
             visible={autoTrackOpen}
             currencySymbol={currency.symbol}
-            // Back returns to Profile, where the dashboard was opened from.
-            onClose={() => {
-              setAutoTrackOpen(false);
-              openAfterHandoff(() => setProfileOpen(true));
-            }}
+            // Back reveals Profile, still open underneath.
+            onClose={() => setAutoTrackOpen(false)}
             onOpenBudget={() => {
               setAutoTrackOpen(false);
+              setProfileOpen(false);
               openAfterHandoff(() => setBudgetEditOpen(true));
             }}
           />

@@ -17,6 +17,7 @@ import {
   profilePayload,
   saveProfile,
   SaveProfileOptions,
+  withoutRolloverCap,
 } from '../lib/profileStore';
 import {
   addScheduledSetup,
@@ -213,7 +214,7 @@ export function RootNavigator() {
           );
         }
       }
-      setDraft({...completed, appLockPin: undefined});
+      setDraft(withoutRolloverCap({...completed, appLockPin: undefined}));
     },
     [router, signUp, stageAccountPrefs],
   );
@@ -287,7 +288,7 @@ export function RootNavigator() {
           'Your setup is on this device. Check your connection, then save your profile again from Profile.',
         );
       }
-      setDraft({...completed, appLockPin: undefined});
+      setDraft(withoutRolloverCap({...completed, appLockPin: undefined}));
       setNeedsSetup(false);
     },
     [stageAccountPrefs, user?.id],
@@ -316,7 +317,7 @@ export function RootNavigator() {
           'Some of this setup may not be saved. Check your connection, then set it again from Profile.',
         );
       }
-      setDraft({...completed, appLockPin: undefined});
+      setDraft(withoutRolloverCap({...completed, appLockPin: undefined}));
       setNeedsUpgrade(false);
     },
     [stageAppLock, user],
@@ -333,7 +334,7 @@ export function RootNavigator() {
 
   const handleProfileSave = useCallback(
     async (updated: OnboardingDraft, options?: SaveProfileOptions) => {
-      setDraft(updated);
+      setDraft(withoutRolloverCap(updated));
       if (!user?.id) {
         return;
       }

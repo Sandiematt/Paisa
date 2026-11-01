@@ -5,6 +5,7 @@ import {ArrowRight} from 'phosphor-react-native/src/icons/ArrowRight';
 import {AppText, Card, PressableScale, ProgressBar} from '../../components/ui';
 import {formatMoney} from '../../lib/formatMoney';
 import {DailyAllowance} from '../../lib/autotrack/types';
+import {spendableToday} from '../home/budgetCopy';
 import {colors, makeStyles, spacing} from '../../theme';
 import {daysLabel, monthProgress} from './autoTrackFormat';
 
@@ -62,7 +63,7 @@ export function AllowanceCard({
         adjustsFontSizeToFit
         minimumFontScale={0.6}
         style={styles.hero}>
-        {money(allowance.dailyLimit)}
+        {money(spendableToday(allowance.dailyLimit, allowance.remainingToday))}
       </AppText>
 
       <View style={styles.split}>

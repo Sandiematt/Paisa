@@ -26,7 +26,12 @@ export type SetupStep = {
   action: SetupAction;
   /** What to try when it will not turn on. */
   help: string;
+  /** The full walkthrough online; "Need help?" opens it instead of `help`. */
+  helpUrl?: string;
 };
+
+/** The step-by-step setup guide for reading payment screens, either method. */
+export const SETUP_HELP_URL = 'https://paisa-setup.sandiematt.com';
 
 /** Step 1 with the standard method: Paisa's accessibility service. */
 function standardStep(status: DetectorStatus | null): SetupStep {
@@ -39,6 +44,7 @@ function standardStep(status: DetectorStatus | null): SetupStep {
     actionLabel: 'Turn on',
     action: 'accessibility-settings',
     help: 'Find "Paisa auto-tracking" and switch it on. Greyed out? App info › ⋮ › Allow restricted settings.',
+    helpUrl: SETUP_HELP_URL,
   };
 }
 
@@ -50,6 +56,7 @@ function shizukuStep(status: DetectorStatus): SetupStep {
     required: true,
     done: status.shizukuCaptureRunning,
     help: 'Start Shizuku with wireless debugging (Shizuku shows how). Start it again after a restart.',
+    helpUrl: SETUP_HELP_URL,
   };
   switch (status.shizukuState) {
     case 'ready':

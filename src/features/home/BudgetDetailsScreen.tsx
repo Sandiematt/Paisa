@@ -18,7 +18,7 @@ import {
   daysLeftLabel,
   partialLabel,
   planNotice,
-  shownLimit,
+  spendableToday,
 } from './budgetCopy';
 import {DetailsFrame, HeroCard, StatCard, StatRow, useDetailsStyles} from './DetailsParts';
 import {relatedTransactions} from './homeInsights';
@@ -216,7 +216,7 @@ export function BudgetDetailsScreen({
                 adjustsFontSizeToFit
                 minimumFontScale={0.7}
                 style={planStyles.limit}>
-                {money(shownLimit(budget.dailyLimit))}
+                {money(spendableToday(budget.dailyLimit, budget.todayLeft))}
               </AppText>
               <View style={planStyles.row}>
                 <AppText variant="label" color={colors.muted}>

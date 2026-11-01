@@ -1,5 +1,5 @@
 import React, {useEffect, useRef, useState} from 'react';
-import {AppState, View} from 'react-native';
+import {AppState, Linking, View} from 'react-native';
 import {Check} from 'phosphor-react-native/src/icons/Check';
 
 import {AppText, Card, PressableScale} from '../../components/ui';
@@ -134,12 +134,21 @@ function StepRow({number, step, stillOff, last, onAction}: StepRowProps) {
                   {step.actionLabel}
                 </AppText>
               </PressableScale>
-              {showHelp ? null : (
+              {/* A step with a guide online keeps the link: the walkthrough
+                  helps most when the step is still off. */}
+              {showHelp && !step.helpUrl ? null : (
                 <PressableScale
-                  onPress={() => setHelpOpen(true)}
+                  onPress={() => {
+                    if (step.helpUrl) {
+                      Linking.openURL(step.helpUrl).catch(() => setHelpOpen(true));
+                    } else {
+                      setHelpOpen(true);
+                    }
+                  }}
                   scaleTo={0.97}
-                  accessibilityRole="button"
+                  accessibilityRole={step.helpUrl ? 'link' : 'button'}
                   accessibilityLabel={`Help: ${step.title}`}
+                  accessibilityHint={step.helpUrl ? 'Opens the setup guide in your browser' : undefined}
                   style={styles.helpLink}>
                   <AppText variant="label" color={colors.lavender}>
                     Need help?

@@ -1,4 +1,6 @@
+/// <reference path="../supabase/functions/deno-env.d.ts" />
 import {calculateInsightStats, earliestDateNeeded} from '../supabase/functions/generate-insights/calculations';
+import {buildFallbackSummary} from '../supabase/functions/generate-insights/ai';
 import type {TransactionRecord} from '../supabase/functions/generate-insights/types';
 
 let nextId = 0;
@@ -129,5 +131,58 @@ describe('month and week keep their behaviour', () => {
     expect(stats.monthlyBudget).toBeNull();
     expect(stats.transactionCount).toBe(0);
     expect(stats.dailyAverage).toBe(0);
+  });
+});
+
+describe('highlights', () => {
+  const housing = {name: 'Housing', slug: 'housing'};
+  const salary = (date: string, amount: number) => expense(date, amount, null, {type: 'income'});
+
+  it('says where the money went, not "new vs last week", when there is nothing to compare with', () => {
+    const {highlights} = calculateInsightStats([expense('2026-10-30', 2000, housing)], profile, '2026-11-01', 'week');
+    expect(highlights.map(h => h.text)).toEqual(['Everything this week went to Housing — ₹2,000']);
+    expect(highlights[0].tone).toBe('neutral');
+  });
+
+  it('reports a savings goal that is far exceeded as reached, never as "4600%"', () => {
+    const {highlights} = calculateInsightStats(
+      [expense('2026-10-30', 2000, housing), salary('2026-11-01', 23000)],
+      {...profile, monthlySavingsGoal: 500},
+      '2026-11-01',
+      'week',
+    );
+    const savings = highlights.find(h => h.category === 'Savings');
+    expect(savings?.text).toBe('Monthly savings goal of ₹500 reached — ₹23,000 saved this month');
+    expect(savings?.tone).toBe('good');
+    expect(highlights.some(h => h.text.includes('%'))).toBe(false);
+  });
+
+  it('leaves the savings line out when the month has no savings yet', () => {
+    const {highlights} = calculateInsightStats(
+      [expense('2026-11-01', 300, housing)],
+      {...profile, monthlySavingsGoal: 500},
+      '2026-11-01',
+      'week',
+    );
+    expect(highlights.some(h => h.category === 'Savings')).toBe(false);
+  });
+
+  it('marks spending going down as good and a new category against real history as bad', () => {
+    const {highlights} = calculateInsightStats(
+      [expense('2026-10-20', 900), expense('2026-10-28', 200), expense('2026-10-29', 400, housing)],
+      profile,
+      '2026-11-01',
+      'week',
+    );
+    expect(highlights.find(h => h.category === 'Dining')).toMatchObject({text: 'Dining down ₹700 vs last week', tone: 'good'});
+    expect(highlights.find(h => h.category === 'Housing')).toMatchObject({
+      text: '₹400 on Housing — nothing there last week',
+      tone: 'bad',
+    });
+  });
+
+  it('writes the fallback summary as an amount when there is nothing to compare with', () => {
+    const {stats} = calculateInsightStats([expense('2026-10-30', 2000, housing)], profile, '2026-11-01', 'week');
+    expect(buildFallbackSummary(stats)).toBe('This week so far: ₹2,000 spent, all of it on housing.');
   });
 });

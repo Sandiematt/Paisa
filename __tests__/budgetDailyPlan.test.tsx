@@ -177,6 +177,18 @@ describe('BudgetDetailsScreen daily limit', () => {
     expect(text).not.toContain('Overspent');
   });
 
+  it('shows nothing left to spend today once over, and less the next day', async () => {
+    const rows = [...LEDGER, expense('c', 2000, WEDNESDAY)];
+    const {state} = budgetFor(rows);
+    const text = textOf(await render(screen({budget: state})));
+    expect(text).toContain('Today you can spend₹0');
+    expect(text).not.toContain('Today you can spend₹1,475');
+
+    const tomorrow = budgetFor(rows, {}, '2026-10-15').state;
+    expect(tomorrow.dailyLimit).toBeLessThan(budgetFor(LEDGER, {}, '2026-10-15').state.dailyLimit);
+    expect(tomorrow.dailyLimit).toBeLessThan(state.dailyLimit);
+  });
+
   it('shows an overspent month with a 0 limit, never a negative one', async () => {
     const rows = [...LEDGER, expense('c', 30000, '2026-10-13')];
     const {state} = budgetFor(rows);

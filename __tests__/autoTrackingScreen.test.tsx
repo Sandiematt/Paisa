@@ -1,5 +1,5 @@
 import React from 'react';
-import {Alert, AppState} from 'react-native';
+import {Alert, AppState, Linking} from 'react-native';
 import ReactTestRenderer, {act} from 'react-test-renderer';
 
 import {PressableScale, PrimaryButton, SecondaryButton, ToggleSwitch} from '../src/components/ui';
@@ -382,6 +382,42 @@ describe('AutoTrackingScreen', () => {
     const text = textOf(tree);
     expect(text).toContain('Still off.');
     expect(text).toContain('Allow restricted settings');
+  });
+
+  it('opens the online setup guide from "Need help?" with either method', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    mockUseAutoTrack.mockReturnValue(
+      autoTrack({status: {...BOTH_ON, accessibilityEnabled: false}}),
+    );
+    let tree = await render(screen());
+    await act(async () => {
+      byLabel(tree, 'Help: Allow screen reading').props.onPress();
+    });
+    expect(openURL).toHaveBeenLastCalledWith('https://paisa-setup.sandiematt.com');
+
+    mockUseAutoTrack.mockReturnValue(
+      autoTrack({status: {...SHIZUKU_ON, shizukuState: 'not_running', shizukuCaptureRunning: false}}),
+    );
+    tree = await render(screen());
+    await act(async () => {
+      byLabel(tree, 'Help: Connect Shizuku').props.onPress();
+    });
+    expect(openURL).toHaveBeenCalledTimes(2);
+    expect(openURL).toHaveBeenLastCalledWith('https://paisa-setup.sandiematt.com');
+  });
+
+  it('keeps the payment alerts help inline', async () => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    openURL.mockClear();
+    mockUseAutoTrack.mockReturnValue(
+      autoTrack({status: {...BOTH_ON, notificationAccessEnabled: false}}),
+    );
+    const tree = await render(screen());
+    await act(async () => {
+      byLabel(tree, 'Help: Payment alerts').props.onPress();
+    });
+    expect(openURL).not.toHaveBeenCalled();
+    expect(textOf(tree)).toContain('Find "Paisa payment check" and switch it on.');
   });
 
   it('switches the setup method from the switch at the top', async () => {

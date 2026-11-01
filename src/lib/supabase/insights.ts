@@ -27,6 +27,8 @@ export type InsightHighlight = {
   category: string;
   text: string;
   direction: InsightDirection;
+  /** Good or bad news. Missing from a generate-insights deployment from before it was added. */
+  tone?: 'good' | 'bad' | 'neutral';
   amount: number;
 };
 

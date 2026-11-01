@@ -8,6 +8,7 @@
 // or the request fails for any reason, we fall back to a deterministic,
 // template-based summary so the endpoint always returns something useful.
 
+import {formatCurrency} from './calculations.ts';
 import type {CalculatedStats, PeriodKind} from './types.ts';
 
 const DEFAULT_MODEL = 'google/gemini-3.5-flash-lite';
@@ -26,6 +27,9 @@ Rules (do not break these):
 - Do NOT perform any math. Do NOT invent, estimate, round differently, or alter any number, percentage, date, or category name.
 - Only use numbers and category names that appear verbatim in the JSON you are given.
 - Write ONE short, warm, plain-English sentence (max 28 words) referencing the most significant, meaningful item in the data.
+- If "hasComparison" is false, nothing was spent in the previous period (the user has likely just started tracking): do NOT compare, do NOT call anything "new"; just say what was spent and where, using "topCategories".
+- Prefer rupee amounts over percentages. Never quote a percentage above 200% — say "more than double" or "several times" instead.
+- "savingsProgress" is for the current calendar month, whatever the period. If "goalReached" is true, say the monthly savings goal is reached; never quote a percentage of the goal.
 - A comparison's "changeKind" tells you how to phrase it: "increase"/"decrease" have a real percentage to quote; "new" means there was no spending in the comparison period at all (say it's new, don't say a percentage); "no-change" means spending was flat (say it's about the same, don't invent a percentage).
 - Use the ₹ symbol for currency amounts.
 - Do not add advice, warnings, or emojis unless the data clearly supports it.
@@ -42,13 +46,44 @@ function summaryFraming(period: PeriodKind, isPeriodComplete: boolean): string {
   return 'This week so far';
 }
 
+/** Savings line for the AI: only when there is something clear to say about it. */
+function savingsContext(stats: CalculatedStats) {
+  const {goalSet, monthlySavingsGoal, savedSoFarThisMonth, percentOfGoal, onTrack} = stats.savingsProgress;
+  // At or below zero this is usually income not logged yet (see buildHighlights).
+  if (!goalSet || monthlySavingsGoal === null || savedSoFarThisMonth <= 0) return null;
+  if (savedSoFarThisMonth >= monthlySavingsGoal) {
+    return {goalReached: true, savedThisMonth: savedSoFarThisMonth, monthlySavingsGoal};
+  }
+  return {goalReached: false, percentOfGoal, onTrack};
+}
+
 /** Trimmed, numbers-only context handed to the AI — never raw transactions. */
 function buildAiContext(stats: CalculatedStats) {
-  return {
+  const hasComparison = stats.periodComparison.previousTotal > 0;
+  const base = {
     period: stats.period,
     isPeriodComplete: stats.isPeriodComplete,
     framing: summaryFraming(stats.period, stats.isPeriodComplete),
     currency: stats.currency,
+    hasComparison,
+    savingsProgress: savingsContext(stats),
+  };
+
+  // With nothing earlier to compare against, every change would be "new":
+  // hand over where the money went instead.
+  if (!hasComparison) {
+    return {
+      ...base,
+      currentTotal: stats.periodComparison.currentTotal,
+      topCategories: stats.categoryBreakdown.slice(0, 3).map(item => ({
+        category: item.category,
+        amount: item.currentAmount,
+      })),
+    };
+  }
+
+  return {
+    ...base,
     periodComparison: {
       currentTotal: stats.periodComparison.currentTotal,
       previousTotal: stats.periodComparison.previousTotal,
@@ -68,12 +103,6 @@ function buildAiContext(stats: CalculatedStats) {
       percentAboveAverage: unusual.percentAboveAverage,
       isNewSpending: unusual.isNewSpending,
     })),
-    savingsProgress: stats.savingsProgress.goalSet
-      ? {
-          percentOfGoal: stats.savingsProgress.percentOfGoal,
-          onTrack: stats.savingsProgress.onTrack,
-        }
-      : null,
     significantChanges: stats.patternChanges.map(change => ({
       label: change.label,
       changePercent: change.changePercent,
@@ -129,17 +158,27 @@ export function buildFallbackSummary(stats: CalculatedStats): string {
   const label = previousPeriodLabel(period);
   const framing = summaryFraming(period, isPeriodComplete);
 
+  if (periodComparison.currentTotal === 0 && periodComparison.previousTotal === 0) {
+    return `${framing}: no spending recorded yet.`;
+  }
   if (periodComparison.changeKind === 'no-change') {
     return `${framing}: your spending is about the same as ${label}.`;
   }
   if (periodComparison.changeKind === 'new') {
-    return `${framing}: you started spending — there was nothing recorded ${label}.`;
+    // Nothing to compare with (usually a new user): say where the money went.
+    const top = stats.categoryBreakdown[0];
+    const spent = formatCurrency(periodComparison.currentTotal);
+    if (!top) return `${framing}: ${spent} spent.`;
+    const where = stats.categoryBreakdown.length === 1 ? 'all of it' : 'the biggest share';
+    return `${framing}: ${spent} spent, ${where} on ${top.category.toLowerCase()}.`;
   }
 
   const trendWord = periodComparison.direction === 'down' ? 'less' : 'more';
-  const pctText = periodComparison.changePercent === null ? '' : ` ${Math.abs(periodComparison.changePercent)}%`;
+  const pct = periodComparison.changePercent === null ? null : Math.abs(periodComparison.changePercent);
+  // "4600% more" is noise; past double, words read better than the number.
+  const pctText = pct === null ? '' : pct > 200 ? ' far' : ` ${pct}%`;
 
-  let sentence = `${framing}: your spending${pctText} is ${trendWord} than ${label}`;
+  let sentence = `${framing}: your spending is${pctText} ${trendWord} than ${label}`;
   const topChange = categoryChanges[0];
   if (topChange) {
     if (topChange.changeKind === 'new') {

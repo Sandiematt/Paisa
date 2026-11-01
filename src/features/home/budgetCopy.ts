@@ -15,6 +15,14 @@ export function shownLimit(limit: number): number {
   return Math.max(0, Math.floor(limit + 1e-9));
 }
 
+/**
+ * What "you can spend today" shows: today's limit, or nothing once today's
+ * spending has gone past it. The overspend still comes off the days after.
+ */
+export function spendableToday(limit: number, leftToday: number): number {
+  return leftToday < 0 ? 0 : shownLimit(limit);
+}
+
 /** "1 Nov", from `YYYY-MM-DD`. */
 export function dayMonth(iso: string): string {
   const [year, month, day] = iso.split('-').map(Number);
@@ -61,7 +69,7 @@ export function budgetStripLine(
       : {text: `${money(left)} of this week's limits left`, tone: 'normal'};
   }
   return {
-    text: `Spend ${money(shownLimit(state.dailyLimit))} today · ${money(state.remaining)} left this month`,
+    text: `Spend ${money(spendableToday(state.dailyLimit, state.todayLeft))} today · ${money(state.remaining)} left this month`,
     tone: 'normal',
   };
 }

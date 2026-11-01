@@ -45,6 +45,11 @@ export type OnboardingDraft = {
   monthlySavingsGoal: string;
   /** The user typed their own budget instead of the calculated one. */
   budgetCustom?: boolean;
+  /**
+   * The most a day's limit may rise from unspent money, in usual days (see
+   * budgetEngine ROLLOVER_CAPS); null is no cap. Undefined leaves the saved one alone.
+   */
+  rolloverCap?: number | null;
   avatarUrl?: string;
   /** Day of the month salary arrives, 1-31; 31 means the last day. */
   payday?: number | null;

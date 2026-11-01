@@ -214,13 +214,21 @@ Deno.serve(async req => {
     return {data: rows, error: null};
   };
 
-  const [{data: profileRow, error: profileError}, {data: transactionRows, error: transactionsError}] = await Promise.all([
+  // Per-user hourly cap on AI spend (consume_function_quota migration). Over it,
+  // the rule-based summary is used; the statistics are always returned. Checked
+  // alongside the data reads rather than after them, to keep the response fast.
+  const [
+    {data: profileRow, error: profileError},
+    {data: transactionRows, error: transactionsError},
+    {data: withinQuota, error: quotaError},
+  ] = await Promise.all([
     supabase
       .from('profiles')
       .select('currency, monthly_income, monthly_budget, monthly_savings_goal, starting_balance')
       .eq('id', user.id)
       .maybeSingle(),
     fetchTransactions(),
+    supabase.rpc('consume_function_quota', {p_function: 'generate-insights'}),
   ]);
 
   if (profileError) {
@@ -235,11 +243,6 @@ Deno.serve(async req => {
   const profile = profileRow ? mapProfileRow(profileRow as ProfileQueryRow) : null;
 
   const {stats, highlights} = calculateInsightStats(transactions, profile, referenceDate, period);
-  // Per-user hourly cap on AI spend (consume_function_quota migration). Over it,
-  // the rule-based summary is used; the statistics are always returned.
-  const {data: withinQuota, error: quotaError} = await supabase.rpc('consume_function_quota', {
-    p_function: 'generate-insights',
-  });
   if (quotaError) {
     console.error('generate-insights: quota check failed', quotaError);
   }

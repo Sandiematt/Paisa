@@ -169,10 +169,14 @@ export interface CalculatedStats {
 // Response shape returned to React Native
 // ---------------------------------------------------------------------------
 
+/** Whether a highlight is good or bad news. Separate from direction: savings going up is good, spending going up is not. */
+export type HighlightTone = 'good' | 'bad' | 'neutral';
+
 export interface Highlight {
   category: string;
   text: string;
   direction: Direction;
+  tone: HighlightTone;
   amount: number;
 }
 

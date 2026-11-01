@@ -10,6 +10,7 @@ import {Equals} from 'phosphor-react-native/src/icons/Equals';
 import {ForkKnife} from 'phosphor-react-native/src/icons/ForkKnife';
 import {Heartbeat} from 'phosphor-react-native/src/icons/Heartbeat';
 import {House} from 'phosphor-react-native/src/icons/House';
+import {Info} from 'phosphor-react-native/src/icons/Info';
 import {Lightning} from 'phosphor-react-native/src/icons/Lightning';
 import {ShareFat} from 'phosphor-react-native/src/icons/ShareFat';
 import {ShoppingCart} from 'phosphor-react-native/src/icons/ShoppingCart';
@@ -59,7 +60,7 @@ import {
   previousPeriodLabel,
   updatedLabel,
 } from './insightsMath';
-import type {ChangeKind, InsightsData, InsightsPeriod} from './insightsTypes';
+import type {AiHighlight, ChangeKind, InsightsData, InsightsPeriod} from './insightsTypes';
 import {buildInsightsDataFromResponse} from './mapInsights';
 import {AiSparkle} from './AiSparkle';
 import {useTutorialTarget} from '../tutorial/TutorialProvider';
@@ -138,6 +139,12 @@ function toneColor(tone: 'good' | 'bad' | 'neutral'): string {
   if (tone === 'good') return colors.mint;
   if (tone === 'bad') return colors.roseLight;
   return colors.muted;
+}
+
+function highlightColor(tone: AiHighlight['tone']): string {
+  if (tone === 'positive') return colors.mint;
+  if (tone === 'warning') return colors.roseLight;
+  return colors.lavender;
 }
 
 function changeColor(kind: ChangeKind): string {
@@ -358,16 +365,22 @@ function AiSummaryCard({data}: {data: InsightsData}) {
       <Text style={styles.aiBody}>{data.aiSummary}</Text>
 
       <View style={styles.aiHighlights}>
-        {data.aiHighlights.map(highlight => (
-          <View key={highlight.id} style={styles.aiHighlightRow}>
-            {highlight.tone === 'positive' ? (
-              <TrendDown size={16} color={colors.mint} weight="bold" />
-            ) : (
-              <TrendUp size={16} color={colors.roseLight} weight="bold" />
-            )}
-            <Text style={styles.aiHighlightText}>{highlight.text}</Text>
-          </View>
-        ))}
+        {data.aiHighlights.map(highlight => {
+          // The arrow says which way it moved; the color says whether that is good news.
+          const color = highlightColor(highlight.tone);
+          return (
+            <View key={highlight.id} style={styles.aiHighlightRow}>
+              {highlight.direction === 'up' ? (
+                <TrendUp size={16} color={color} weight="bold" />
+              ) : highlight.direction === 'down' ? (
+                <TrendDown size={16} color={color} weight="bold" />
+              ) : (
+                <Info size={16} color={color} weight="bold" />
+              )}
+              <Text style={styles.aiHighlightText}>{highlight.text}</Text>
+            </View>
+          );
+        })}
       </View>
     </GradientView>
   );
@@ -501,8 +514,8 @@ export function InsightsScreen({currencySymbol, monthlyBudget = null, trackingSi
 
   const insights = useInsights(period);
   const isLive = insights.status === 'ready' && insights.data !== null;
-  // "Loading" only means a true first load with nothing to show. Period switches
-  // and refreshes keep the previous data on screen (see useInsights).
+  // "Loading" means nothing to show for this period yet. Refreshes and switches to
+  // an already-loaded period keep data on screen (see useInsights).
   const loading = insights.status === 'loading' && !isLive;
   // The skeleton appears only if loading outlasts a short delay, then holds for a
   // minimum time, so fast loads never flash it. Until then, reserve the space.

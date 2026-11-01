@@ -1,9 +1,13 @@
-import type {InsightDirection, InsightsResponse} from '../../lib/supabase/insights';
+import type {InsightHighlight, InsightsResponse} from '../../lib/supabase/insights';
 import {bucketsSince, previousWindowEnd, topWeekdayFromBuckets, trackedDays} from './insightsMath';
 import type {AiHighlight, CategoryMovement, CategorySpend, InsightsData} from './insightsTypes';
 
-function highlightTone(direction: InsightDirection): 'positive' | 'warning' {
-  return direction === 'down' ? 'positive' : 'warning';
+/** A deployment from before highlights carried a tone only has the direction: spending down is good. */
+function highlightTone(highlight: InsightHighlight): AiHighlight['tone'] {
+  if (highlight.tone === 'good') return 'positive';
+  if (highlight.tone === 'bad') return 'warning';
+  if (highlight.tone === 'neutral') return 'neutral';
+  return highlight.direction === 'down' ? 'positive' : 'warning';
 }
 
 function slugify(label: string): string {
@@ -69,7 +73,8 @@ export function buildInsightsDataFromResponse(
 
   const highlights: AiHighlight[] = response.highlights.map((highlight, index) => ({
     id: `${index + 1}`,
-    tone: highlightTone(highlight.direction),
+    tone: highlightTone(highlight),
+    direction: highlight.direction,
     text: highlight.text,
   }));
 
@@ -111,7 +116,7 @@ export function buildInsightsDataFromResponse(
     categories: buildCategories(stats),
     aiSummary: response.summary,
     aiHighlights:
-      highlights.length > 0 ? highlights : [{id: '1', tone: 'positive', text: 'No notable changes this period.'}],
+      highlights.length > 0 ? highlights : [{id: '1', tone: 'neutral', direction: 'flat', text: 'No notable changes this period.'}],
     movements: hasPrevious ? movements : [],
     generatedAt: response.generatedAt,
   };

@@ -59,7 +59,7 @@ import {
   weeklySpendNudge,
 } from './homeInsights';
 import {MonthState} from '../../lib/budgetEngine';
-import {budgetCardFigures, budgetStripLine, dayMonth} from './budgetCopy';
+import {budgetCardFigures, budgetStripLine, dayMonth, extraSavingsShare} from './budgetCopy';
 import {HomeRange, HomeReport, rangeNoun, rangeScopeLabel} from './homeReport';
 import {RelatedTransactions} from './RelatedTransactions';
 
@@ -497,8 +497,15 @@ function SavingsGoalCard({
     );
   }
 
-  // The goal is set aside from the first day, so it is always whole; what is
-  // left unspent at month end is extra savings on top.
+  // The ring drains like the extra savings bar on the Savings screen: it starts
+  // full and empties as spending eats into the unspent money. Without day-to-day
+  // money to spend it shows the goal, set aside whole.
+  const ringProgress =
+    budget.kind === 'active' && budget.spendable > 0
+      ? extraSavingsShare(budget)
+      : goal > 0
+        ? 1
+        : 0;
   const line = budget.overspent
     ? 'No extra this month'
     : extra > 0
@@ -510,8 +517,8 @@ function SavingsGoalCard({
     <GoalCard
       icon={icon}
       iconGradient="savings"
-      ringProgress={goal > 0 ? 1 : 0}
-      ringGradient="savings"
+      ringProgress={ringProgress}
+      ringGradient={budget.overspent ? 'rose' : 'savings'}
       centerTop={
         <AppText
           style={[styles.ringAmount, tabular]}

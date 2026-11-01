@@ -162,6 +162,7 @@ export function OnboardingFlow({
               swapKey={flow.stepKey}
               direction={flow.direction}
               fill={false}
+              style={styles.swap}
               render={renderStep}
             />
           </ScrollView>
@@ -196,5 +197,10 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingBottom: spacing.section,
+  },
+  // SlideSwap paints the ground by default, which here would cut the screen
+  // glow off in a hard line just under the header.
+  swap: {
+    backgroundColor: 'transparent',
   },
 });
