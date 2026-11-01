@@ -868,6 +868,7 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
                 : undefined
             }
             onAddMoney={budgetData.history.available ? () => setMoneySheet('top_up') : undefined}
+            onMoveToSavings={budgetData.history.available ? () => setMoneySheet('move_to_savings') : undefined}
             onEditBudget={() => {
               setBudgetOpen(false);
               openAfterHandoff(() => setBudgetEditOpen(true));
@@ -893,6 +894,28 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
                   lead="Extra income or a gift for this month. It goes into what you can spend, so today's limit and the days after it rise. Next month starts from your usual budget."
                   validate={value => (value !== '' && !(Number(value) > 0) ? 'Enter an amount above zero.' : null)}
                   onDone={value => moneyMoved('top_up', value)}
+                  onClose={() => setMoneySheet(null)}
+                />
+                <MoneySheet
+                  visible={moneySheet === 'move_to_savings'}
+                  title="Move to savings"
+                  label="Amount"
+                  symbol={currency.symbol}
+                  value=""
+                  lead={`Up to ${formatMoney(Math.max(0, budgetState?.remaining ?? 0), currency.symbol, {
+                    decimals: 0,
+                  })} of this month's unspent money. Your daily limit goes down to match.`}
+                  validate={value => {
+                    const amount = Number(value);
+                    if (value === '') {
+                      return null;
+                    }
+                    const most = Math.max(0, budgetState?.remaining ?? 0);
+                    return amount > 0 && amount <= most + 0.004
+                      ? null
+                      : `Enter up to ${formatMoney(most, currency.symbol, {decimals: 0})}.`;
+                  }}
+                  onDone={value => moneyMoved('move_to_savings', value)}
                   onClose={() => setMoneySheet(null)}
                 />
               </>
@@ -955,43 +978,26 @@ export function MainTabs({draft, onProfileSave, onSignOut}: MainTabsProps) {
                 ? () => setMoneySheet('move_to_budget')
                 : undefined
             }
-            onMoveToSavings={
-              budgetData.history.available && budgetState?.kind === 'active'
-                ? () => setMoneySheet('move_to_savings')
-                : undefined
-            }
             sheets={
               <MoneySheet
-                visible={moneySheet === 'move_to_budget' || moneySheet === 'move_to_savings'}
-                title={moneySheet === 'move_to_savings' ? 'Move to savings' : 'Move to budget'}
+                visible={moneySheet === 'move_to_budget'}
+                title="Move to budget"
                 label="Amount"
                 symbol={currency.symbol}
                 value=""
-                lead={
-                  moneySheet === 'move_to_savings'
-                    ? `Up to ${formatMoney(Math.max(0, budgetState?.remaining ?? 0), currency.symbol, {
-                        decimals: 0,
-                      })} of this month's unspent money. Your daily limit goes down to match.`
-                    : `Up to ${formatMoney(keptExtra, currency.symbol, {
-                        decimals: 0,
-                      })} of your kept extra savings, added to what you can spend this month.`
-                }
+                lead={`Up to ${formatMoney(keptExtra, currency.symbol, {
+                  decimals: 0,
+                })} of your kept extra savings, added to what you can spend this month.`}
                 validate={value => {
                   const amount = Number(value);
                   if (value === '') {
                     return null;
                   }
-                  const most =
-                    moneySheet === 'move_to_savings'
-                      ? Math.max(0, budgetState?.remaining ?? 0)
-                      : keptExtra;
-                  return amount > 0 && amount <= most + 0.004
+                  return amount > 0 && amount <= keptExtra + 0.004
                     ? null
-                    : `Enter up to ${formatMoney(most, currency.symbol, {decimals: 0})}.`;
+                    : `Enter up to ${formatMoney(keptExtra, currency.symbol, {decimals: 0})}.`;
                 }}
-                onDone={value =>
-                  moneyMoved(moneySheet === 'move_to_savings' ? 'move_to_savings' : 'move_to_budget', value)
-                }
+                onDone={value => moneyMoved('move_to_budget', value)}
                 onClose={() => setMoneySheet(null)}
               />
             }

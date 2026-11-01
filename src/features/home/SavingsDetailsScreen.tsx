@@ -31,8 +31,6 @@ type SavingsDetailsScreenProps = {
   categories?: CategoryRow[];
   /** Moves some kept extra savings into this month's budget. */
   onMoveToBudget?: () => void;
-  /** Moves some of this month's unspent money to savings. */
-  onMoveToSavings?: () => void;
   /** Sheets opened from this screen, shown above it. */
   sheets?: React.ReactNode;
 };
@@ -122,7 +120,6 @@ export function SavingsDetailsScreen({
   transactions = EMPTY_ROWS,
   categories = EMPTY_CATEGORIES,
   onMoveToBudget,
-  onMoveToSavings,
   sheets,
 }: SavingsDetailsScreenProps) {
   const detailsStyles = useDetailsStyles();
@@ -207,32 +204,18 @@ export function SavingsDetailsScreen({
         <StatCard label="Goals saved before" value={money(goalsSoFar)} dotColor={colors.sky} />
       </StatRow>
 
-      {onMoveToBudget || onMoveToSavings ? (
+      {onMoveToBudget ? (
         <Card style={detailsStyles.gap}>
-          <AppText variant="bodyStrong">Move money</AppText>
+          <AppText variant="bodyStrong">Need some of it back?</AppText>
           <AppText variant="caption" color={colors.muted} style={styles.note}>
-            Spend some of your saved extra this month, or save some of this month's money.
+            Spend some of your saved extra this month.
           </AppText>
-          <View style={styles.actions}>
-            {onMoveToBudget ? (
-              <GhostButton
-                label="Move to budget"
-                tone="ink"
-                disabled={keptExtra <= 0}
-                onPress={onMoveToBudget}
-                style={styles.action}
-              />
-            ) : null}
-            {onMoveToSavings ? (
-              <GhostButton
-                label="Move to savings"
-                tone="ink"
-                disabled={!budget || budget.kind !== 'active' || budget.remaining <= 0}
-                onPress={onMoveToSavings}
-                style={styles.action}
-              />
-            ) : null}
-          </View>
+          <GhostButton
+            label="Move to budget"
+            tone="ink"
+            disabled={keptExtra <= 0}
+            onPress={onMoveToBudget}
+          />
         </Card>
       ) : null}
 
@@ -304,12 +287,5 @@ const useStyles = makeStyles(() => ({
   },
   extraNote: {
     marginTop: spacing.sm,
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  action: {
-    flex: 1,
   },
 }));

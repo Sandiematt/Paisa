@@ -45,6 +45,8 @@ type BudgetDetailsScreenProps = {
   onBillPress?: (bill: CycleBill) => void;
   /** Adds money to this month's budget (extra income). */
   onAddMoney?: () => void;
+  /** Moves some of this month's unspent money to savings. */
+  onMoveToSavings?: () => void;
   onEditBudget?: () => void;
   /** Sheets opened from this screen, shown above it. */
   sheets?: React.ReactNode;
@@ -100,6 +102,7 @@ export function BudgetDetailsScreen({
   payday = null,
   onBillPress,
   onAddMoney,
+  onMoveToSavings,
   onEditBudget,
   sheets,
 }: BudgetDetailsScreenProps) {
@@ -325,6 +328,21 @@ export function BudgetDetailsScreen({
             Add it here and your daily limit goes up.
           </AppText>
           <GhostButton label="Add money" tone="ink" onPress={onAddMoney} />
+        </Card>
+      ) : null}
+
+      {budget?.kind === 'active' && onMoveToSavings ? (
+        <Card style={detailsStyles.gap}>
+          <AppText variant="bodyStrong">Want to save what is left?</AppText>
+          <AppText variant="caption" color={colors.muted} style={planStyles.billsNote}>
+            Move some of this month's unspent money to savings. Your daily limit goes down to match.
+          </AppText>
+          <GhostButton
+            label="Move to savings"
+            tone="ink"
+            disabled={budget.remaining <= 0}
+            onPress={onMoveToSavings}
+          />
         </Card>
       ) : null}
 
