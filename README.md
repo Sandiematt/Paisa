@@ -12,6 +12,7 @@
   <img alt="Expo" src="https://img.shields.io/badge/Expo-58-000020?logo=expo&logoColor=white">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white">
   <img alt="Supabase" src="https://img.shields.io/badge/Supabase-3ECF8E?logo=supabase&logoColor=white">
+  <a href="LICENSE.md"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-yellow.svg"></a>
 </p>
 
 ---
@@ -29,6 +30,7 @@ https://github.com/user-attachments/assets/a9deb1eb-1c2c-44d8-b31f-6bc5b67e8107
 - [Modifying the App](#modifying-the-app)
 - [Troubleshooting](#troubleshooting)
 - [Learn More](#learn-more)
+- [License](#license)
 
 ---
 
@@ -116,3 +118,9 @@ If the steps above don't work, see the React Native [Troubleshooting](https://re
 - [Learn the Basics](https://reactnative.dev/docs/getting-started) - a guided tour of the React Native basics.
 - [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps) - add React Native to an existing application.
 - [Blog](https://reactnative.dev/blog) - the latest official React Native blog posts.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE.md).
